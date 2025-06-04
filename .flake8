@@ -1,0 +1,37 @@
+[flake8]
+max-line-length = 127
+max-complexity = 15
+ignore = E203, W503
+exclude = 
+    .git,
+    __pycache__,
+    build,
+    dist,
+    *.pyc,
+    *.pyo,
+    *.pyd,
+    .Python,
+    env,
+    venv,
+    .venv,
+    .env,
+    .eggs,
+    *.egg-info,
+    .installed.cfg,
+    *.egg,
+    .tox,
+    .coverage,
+    htmlcov,
+    .pytest_cache,
+    .mypy_cache
+
+# Per-file ignores
+[flake8:app.py]
+max-complexity = 20  # Allow more complexity for the main app
+
+[flake8:src/agent_core.py]
+max-complexity = 20  # Allow more complexity for agent core
+
+# Ignore specific errors in specific files
+[flake8:src/data_analysis.py]
+ignore = E402  # Allow imports not at top of file for data analysis 
