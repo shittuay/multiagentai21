@@ -1,0 +1,7 @@
+| transaction\_id | customer\_id | product\_name | category    | quantity | price\_per\_unit | transaction\_date |
+| --------------- | ------------ | ------------- | ----------- | -------- | ---------------- | ----------------- |
+| TXN001          | CUST001      | Laptop        | Electronics | 1        | 1200.00          | 2024-12-10        |
+| TXN002          | CUST002      | Headphones    | Electronics | 2        | 150.00           | 2024-12-11        |
+| TXN003          | CUST003      | Chair         | Furniture   | 4        | 85.00            | 2024-12-11        |
+| TXN004          | CUST001      | Monitor       | Electronics | 1        | 300.00           | 2024-12-12        |
+| TXN005          | CUST004      | Desk          | Furniture   | 1        | 250.00           | 2024-12-13        |

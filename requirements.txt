@@ -1,0 +1,59 @@
+# MultiAgentAI21 Requirements
+# Core web framework
+streamlit>=1.24.0
+
+# Google Cloud and AI services
+google-cloud-bigquery>=3.11.0
+google-cloud-core>=2.3.0
+google-auth>=2.22.0
+google-generativeai>=0.3.2
+
+# Data processing
+pandas>=2.0.0
+numpy>=1.24.0
+statsmodels>=0.14.0
+
+# Environment management
+python-dotenv>=1.0.0
+
+# Testing frameworks
+pytest>=7.4.0
+pytest-cov>=4.1.0
+unittest2>=1.1.0; python_version < "3.5"
+
+# Additional utilities
+pathlib2>=2.3.7; python_version < "3.4"
+typing-extensions>=4.0.0; python_version < "3.8"
+
+# Optional: Enhanced data visualization
+plotly>=5.14.0
+matplotlib>=3.7.0
+seaborn>=0.12.0
+
+# Optional: Enhanced text processing
+textblob>=0.17.0
+nltk>=3.8.0
+
+# Development tools
+black>=23.7.0
+flake8>=6.1.0
+mypy>=1.5.0
+
+# Data Analysis Dependencies
+pandas>=1.5.0
+numpy>=1.21.0
+matplotlib>=3.5.0
+seaborn>=0.12.0
+
+# Additional dependencies
+scikit-learn>=1.2.0
+requests>=2.31.0
+openai>=1.0.0
+google-cloud-aiplatform>=1.36.0
+google-cloud-storage>=2.10.0
+google-api-python-client>=2.100.0
+python-magic>=0.4.27
+python-magic-bin>=0.4.14; sys_platform == 'win32'
+isort>=5.12.0
+pre-commit>=3.3.3
+chardet>=5.2.0

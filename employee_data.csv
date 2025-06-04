@@ -1,0 +1,31 @@
+employee_id,name,department,position,salary,hire_date,age,performance_score,years_experience,education_level,city,remote_work
+1001,Alice Johnson,Engineering,Senior Developer,95000,2019-03-15,32,4.2,8,Bachelor,New York,Yes
+1002,Bob Smith,Marketing,Marketing Manager,75000,2020-07-22,29,3.8,5,Master,Chicago,No
+1003,Carol Davis,Engineering,Junior Developer,65000,2022-01-10,26,3.9,3,Bachelor,San Francisco,Yes
+1004,David Wilson,Sales,Sales Representative,55000,2021-11-05,31,4.1,6,Bachelor,Los Angeles,No
+1005,Eva Brown,HR,HR Specialist,60000,2020-09-18,28,4.0,4,Master,New York,No
+1006,Frank Miller,Engineering,Lead Engineer,110000,2018-05-12,35,4.5,12,Master,Seattle,Yes
+1007,Grace Taylor,Marketing,Content Creator,50000,2022-08-30,25,3.7,2,Bachelor,Austin,Yes
+1008,Henry Anderson,Sales,Sales Manager,85000,2019-12-03,33,4.3,9,Bachelor,Miami,No
+1009,Ivy Chen,Engineering,DevOps Engineer,88000,2021-04-20,30,4.1,7,Master,San Francisco,Yes
+1010,Jack Thompson,Finance,Financial Analyst,70000,2020-02-14,27,3.9,4,Bachelor,Boston,No
+1011,Karen White,HR,HR Manager,90000,2018-10-08,36,4.4,11,Master,Chicago,No
+1012,Liam Garcia,Marketing,Digital Marketer,58000,2021-06-25,29,3.6,5,Bachelor,Denver,Yes
+1013,Mia Rodriguez,Sales,Account Executive,62000,2022-03-12,28,4.0,3,Bachelor,Phoenix,No
+1014,Noah Lee,Engineering,Full Stack Developer,82000,2020-11-30,31,4.2,6,Bachelor,Portland,Yes
+1015,Olivia Martinez,Finance,Senior Analyst,78000,2019-08-17,34,4.1,8,Master,Dallas,No
+1016,Paul Jackson,Engineering,Software Architect,125000,2017-01-20,38,4.7,15,Master,San Francisco,No
+1017,Quinn Davis,Marketing,Brand Manager,72000,2021-09-14,30,3.8,6,Master,Atlanta,Yes
+1018,Ruby Wilson,Sales,Senior Sales Rep,68000,2020-05-07,32,4.2,7,Bachelor,Nashville,No
+1019,Sam Kim,HR,Recruiter,55000,2022-07-19,26,3.5,2,Bachelor,San Diego,Yes
+1020,Tina Patel,Finance,Controller,95000,2018-12-11,37,4.6,13,Master,New York,No
+1021,Uma Singh,Engineering,Data Scientist,105000,2019-06-28,29,4.4,6,PhD,Seattle,Yes
+1022,Victor Chen,Marketing,Growth Hacker,64000,2021-10-15,27,3.9,4,Bachelor,San Francisco,Yes
+1023,Wendy Liu,Sales,Inside Sales Rep,48000,2022-12-01,24,3.4,1,Bachelor,Los Angeles,No
+1024,Xavier Brown,Engineering,Security Engineer,92000,2020-08-22,33,4.3,9,Master,Austin,Yes
+1025,Yuki Tanaka,Finance,Budget Analyst,66000,2021-03-08,28,3.8,3,Bachelor,Chicago,No
+1026,Zoe Adams,HR,Training Coordinator,52000,2022-05-16,25,3.6,2,Bachelor,Boston,Yes
+1027,Alex Murphy,Engineering,Machine Learning Engineer,115000,2018-09-04,34,4.5,10,PhD,San Francisco,No
+1028,Blake Foster,Marketing,Social Media Manager,54000,2021-12-20,26,3.7,3,Bachelor,Miami,Yes
+1029,Chloe Baker,Sales,Regional Manager,95000,2019-02-28,35,4.4,12,Master,Denver,No
+1030,Dylan Cooper,Finance,Investment Analyst,82000,2020-07-10,29,4.1,5,Master,New York,Yes 
