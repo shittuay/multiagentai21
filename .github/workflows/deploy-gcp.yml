@@ -12,8 +12,88 @@ env:
   REGION: us-central1
 
 jobs:
-  deploy:
+  format:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+    
+    - name: Install formatting tools
+      run: |
+        python -m pip install --upgrade pip
+        pip install black==23.12.1 isort==5.13.2 flake8==7.0.0
+    
+    - name: Format with black
+      run: |
+        black . --line-length 127 --extend-exclude "/(\.git|\.venv|venv|env)/"
+    
+    - name: Sort imports with isort
+      run: |
+        isort . --profile black --line-length 127
+    
+    - name: Commit formatting changes
+      run: |
+        git config --local user.email "github-actions[bot]@users.noreply.github.com"
+        git config --local user.name "github-actions[bot]"
+        git add .
+        git diff --staged --quiet || (git commit -m "style: format code with black and isort" && git push)
+    
+    - name: Create Pull Request
+      if: github.event_name == 'push'
+      uses: peter-evans/create-pull-request@v5
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        commit-message: "style: format code with black and isort"
+        title: "style: format code with black and isort"
+        body: |
+          This PR contains automated formatting changes:
+          - Formatted code with black
+          - Sorted imports with isort
+          - Fixed linting issues
+        branch: format-code
+        base: main
+
+  lint:
+    needs: format
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install flake8==7.0.0
+    
+    - name: Run flake8 with relaxed rules
+      run: |
+        flake8 . --count \
+          --max-complexity=20 \
+          --max-line-length=127 \
+          --statistics \
+          --ignore=E203,W503,E501,E302,E305,F401,F841,W291,W292,W293,F541,F811,E722,E402,E128,C901 \
+          --exclude=.git,__pycache__,build,dist,*.pyc,*.pyo,*.pyd,.Python,env,venv,.venv,.env,.eggs,*.egg-info,.installed.cfg,*.egg,.tox,.coverage,htmlcov,.pytest_cache,.mypy_cache
+
+  deploy:
+    needs: [format, lint]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     
     steps:
     - name: Checkout code
@@ -27,31 +107,7 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install flake8 black isort
         if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-    
-    - name: Auto-format code with Black
-      run: |
-        black . --line-length 127 --extend-exclude "/(\.git|\.venv|venv|env)/"
-      continue-on-error: true
-    
-    - name: Sort imports with isort  
-      run: |
-        isort . --profile black --line-length 127
-      continue-on-error: true
-    
-    - name: Lint with flake8 (relaxed rules)
-      run: |
-        flake8 . --count --max-complexity=20 --max-line-length=127 --statistics --ignore=E203,W503,E501,E302,E305,F401,F841,W291,W292,W293,F541,F811,E722,E402,E128,C901
-      continue-on-error: true
-    
-    - name: Commit formatting changes
-      run: |
-        git config --local user.email "action@github.com"
-        git config --local user.name "GitHub Action"
-        git add -A
-        git diff --staged --quiet || git commit -m "Auto-format code with Black and isort"
-        git push || echo "No changes to commit"
     
     - name: Set up Google Cloud CLI
       uses: google-github-actions/setup-gcloud@v2
@@ -89,25 +145,19 @@ jobs:
           --concurrency 100 \
           --max-instances 10 \
           --timeout 900 \
-          --set-env-vars "ENVIRONMENT=production"
+          --set-env-vars "ENVIRONMENT=production,GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}"
     
     - name: Verify domain ownership (optional)
       run: |
-        # This step might fail on first run - domain verification takes time
         gcloud domains verify multiagentai21.com || echo "Domain verification in progress..."
     
     - name: Deploy custom domain mapping
       run: |
-        # Wait a moment for service to be ready
         sleep 30
-        
-        # Create domain mapping for root domain
         gcloud run domain-mappings create \
           --service $SERVICE_NAME \
           --domain multiagentai21.com \
           --region $REGION || echo "Root domain mapping may already exist"
-        
-        # Create domain mapping for www subdomain  
         gcloud run domain-mappings create \
           --service $SERVICE_NAME \
           --domain www.multiagentai21.com \
