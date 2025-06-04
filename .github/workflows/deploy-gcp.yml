@@ -1,0 +1,97 @@
+name: Deploy to Google Cloud
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+env:
+  PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+  SERVICE_NAME: multiagentai21
+  REGION: us-central1
+  PYTHON_VERSION: "3.10"
+
+jobs:
+  test-build:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python ${{ env.PYTHON_VERSION }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install --no-cache-dir -r requirements.txt
+        pip install --no-cache-dir google-generativeai==0.1.0rc1
+
+    - name: Test Docker build
+      run: |
+        docker build -t $SERVICE_NAME:test .
+
+  deploy:
+    needs: test-build
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/master' && github.event_name == 'push'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Set up Google Cloud CLI
+      uses: google-github-actions/setup-gcloud@v2
+      with:
+        project_id: ${{ env.PROJECT_ID }}
+        install_components: 'gke-gcloud-auth-plugin'
+    
+    - name: Authenticate to Google Cloud
+      uses: google-github-actions/auth@v2
+      with:
+        credentials_json: ${{ secrets.GCP_SA_KEY }}
+    
+    - name: Configure Docker for GCR
+      run: |
+        gcloud auth configure-docker --quiet
+    
+    - name: Build and Push Docker image
+      run: |
+        # Build with specific version
+        docker build -t gcr.io/$PROJECT_ID/$SERVICE_NAME:$GITHUB_SHA \
+                    -t gcr.io/$PROJECT_ID/$SERVICE_NAME:latest .
+        
+        # Push both tags
+        docker push gcr.io/$PROJECT_ID/$SERVICE_NAME:$GITHUB_SHA
+        docker push gcr.io/$PROJECT_ID/$SERVICE_NAME:latest
+    
+    - name: Deploy to Cloud Run
+      run: |
+        gcloud run deploy $SERVICE_NAME \
+          --image gcr.io/$PROJECT_ID/$SERVICE_NAME:latest \
+          --region $REGION \
+          --platform managed \
+          --allow-unauthenticated \
+          --port 8080 \
+          --memory 2Gi \
+          --cpu 2 \
+          --concurrency 100 \
+          --max-instances 10 \
+          --timeout 900 \
+          --set-env-vars "ENVIRONMENT=production,GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}" \
+          --quiet
+    
+    - name: Show deployment URL
+      if: success()
+      run: |
+        echo "Deployment completed successfully!"
+        echo "Service URL: $(gcloud run services describe $SERVICE_NAME --region $REGION --format 'value(status.url)')"
+    
+    - name: Handle deployment failure
+      if: failure()
+      run: |
+        echo "Deployment failed. Check the logs above for details."
+        exit 1 
