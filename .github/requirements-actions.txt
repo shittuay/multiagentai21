@@ -1,0 +1,17 @@
+# Core dependencies for GitHub Actions
+streamlit>=1.24.0
+google-cloud-bigquery>=3.11.0
+google-cloud-core>=2.3.0
+google-auth>=2.22.0
+google-generativeai==0.1.0rc1
+pandas>=2.0.0
+numpy>=1.24.0
+python-dotenv>=1.0.0
+
+# Testing dependencies
+pytest==7.4.3
+pytest-cov==4.1.0
+flake8==6.1.0
+black==23.11.0
+build==1.0.3
+twine==4.0.2 
