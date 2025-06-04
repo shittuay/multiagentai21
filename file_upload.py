@@ -23,42 +23,72 @@ class FileUploadApp:
         self.main_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
 
         # File selection
-        ttk.Label(self.main_frame, text="Select File:").grid(row=0, column=0, sticky=tk.W, pady=5)
+        ttk.Label(self.main_frame, text="Select File:").grid(
+            row=0, column=0, sticky=tk.W, pady=5
+        )
         self.file_path_var = tk.StringVar()
-        ttk.Entry(self.main_frame, textvariable=self.file_path_var, width=50).grid(row=0, column=1, padx=5)
-        ttk.Button(self.main_frame, text="Browse", command=self.browse_file).grid(row=0, column=2)
+        ttk.Entry(self.main_frame, textvariable=self.file_path_var, width=50).grid(
+            row=0, column=1, padx=5
+        )
+        ttk.Button(self.main_frame, text="Browse", command=self.browse_file).grid(
+            row=0, column=2
+        )
 
         # Analysis type selection
-        ttk.Label(self.main_frame, text="Analysis Type:").grid(row=1, column=0, sticky=tk.W, pady=5)
+        ttk.Label(self.main_frame, text="Analysis Type:").grid(
+            row=1, column=0, sticky=tk.W, pady=5
+        )
         self.analysis_type = tk.StringVar(value="data")
-        ttk.Radiobutton(self.main_frame, text="Data Analysis", variable=self.analysis_type, value="data").grid(
-            row=1, column=1, sticky=tk.W
-        )
-        ttk.Radiobutton(self.main_frame, text="Image Analysis", variable=self.analysis_type, value="image").grid(
-            row=1, column=1, sticky=tk.E
-        )
+        ttk.Radiobutton(
+            self.main_frame,
+            text="Data Analysis",
+            variable=self.analysis_type,
+            value="data",
+        ).grid(row=1, column=1, sticky=tk.W)
+        ttk.Radiobutton(
+            self.main_frame,
+            text="Image Analysis",
+            variable=self.analysis_type,
+            value="image",
+        ).grid(row=1, column=1, sticky=tk.E)
 
         # Request input
-        ttk.Label(self.main_frame, text="Analysis Request:").grid(row=2, column=0, sticky=tk.W, pady=5)
-        self.request_text = scrolledtext.ScrolledText(self.main_frame, width=60, height=4)
+        ttk.Label(self.main_frame, text="Analysis Request:").grid(
+            row=2, column=0, sticky=tk.W, pady=5
+        )
+        self.request_text = scrolledtext.ScrolledText(
+            self.main_frame, width=60, height=4
+        )
         self.request_text.grid(row=2, column=1, columnspan=2, pady=5)
         self.request_text.insert(tk.END, "Analyze this data and provide insights")
 
         # Status and results
-        ttk.Label(self.main_frame, text="Status:").grid(row=3, column=0, sticky=tk.W, pady=5)
+        ttk.Label(self.main_frame, text="Status:").grid(
+            row=3, column=0, sticky=tk.W, pady=5
+        )
         self.status_var = tk.StringVar(value="Ready")
-        ttk.Label(self.main_frame, textvariable=self.status_var).grid(row=3, column=1, sticky=tk.W)
+        ttk.Label(self.main_frame, textvariable=self.status_var).grid(
+            row=3, column=1, sticky=tk.W
+        )
 
-        ttk.Label(self.main_frame, text="Results:").grid(row=4, column=0, sticky=tk.W, pady=5)
-        self.results_text = scrolledtext.ScrolledText(self.main_frame, width=60, height=15)
+        ttk.Label(self.main_frame, text="Results:").grid(
+            row=4, column=0, sticky=tk.W, pady=5
+        )
+        self.results_text = scrolledtext.ScrolledText(
+            self.main_frame, width=60, height=15
+        )
         self.results_text.grid(row=4, column=1, columnspan=2, pady=5)
 
         # Upload button
-        self.upload_button = ttk.Button(self.main_frame, text="Analyze File", command=self.analyze_file)
+        self.upload_button = ttk.Button(
+            self.main_frame, text="Analyze File", command=self.analyze_file
+        )
         self.upload_button.grid(row=5, column=1, pady=10)
 
         # Progress bar
-        self.progress = ttk.Progressbar(self.main_frame, length=300, mode="indeterminate")
+        self.progress = ttk.Progressbar(
+            self.main_frame, length=300, mode="indeterminate"
+        )
         self.progress.grid(row=6, column=1, pady=5)
 
         # Configure grid weights
@@ -76,7 +106,9 @@ class FileUploadApp:
             print("Agent system initialized successfully")
         except Exception as e:
             print(f"Error initializing agent system: {e}")
-            self.show_error("Failed to initialize agent system. Please check your API key.")
+            self.show_error(
+                "Failed to initialize agent system. Please check your API key."
+            )
 
     def browse_file(self):
         """Open file dialog to select a file"""
@@ -95,11 +127,15 @@ class FileUploadApp:
             if filename.lower().endswith((".png", ".jpg", ".jpeg", ".gif")):
                 self.analysis_type.set("image")
                 self.request_text.delete(1.0, tk.END)
-                self.request_text.insert(tk.END, "Analyze this image and describe its contents")
+                self.request_text.insert(
+                    tk.END, "Analyze this image and describe its contents"
+                )
             else:
                 self.analysis_type.set("data")
                 self.request_text.delete(1.0, tk.END)
-                self.request_text.insert(tk.END, "Analyze this data and provide insights")
+                self.request_text.insert(
+                    tk.END, "Analyze this data and provide insights"
+                )
 
     def analyze_file(self):
         """Analyze the selected file"""
@@ -139,7 +175,9 @@ class FileUploadApp:
 
             # Process the file
             with open(file_path, "rb") as f:
-                file_data = agent.process_file(file=f, filename=os.path.basename(file_path))
+                file_data = agent.process_file(
+                    file=f, filename=os.path.basename(file_path)
+                )
 
             # Process the request
             response = agent.process_request(request=request, files=[file_data])

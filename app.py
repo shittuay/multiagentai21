@@ -43,7 +43,10 @@ except ImportError as e:
 try:
     logger.info("Setting up page configuration...")
     st.set_page_config(
-        page_title="MultiAgentAI21 - Advanced AI Assistant", page_icon="🚀", layout="wide", initial_sidebar_state="expanded"
+        page_title="MultiAgentAI21 - Advanced AI Assistant",
+        page_icon="🚀",
+        layout="wide",
+        initial_sidebar_state="expanded",
     )
     logger.info("Page configuration set successfully")
 except Exception as e:
@@ -412,7 +415,9 @@ def load_chat_history(chat_id: str) -> list:
                         st.session_state.selected_agent = agent_type.value
                         logger.info(f"Restored agent type: {agent_type.value}")
                     except ValueError as e:
-                        logger.error(f"Invalid agent type in chat history: {data['agent_type']}")
+                        logger.error(
+                            f"Invalid agent type in chat history: {data['agent_type']}"
+                        )
                         st.session_state.selected_agent = None
 
                 messages = data.get("messages", [])
@@ -523,7 +528,7 @@ def display_enhanced_header():
 def display_chat_history_sidebar():
     """Display chat history in the sidebar."""
     st.sidebar.title("Chat History")
-    
+
     # New Chat button
     if st.sidebar.button("New Chat", key="new_chat_btn"):
         st.session_state.current_chat_id = f"chat_{int(time.time())}"
@@ -531,18 +536,17 @@ def display_chat_history_sidebar():
         st.session_state.agent_locked = False
         st.session_state.selected_agent = None
         st.rerun()
-    
+
     # Display available chats
     available_chats = get_available_chats()
     if not available_chats:
         st.sidebar.info("No previous chats available.")
         return
-    
+
     st.sidebar.subheader("Previous Chats")
     for chat_id, chat_info in available_chats.items():
         if st.sidebar.button(
-            f"{chat_info['date']} - {chat_info['preview']}",
-            key=f"chat_{chat_id}"
+            f"{chat_info['date']} - {chat_info['preview']}", key=f"chat_{chat_id}"
         ):
             load_chat_history(chat_id)
 
@@ -555,15 +559,17 @@ def display_agent_selection():
             "Choose an agent type:",
             [agent.value for agent in AgentType],
             format_func=lambda x: x.replace("_", " ").title(),
-            key="agent_selection"
+            key="agent_selection",
         )
-        
+
         if st.button("Start Chat", key="start_chat_btn"):
             st.session_state.selected_agent = agent_type
             st.session_state.agent_locked = True
             st.rerun()
     else:
-        st.success(f"Chatting with {st.session_state.selected_agent.replace('_', ' ').title()} Agent")
+        st.success(
+            f"Chatting with {st.session_state.selected_agent.replace('_', ' ').title()} Agent"
+        )
         if st.button("Change Agent", key="change_agent_btn"):
             st.session_state.agent_locked = False
             st.session_state.selected_agent = None
@@ -582,28 +588,28 @@ def process_and_display_user_message(user_input):
     if not st.session_state.selected_agent:
         st.error("Please select an agent first.")
         return
-    
+
     # Add user message to chat
     st.session_state.chat_history.append({"role": "user", "content": user_input})
-    
+
     # Process with selected agent
     try:
         response = process_request(
             user_input,
             st.session_state.selected_agent,
-            {"chat_history": st.session_state.chat_history}
+            {"chat_history": st.session_state.chat_history},
         )
-        
+
         # Add agent response to chat
         st.session_state.chat_history.append({"role": "assistant", "content": response})
-        
+
         # Save updated chat history
         save_chat_history(
             st.session_state.current_chat_id,
             st.session_state.chat_history,
-            st.session_state.selected_agent
+            st.session_state.selected_agent,
         )
-        
+
     except Exception as e:
         st.error(f"Error processing request: {str(e)}")
         logging.error(f"Error in process_request: {str(e)}", exc_info=True)
@@ -620,22 +626,22 @@ def display_chat_interface():
         st.session_state.agent_locked = False
     if "selected_agent" not in st.session_state:
         st.session_state.selected_agent = None
-    
+
     # Display chat history in sidebar
     display_chat_history_sidebar()
-    
+
     # Main chat area
     st.title("MultiAgentAI21 Chat")
-    
+
     # Display current chat ID
     st.caption(f"Chat ID: {st.session_state.current_chat_id}")
-    
+
     # Agent selection
     display_agent_selection()
-    
+
     # Display chat messages
     display_chat_messages()
-    
+
     # Chat input
     if user_input := st.chat_input("Type your message here..."):
         process_and_display_user_message(user_input)
@@ -688,8 +694,14 @@ def display_analytics_dashboard():
 
     # Calculate metrics
     total_requests = len(st.session_state.chat_history)
-    avg_response_time = sum(chat.get("execution_time", 0) for chat in st.session_state.chat_history) / total_requests
-    success_rate = (sum(1 for chat in st.session_state.chat_history if chat.get("success", True)) / total_requests) * 100
+    avg_response_time = (
+        sum(chat.get("execution_time", 0) for chat in st.session_state.chat_history)
+        / total_requests
+    )
+    success_rate = (
+        sum(1 for chat in st.session_state.chat_history if chat.get("success", True))
+        / total_requests
+    ) * 100
 
     col1, col2, col3 = st.columns(3)
 
@@ -750,7 +762,9 @@ def process_user_request(user_input: str):
             context = {}
             if len(st.session_state.chat_history) > 0:
                 context["previous_requests"] = [
-                    msg["content"] for msg in st.session_state.chat_history[-3:] if msg["role"] == "user"
+                    msg["content"]
+                    for msg in st.session_state.chat_history[-3:]
+                    if msg["role"] == "user"
                 ]
 
             # Get the agent type enum value
@@ -761,17 +775,26 @@ def process_user_request(user_input: str):
             except ValueError as e:
                 logger.error(f"Invalid agent type: {st.session_state.selected_agent}")
                 st.error(f"Invalid agent type selected. Please select a valid agent.")
-                return {"content": "Invalid agent type selected. Please select a valid agent.", "data": None}
+                return {
+                    "content": "Invalid agent type selected. Please select a valid agent.",
+                    "data": None,
+                }
 
             # Route request to selected agent
             start_time = time.time()
-            response = st.session_state.agent.route_request(user_input, agent_type, context)
+            response = st.session_state.agent.route_request(
+                user_input, agent_type, context
+            )
             execution_time = time.time() - start_time
 
             # Create response dictionary with proper content handling
             response_dict = {
-                "content": response.content if response and response.content else "No response received",
-                "data": response.data if response and hasattr(response, "data") else None,
+                "content": response.content
+                if response and response.content
+                else "No response received",
+                "data": response.data
+                if response and hasattr(response, "data")
+                else None,
             }
 
             # Show success message
@@ -806,7 +829,11 @@ def display_data_analysis_section():
     )
 
     # File upload section
-    uploaded_file = st.file_uploader("Upload your data file (CSV format)", type=["csv"], help="Upload a CSV file for analysis")
+    uploaded_file = st.file_uploader(
+        "Upload your data file (CSV format)",
+        type=["csv"],
+        help="Upload a CSV file for analysis",
+    )
 
     if uploaded_file is not None:
         try:
@@ -860,8 +887,20 @@ def display_data_analysis_section():
                         # Create salary box plot
                         fig = go.Figure()
                         for dept, stats in salary_data["mean"].items():
-                            fig.add_trace(go.Box(y=[stats], name=dept, boxpoints="all", jitter=0.3, pointpos=-1.8))
-                        fig.update_layout(title="Salary Distribution by Department", yaxis_title="Salary", showlegend=True)
+                            fig.add_trace(
+                                go.Box(
+                                    y=[stats],
+                                    name=dept,
+                                    boxpoints="all",
+                                    jitter=0.3,
+                                    pointpos=-1.8,
+                                )
+                            )
+                        fig.update_layout(
+                            title="Salary Distribution by Department",
+                            yaxis_title="Salary",
+                            showlegend=True,
+                        )
                         st.plotly_chart(fig, use_container_width=True)
 
                     if "performance_score" in dept_analysis:
@@ -885,7 +924,9 @@ def display_data_analysis_section():
                             )
                         )
                         fig.update_layout(
-                            title="Performance Metrics by Department", xaxis_title="Department", yaxis_title="Metric"
+                            title="Performance Metrics by Department",
+                            xaxis_title="Department",
+                            yaxis_title="Metric",
                         )
                         st.plotly_chart(fig, use_container_width=True)
 
@@ -898,9 +939,15 @@ def display_data_analysis_section():
                         st.markdown("#### Salary by Education Level")
                         edu_data = pd.DataFrame(
                             {
-                                "Education": list(edu_analysis["salary"]["mean"].keys()),
-                                "Mean Salary": list(edu_analysis["salary"]["mean"].values()),
-                                "Median Salary": list(edu_analysis["salary"]["median"].values()),
+                                "Education": list(
+                                    edu_analysis["salary"]["mean"].keys()
+                                ),
+                                "Mean Salary": list(
+                                    edu_analysis["salary"]["mean"].values()
+                                ),
+                                "Median Salary": list(
+                                    edu_analysis["salary"]["median"].values()
+                                ),
                             }
                         )
 
@@ -924,7 +971,9 @@ def display_data_analysis_section():
                             st.components.v1.html(html_content, height=600)
 
                 # Save results
-                results_file = f"analysis_results_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+                results_file = (
+                    f"analysis_results_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+                )
                 with open(results_file, "w") as f:
                     json.dump(results, f, indent=2)
                 st.download_button(
@@ -970,7 +1019,10 @@ def main():
         # Create sidebar navigation
         logger.info("Setting up navigation...")
         st.sidebar.title("Navigation")
-        page = st.sidebar.radio("Select a page", ["🤖 Agent Chat", "📊 Data Analysis", "📈 Analytics Dashboard", "📚 Examples"])
+        page = st.sidebar.radio(
+            "Select a page",
+            ["🤖 Agent Chat", "📊 Data Analysis", "📈 Analytics Dashboard", "📚 Examples"],
+        )
 
         logger.info(f"Selected page: {page}")
 

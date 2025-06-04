@@ -34,7 +34,9 @@ class EmployeeDataAnalyzer:
 
             # Calculate tenure in years
             current_date = datetime.now()
-            self.clean_df["tenure"] = (current_date - self.clean_df["hire_date"]).dt.days / 365.25
+            self.clean_df["tenure"] = (
+                current_date - self.clean_df["hire_date"]
+            ).dt.days / 365.25
 
             # Add salary categories
             self.clean_df["salary_category"] = pd.cut(
@@ -47,7 +49,12 @@ class EmployeeDataAnalyzer:
             self.clean_df["performance_category"] = pd.cut(
                 self.clean_df["performance_score"],
                 bins=[0, 3.5, 4.0, 4.5, 5.0],
-                labels=["Needs Improvement", "Meets Expectations", "Exceeds Expectations", "Outstanding"],
+                labels=[
+                    "Needs Improvement",
+                    "Meets Expectations",
+                    "Exceeds Expectations",
+                    "Outstanding",
+                ],
             )
 
             print("\nData Cleaning Summary:")
@@ -74,11 +81,15 @@ class EmployeeDataAnalyzer:
             # Basic statistics
             print("\nBasic Statistics:")
             print("\nSalary Statistics by Department:")
-            dept_stats = self.clean_df.groupby("department")["salary"].agg(["mean", "median", "min", "max"])
+            dept_stats = self.clean_df.groupby("department")["salary"].agg(
+                ["mean", "median", "min", "max"]
+            )
             print(dept_stats)
 
             print("\nPerformance Score Statistics:")
-            perf_stats = self.clean_df.groupby("department")["performance_score"].agg(["mean", "median", "min", "max"])
+            perf_stats = self.clean_df.groupby("department")["performance_score"].agg(
+                ["mean", "median", "min", "max"]
+            )
             print(perf_stats)
 
             # Store results for later use
@@ -105,21 +116,35 @@ class EmployeeDataAnalyzer:
         try:
             # Correlation Analysis
             print("\nCorrelation Analysis:")
-            numeric_cols = ["salary", "age", "performance_score", "years_experience", "tenure"]
+            numeric_cols = [
+                "salary",
+                "age",
+                "performance_score",
+                "years_experience",
+                "tenure",
+            ]
             correlation_matrix = self.clean_df[numeric_cols].corr()
             print(correlation_matrix)
 
             # Remote Work Analysis
             print("\nRemote Work Analysis:")
             remote_stats = self.clean_df.groupby("remote_work").agg(
-                {"salary": ["mean", "median"], "performance_score": ["mean", "median"], "employee_id": "count"}
+                {
+                    "salary": ["mean", "median"],
+                    "performance_score": ["mean", "median"],
+                    "employee_id": "count",
+                }
             )
             print(remote_stats)
 
             # Education Level Analysis
             print("\nEducation Level Analysis:")
             education_stats = self.clean_df.groupby("education_level").agg(
-                {"salary": ["mean", "median"], "performance_score": ["mean", "median"], "employee_id": "count"}
+                {
+                    "salary": ["mean", "median"],
+                    "performance_score": ["mean", "median"],
+                    "employee_id": "count",
+                }
             )
             print(education_stats)
 
@@ -149,7 +174,10 @@ class EmployeeDataAnalyzer:
             dept_stats = self.analysis_results["department_stats"]
             max_salary_dept = dept_stats["mean"].idxmax()
             min_salary_dept = dept_stats["mean"].idxmin()
-            salary_gap = dept_stats["mean"][max_salary_dept] - dept_stats["mean"][min_salary_dept]
+            salary_gap = (
+                dept_stats["mean"][max_salary_dept]
+                - dept_stats["mean"][min_salary_dept]
+            )
 
             recommendations.append(
                 f"1. Salary Equity: There's a ${salary_gap:.2f} gap between {max_salary_dept} and {min_salary_dept} departments. "
@@ -158,7 +186,10 @@ class EmployeeDataAnalyzer:
 
             # Remote Work Recommendations
             remote_stats = self.analysis_results["remote_stats"]
-            if remote_stats[("salary", "mean")]["Yes"] > remote_stats[("salary", "mean")]["No"]:
+            if (
+                remote_stats[("salary", "mean")]["Yes"]
+                > remote_stats[("salary", "mean")]["No"]
+            ):
                 recommendations.append(
                     "2. Remote Work Policy: Remote workers show higher average salaries. "
                     "Consider expanding remote work opportunities."
@@ -210,53 +241,80 @@ class EmployeeDataAnalyzer:
 
             # 1. Salary Distribution by Department
             plt.figure(figsize=(12, 6))
-            ax = sns.boxplot(data=self.clean_df, x="department", y="salary", palette=colors)
+            ax = sns.boxplot(
+                data=self.clean_df, x="department", y="salary", palette=colors
+            )
             plt.title("Salary Distribution by Department", pad=20, fontsize=12)
             plt.xlabel("Department", fontsize=10)
             plt.ylabel("Salary ($)", fontsize=10)
             plt.xticks(rotation=45, ha="right")
             plt.grid(True, alpha=0.3)
             plt.tight_layout()
-            plt.savefig("analysis_plots/salary_by_department.png", dpi=300, bbox_inches="tight")
+            plt.savefig(
+                "analysis_plots/salary_by_department.png", dpi=300, bbox_inches="tight"
+            )
             plt.close()
 
             # 2. Performance Score Distribution
             plt.figure(figsize=(10, 6))
-            ax = sns.histplot(data=self.clean_df, x="performance_score", bins=20, color=colors[0])
+            ax = sns.histplot(
+                data=self.clean_df, x="performance_score", bins=20, color=colors[0]
+            )
             plt.title("Distribution of Performance Scores", pad=20, fontsize=12)
             plt.xlabel("Performance Score", fontsize=10)
             plt.ylabel("Count", fontsize=10)
             plt.grid(True, alpha=0.3)
             plt.tight_layout()
-            plt.savefig("analysis_plots/performance_distribution.png", dpi=300, bbox_inches="tight")
+            plt.savefig(
+                "analysis_plots/performance_distribution.png",
+                dpi=300,
+                bbox_inches="tight",
+            )
             plt.close()
 
             # 3. Remote Work Impact
             plt.figure(figsize=(10, 6))
-            ax = sns.boxplot(data=self.clean_df, x="remote_work", y="salary", palette=[colors[1], colors[2]])
+            ax = sns.boxplot(
+                data=self.clean_df,
+                x="remote_work",
+                y="salary",
+                palette=[colors[1], colors[2]],
+            )
             plt.title("Salary Distribution by Remote Work Status", pad=20, fontsize=12)
             plt.xlabel("Remote Work Status", fontsize=10)
             plt.ylabel("Salary ($)", fontsize=10)
             plt.grid(True, alpha=0.3)
             plt.tight_layout()
-            plt.savefig("analysis_plots/remote_work_impact.png", dpi=300, bbox_inches="tight")
+            plt.savefig(
+                "analysis_plots/remote_work_impact.png", dpi=300, bbox_inches="tight"
+            )
             plt.close()
 
             # 4. Education Level Impact
             plt.figure(figsize=(10, 6))
-            ax = sns.boxplot(data=self.clean_df, x="education_level", y="salary", palette=colors)
+            ax = sns.boxplot(
+                data=self.clean_df, x="education_level", y="salary", palette=colors
+            )
             plt.title("Salary Distribution by Education Level", pad=20, fontsize=12)
             plt.xlabel("Education Level", fontsize=10)
             plt.ylabel("Salary ($)", fontsize=10)
             plt.xticks(rotation=45, ha="right")
             plt.grid(True, alpha=0.3)
             plt.tight_layout()
-            plt.savefig("analysis_plots/education_impact.png", dpi=300, bbox_inches="tight")
+            plt.savefig(
+                "analysis_plots/education_impact.png", dpi=300, bbox_inches="tight"
+            )
             plt.close()
 
             # 5. Correlation Heatmap
             plt.figure(figsize=(10, 8))
-            numeric_cols = ["salary", "age", "performance_score", "years_experience", "tenure"]
+            numeric_cols = [
+                "salary",
+                "age",
+                "performance_score",
+                "years_experience",
+                "tenure",
+            ]
             correlation_matrix = self.clean_df[numeric_cols].corr()
             mask = np.triu(np.ones_like(correlation_matrix, dtype=bool))
             sns.heatmap(
@@ -271,7 +329,9 @@ class EmployeeDataAnalyzer:
             )
             plt.title("Correlation Matrix of Key Metrics", pad=20, fontsize=12)
             plt.tight_layout()
-            plt.savefig("analysis_plots/correlation_heatmap.png", dpi=300, bbox_inches="tight")
+            plt.savefig(
+                "analysis_plots/correlation_heatmap.png", dpi=300, bbox_inches="tight"
+            )
             plt.close()
 
             print("\nVisualizations created and saved in 'analysis_plots' directory")
@@ -293,7 +353,9 @@ def main():
             if analyzer.perform_in_depth_analysis():
                 analyzer.generate_recommendations()
 
-    print("\nAnalysis complete! Check the 'analysis_plots' directory for visualizations.")
+    print(
+        "\nAnalysis complete! Check the 'analysis_plots' directory for visualizations."
+    )
 
 
 if __name__ == "__main__":

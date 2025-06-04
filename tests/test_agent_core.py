@@ -22,14 +22,12 @@ class TestAgent(unittest.TestCase):
         self.assertEqual(agent.agent_type, AgentType.AUTOMATION)
         self.assertIsNotNone(agent.model)
 
-
     def test_agent_response(self):
         """Test agent response generation."""
         agent = Agent(AgentType.AUTOMATION)
         response = agent.process_request("test request")
         self.assertIsNotNone(response)
         self.assertIsInstance(response, str)
-
 
     def test_invalid_agent_type(self):
         """Test handling of invalid agent type."""
@@ -45,7 +43,6 @@ class TestProcessRequest(unittest.TestCase):
         response = process_request("test request", AgentType.AUTOMATION)
         self.assertIsNotNone(response)
         self.assertIsInstance(response, str)
-
 
     def test_process_request_with_invalid_type(self):
         """Test process_request with invalid agent type."""

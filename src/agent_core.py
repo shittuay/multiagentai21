@@ -68,7 +68,9 @@ class AgentResponse:
 class BaseAgent(ABC):
     """Abstract base class for all specialized agents"""
 
-    def __init__(self, agent_type: AgentType, model_name: str = "models/gemini-1.5-pro-002"):
+    def __init__(
+        self, agent_type: AgentType, model_name: str = "models/gemini-1.5-pro-002"
+    ):
         """Initialize the base agent with type and model"""
         self.agent_type = agent_type
         self.model_name = model_name
@@ -100,7 +102,9 @@ class BaseAgent(ABC):
                     print(f"Successfully initialized model: {model_name}")
                     return
                 else:
-                    raise ValueError(f"Model {model_name} did not return a valid response")
+                    raise ValueError(
+                        f"Model {model_name} did not return a valid response"
+                    )
 
             except Exception as e:
                 print(f"Error initializing model {model_name}: {e}")
@@ -109,7 +113,9 @@ class BaseAgent(ABC):
         except Exception as e:
             print(f"Failed to initialize Gemini: {str(e)}")
             print(f"Error type: {type(e)}")
-            print(f"Error details: {e.__dict__ if hasattr(e, '__dict__') else 'No details available'}")
+            print(
+                f"Error details: {e.__dict__ if hasattr(e, '__dict__') else 'No details available'}"
+            )
             raise
 
     def _initialize_temp_dir(self):
@@ -174,7 +180,9 @@ class BaseAgent(ABC):
 
         return FileType.UNKNOWN
 
-    def process_file(self, file: BinaryIO, filename: str, mime_type: Optional[str] = None) -> FileData:
+    def process_file(
+        self, file: BinaryIO, filename: str, mime_type: Optional[str] = None
+    ) -> FileData:
         """Process uploaded file and return FileData object"""
         try:
             # Create temporary file
@@ -210,12 +218,16 @@ class BaseAgent(ABC):
             elif file_type in [FileType.IMAGE, FileType.VIDEO, FileType.AUDIO]:
                 # For media files, we'll just store the path and basic metadata
                 metadata["duration"] = None  # Would implement media duration extraction
-                metadata["dimensions"] = None  # Would implement image/video dimension extraction
+                metadata[
+                    "dimensions"
+                ] = None  # Would implement image/video dimension extraction
 
             return FileData(
                 filename=filename,
                 file_type=file_type,
-                mime_type=mime_type or mimetypes.guess_type(filename)[0] or "application/octet-stream",
+                mime_type=mime_type
+                or mimetypes.guess_type(filename)[0]
+                or "application/octet-stream",
                 size=file_size,
                 temp_path=temp_path,
                 content=content,
@@ -232,12 +244,17 @@ class BaseAgent(ABC):
 
     @abstractmethod
     def process_request(
-        self, request: str, context: Optional[Dict] = None, files: Optional[List[FileData]] = None
+        self,
+        request: str,
+        context: Optional[Dict] = None,
+        files: Optional[List[FileData]] = None,
     ) -> AgentResponse:
         """Abstract method for processing requests with optional file handling"""
         pass
 
-    def _generate_content(self, prompt: str, files: Optional[List[FileData]] = None) -> str:
+    def _generate_content(
+        self, prompt: str, files: Optional[List[FileData]] = None
+    ) -> str:
         """Generate content using Gemini AI with optional file context"""
         try:
             if not self.model:
@@ -250,9 +267,7 @@ class BaseAgent(ABC):
                     file_context += f"- {file.filename} ({file.file_type.value}): "
                     if file.content is not None:
                         if isinstance(file.content, pd.DataFrame):
-                            file_context += (
-                                f"DataFrame with {len(file.content)} rows and {len(file.content.columns)} columns\n"
-                            )
+                            file_context += f"DataFrame with {len(file.content)} rows and {len(file.content.columns)} columns\n"
                         else:
                             file_context += f"{str(file.content)[:200]}...\n"
                     else:
@@ -272,16 +287,24 @@ class BaseAgent(ABC):
         """Initialize the data analyzer with the agent's temp directory"""
         self.data_analyzer = DataAnalyzer(temp_dir=self.temp_dir)
 
-    def process_request(self, request: str, files: Optional[List[FileData]] = None) -> AgentResponse:
+    def process_request(
+        self, request: str, files: Optional[List[FileData]] = None
+    ) -> AgentResponse:
         """Process a request with optional file data"""
         try:
             # Handle file analysis if files are provided
             if files:
                 analysis_results = []
                 for file in files:
-                    if file.file_type in [FileType.TEXT, FileType.SPREADSHEET, FileType.DOCUMENT]:
+                    if file.file_type in [
+                        FileType.TEXT,
+                        FileType.SPREADSHEET,
+                        FileType.DOCUMENT,
+                    ]:
                         result = self.data_analyzer.analyze_file(file.temp_path)
-                        analysis_results.append({"file_name": file.filename, "analysis": result})
+                        analysis_results.append(
+                            {"file_name": file.filename, "analysis": result}
+                        )
 
                 if analysis_results:
                     # Format analysis results for the model
@@ -289,7 +312,9 @@ class BaseAgent(ABC):
                     for result in analysis_results:
                         analysis_summary += f"\nFile: {result['file_name']}\n"
                         if "error" in result["analysis"]:
-                            analysis_summary += f"Error: {result['analysis']['error']}\n"
+                            analysis_summary += (
+                                f"Error: {result['analysis']['error']}\n"
+                            )
                         else:
                             analysis_summary += json.dumps(result["analysis"], indent=2)
 
@@ -306,7 +331,11 @@ class BaseAgent(ABC):
             return response
 
         except Exception as e:
-            return AgentResponse(success=False, message=f"Error processing request: {str(e)}", error=str(e))
+            return AgentResponse(
+                success=False,
+                message=f"Error processing request: {str(e)}",
+                error=str(e),
+            )
 
     def cleanup(self):
         """Clean up resources"""
@@ -332,7 +361,10 @@ class AutomationAgent(BaseAgent):
             print(f"BigQuery initialization failed: {e}")
 
     def process_request(
-        self, request: str, context: Optional[Dict] = None, files: Optional[List[FileData]] = None
+        self,
+        request: str,
+        context: Optional[Dict] = None,
+        files: Optional[List[FileData]] = None,
     ) -> AgentResponse:
         """Process automation requests with optional file handling"""
         start_time = time.time()
@@ -352,7 +384,10 @@ class AutomationAgent(BaseAgent):
 
                 content = self._generate_content(greeting_prompt)
                 return AgentResponse(
-                    success=True, agent_type=self.agent_type.value, content=content, execution_time=time.time() - start_time
+                    success=True,
+                    agent_type=self.agent_type.value,
+                    content=content,
+                    execution_time=time.time() - start_time,
                 )
 
             # For actual automation requests, provide a human-readable analysis
@@ -413,7 +448,10 @@ class AutomationAgent(BaseAgent):
             )
 
     def _execute_automation_task(
-        self, request: str, context: Optional[Dict], files: Optional[List[FileData]] = None
+        self,
+        request: str,
+        context: Optional[Dict],
+        files: Optional[List[FileData]] = None,
     ) -> Dict[str, Any]:
         """Execute specific automation tasks with optional file handling"""
         automation_data = {
@@ -444,7 +482,11 @@ class AutomationAgent(BaseAgent):
                 "Result verification",
                 "Notification dispatch",
             ]
-            automation_data["tools_required"] = ["API integration", "Database", "Notification system"]
+            automation_data["tools_required"] = [
+                "API integration",
+                "Database",
+                "Notification system",
+            ]
 
         return automation_data
 
@@ -465,7 +507,10 @@ class DataAnalysisAgent(BaseAgent):
             print(f"BigQuery initialization failed: {e}")
 
     def process_request(
-        self, request: str, context: Optional[Dict] = None, files: Optional[List[FileData]] = None
+        self,
+        request: str,
+        context: Optional[Dict] = None,
+        files: Optional[List[FileData]] = None,
     ) -> AgentResponse:
         """Process data analysis requests with optional file handling"""
         start_time = time.time()
@@ -513,7 +558,10 @@ class DataAnalysisAgent(BaseAgent):
             )
 
     def _perform_data_analysis(
-        self, request: str, context: Optional[Dict], files: Optional[List[FileData]] = None
+        self,
+        request: str,
+        context: Optional[Dict],
+        files: Optional[List[FileData]] = None,
     ) -> Dict[str, Any]:
         """Perform actual data analysis"""
         analysis_results = {
@@ -568,7 +616,10 @@ class CustomerServiceAgent(BaseAgent):
         self.customer_context = {}
 
     def process_request(
-        self, request: str, context: Optional[Dict] = None, files: Optional[List[FileData]] = None
+        self,
+        request: str,
+        context: Optional[Dict] = None,
+        files: Optional[List[FileData]] = None,
     ) -> AgentResponse:
         """Process customer service requests with optional file handling"""
         start_time = time.time()
@@ -652,7 +703,10 @@ class ContentCreationAgent(BaseAgent):
         }
 
     def process_request(
-        self, request: str, context: Optional[Dict] = None, files: Optional[List[FileData]] = None
+        self,
+        request: str,
+        context: Optional[Dict] = None,
+        files: Optional[List[FileData]] = None,
     ) -> AgentResponse:
         """Process content creation requests with optional file handling"""
         start_time = time.time()
@@ -707,9 +761,16 @@ class ContentCreationAgent(BaseAgent):
                 execution_time=time.time() - start_time,
             )
 
-    def _analyze_content_request(self, request: str, context: Optional[Dict]) -> Dict[str, str]:
+    def _analyze_content_request(
+        self, request: str, context: Optional[Dict]
+    ) -> Dict[str, str]:
         """Analyze content request to determine parameters"""
-        params = {"type": "general", "audience": "general", "tone": "professional", "length": "medium"}
+        params = {
+            "type": "general",
+            "audience": "general",
+            "tone": "professional",
+            "length": "medium",
+        }
 
         # Simple keyword analysis
         request_lower = request.lower()
@@ -718,7 +779,10 @@ class ContentCreationAgent(BaseAgent):
             params["type"] = "blog"
         elif any(word in request_lower for word in ["email", "newsletter"]):
             params["type"] = "email"
-        elif any(word in request_lower for word in ["social", "twitter", "facebook", "instagram"]):
+        elif any(
+            word in request_lower
+            for word in ["social", "twitter", "facebook", "instagram"]
+        ):
             params["type"] = "social"
         elif any(word in request_lower for word in ["presentation", "slides"]):
             params["type"] = "presentation"
@@ -728,13 +792,17 @@ class ContentCreationAgent(BaseAgent):
 
         return params
 
-    def _generate_content_metadata(self, content: str, params: Dict[str, str]) -> Dict[str, Any]:
+    def _generate_content_metadata(
+        self, content: str, params: Dict[str, str]
+    ) -> Dict[str, Any]:
         """Generate metadata for created content"""
         return {
             "content_type": params.get("type", "general"),
             "word_count": len(content.split()),
             "character_count": len(content),
-            "estimated_read_time": max(1, len(content.split()) // 200),  # words per minute
+            "estimated_read_time": max(
+                1, len(content.split()) // 200
+            ),  # words per minute
             "content_quality_score": "good",  # Would implement quality assessment
             "seo_keywords": [],  # Would implement keyword extraction
             "sentiment": "neutral",  # Would implement sentiment analysis
@@ -754,7 +822,10 @@ class MultiAgentCodingAI:
         self.conversation_history = []
 
     def route_request(
-        self, request: str, agent_type: Optional[AgentType] = None, context: Optional[Dict] = None
+        self,
+        request: str,
+        agent_type: Optional[AgentType] = None,
+        context: Optional[Dict] = None,
     ) -> AgentResponse:
         """Route request to appropriate agent or auto-detect"""
 
@@ -763,7 +834,10 @@ class MultiAgentCodingAI:
 
         if agent_type not in self.agents:
             return AgentResponse(
-                success=False, agent_type="unknown", content="", error_message=f"Unknown agent type: {agent_type}"
+                success=False,
+                agent_type="unknown",
+                content="",
+                error_message=f"Unknown agent type: {agent_type}",
             )
 
         # Process request with selected agent
@@ -779,23 +853,70 @@ class MultiAgentCodingAI:
         request_lower = request.lower()
 
         # Keywords for each agent type
-        automation_keywords = ["automate", "workflow", "process", "schedule", "trigger", "pipeline"]
-        data_keywords = ["analyze", "data", "report", "chart", "sql", "query", "insights", "metrics"]
-        customer_keywords = ["help", "support", "issue", "problem", "question", "customer", "service"]
-        content_keywords = ["write", "create", "content", "blog", "post", "email", "marketing", "copy"]
+        automation_keywords = [
+            "automate",
+            "workflow",
+            "process",
+            "schedule",
+            "trigger",
+            "pipeline",
+        ]
+        data_keywords = [
+            "analyze",
+            "data",
+            "report",
+            "chart",
+            "sql",
+            "query",
+            "insights",
+            "metrics",
+        ]
+        customer_keywords = [
+            "help",
+            "support",
+            "issue",
+            "problem",
+            "question",
+            "customer",
+            "service",
+        ]
+        content_keywords = [
+            "write",
+            "create",
+            "content",
+            "blog",
+            "post",
+            "email",
+            "marketing",
+            "copy",
+        ]
 
         # Count keyword matches
         scores = {
-            AgentType.AUTOMATION: sum(1 for word in automation_keywords if word in request_lower),
-            AgentType.DATA_ANALYSIS: sum(1 for word in data_keywords if word in request_lower),
-            AgentType.CUSTOMER_SERVICE: sum(1 for word in customer_keywords if word in request_lower),
-            AgentType.CONTENT_CREATION: sum(1 for word in content_keywords if word in request_lower),
+            AgentType.AUTOMATION: sum(
+                1 for word in automation_keywords if word in request_lower
+            ),
+            AgentType.DATA_ANALYSIS: sum(
+                1 for word in data_keywords if word in request_lower
+            ),
+            AgentType.CUSTOMER_SERVICE: sum(
+                1 for word in customer_keywords if word in request_lower
+            ),
+            AgentType.CONTENT_CREATION: sum(
+                1 for word in content_keywords if word in request_lower
+            ),
         }
 
         # Return agent type with highest score, default to content creation
-        return max(scores.items(), key=lambda x: x[1])[0] if max(scores.values()) > 0 else AgentType.CONTENT_CREATION
+        return (
+            max(scores.items(), key=lambda x: x[1])[0]
+            if max(scores.values()) > 0
+            else AgentType.CONTENT_CREATION
+        )
 
-    def _log_conversation(self, request: str, response: AgentResponse, agent_type: AgentType):
+    def _log_conversation(
+        self, request: str, response: AgentResponse, agent_type: AgentType
+    ):
         """Log conversation for analysis and improvement"""
         conversation_entry = {
             "timestamp": time.time(),
@@ -812,7 +933,11 @@ class MultiAgentCodingAI:
         """Get status of all agents"""
         status = {}
         for agent_type, agent in self.agents.items():
-            status[agent_type.value] = {"initialized": agent.model is not None, "type": agent_type.value, "ready": True}
+            status[agent_type.value] = {
+                "initialized": agent.model is not None,
+                "type": agent_type.value,
+                "ready": True,
+            }
 
         return status
 
@@ -828,7 +953,9 @@ class HackathonAgent(MultiAgentCodingAI):
     def generate_content(self, prompt: str) -> str:
         """Generate content using content creation agent"""
         response = self.route_request(prompt, AgentType.CONTENT_CREATION)
-        return response.content if response.success else f"Error: {response.error_message}"
+        return (
+            response.content if response.success else f"Error: {response.error_message}"
+        )
 
     def process_request(self, request: str) -> Dict[str, Any]:
         """Process request and return dictionary format"""

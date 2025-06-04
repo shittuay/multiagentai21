@@ -49,7 +49,14 @@ class DataAnalyzer:
 
             if file_type == "csv":
                 # Try different encodings with more detailed error handling
-                encodings = ["utf-8", "latin1", "cp1252", "iso-8859-1", "utf-16", "utf-32"]
+                encodings = [
+                    "utf-8",
+                    "latin1",
+                    "cp1252",
+                    "iso-8859-1",
+                    "utf-16",
+                    "utf-32",
+                ]
                 df = None
                 last_error = None
 
@@ -65,11 +72,17 @@ class DataAnalyzer:
                         # Try reading with the detected encoding first
                         if detected["confidence"] > 0.7:
                             try:
-                                df = pd.read_csv(file_path, encoding=detected["encoding"])
-                                print(f"Successfully read file with detected encoding: {detected['encoding']}")
+                                df = pd.read_csv(
+                                    file_path, encoding=detected["encoding"]
+                                )
+                                print(
+                                    f"Successfully read file with detected encoding: {detected['encoding']}"
+                                )
                                 break
                             except Exception as e:
-                                print(f"Failed to read with detected encoding: {str(e)}")
+                                print(
+                                    f"Failed to read with detected encoding: {str(e)}"
+                                )
 
                         # If detected encoding fails, try the current encoding
                         df = pd.read_csv(file_path, encoding=encoding)
@@ -91,7 +104,9 @@ class DataAnalyzer:
                         "error": error_msg,
                         "supported_encodings": encodings,
                         "file_path": file_path,
-                        "file_size": os.path.getsize(file_path) if os.path.exists(file_path) else "File not found",
+                        "file_size": os.path.getsize(file_path)
+                        if os.path.exists(file_path)
+                        else "File not found",
                     }
 
                 print(f"Successfully loaded DataFrame with shape: {df.shape}")
@@ -119,10 +134,15 @@ class DataAnalyzer:
                     print(f"Using {analysis_type} analysis method")
                     return analysis_methods[analysis_type](df)
                 else:
-                    print(f"Using generic analysis method (requested type {analysis_type} not found)")
+                    print(
+                        f"Using generic analysis method (requested type {analysis_type} not found)"
+                    )
                     return self._analyze_generic_data(df)
             else:
-                return {"error": f"Unsupported file type: {file_type}", "supported_types": ["csv"]}
+                return {
+                    "error": f"Unsupported file type: {file_type}",
+                    "supported_types": ["csv"],
+                }
 
         except Exception as e:
             error_msg = f"Analysis failed: {str(e)}"
@@ -135,7 +155,9 @@ class DataAnalyzer:
                 "traceback": traceback.format_exc(),
                 "file_path": file_path,
                 "file_exists": os.path.exists(file_path),
-                "file_size": os.path.getsize(file_path) if os.path.exists(file_path) else "N/A",
+                "file_size": os.path.getsize(file_path)
+                if os.path.exists(file_path)
+                else "N/A",
             }
 
     def _detect_file_type(self, file_path: str) -> str:
@@ -155,43 +177,110 @@ class DataAnalyzer:
         columns = set(df.columns.str.lower())
 
         # Employee data detection
-        if any(col in columns for col in ["employee", "department", "salary", "performance"]):
+        if any(
+            col in columns
+            for col in ["employee", "department", "salary", "performance"]
+        ):
             return "employee"
 
         # Sales data detection
-        if any(col in columns for col in ["sales", "revenue", "product", "customer", "transaction"]):
+        if any(
+            col in columns
+            for col in ["sales", "revenue", "product", "customer", "transaction"]
+        ):
             return "sales"
 
         # Financial data detection
-        if any(col in columns for col in ["income", "expense", "profit", "loss", "balance", "cash_flow"]):
+        if any(
+            col in columns
+            for col in ["income", "expense", "profit", "loss", "balance", "cash_flow"]
+        ):
             return "financial"
 
         # Customer data detection
-        if any(col in columns for col in ["customer", "client", "satisfaction", "feedback", "rating"]):
+        if any(
+            col in columns
+            for col in ["customer", "client", "satisfaction", "feedback", "rating"]
+        ):
             return "customer"
 
         # Marketing data detection
-        if any(col in columns for col in ["campaign", "marketing", "advertisement", "conversion", "impression"]):
+        if any(
+            col in columns
+            for col in [
+                "campaign",
+                "marketing",
+                "advertisement",
+                "conversion",
+                "impression",
+            ]
+        ):
             return "marketing"
 
         # Inventory data detection
-        if any(col in columns for col in ["inventory", "stock", "warehouse", "sku", "quantity", "reorder"]):
+        if any(
+            col in columns
+            for col in ["inventory", "stock", "warehouse", "sku", "quantity", "reorder"]
+        ):
             return "inventory"
 
         # Supply chain data detection
-        if any(col in columns for col in ["supplier", "vendor", "shipment", "delivery", "lead_time", "order"]):
+        if any(
+            col in columns
+            for col in [
+                "supplier",
+                "vendor",
+                "shipment",
+                "delivery",
+                "lead_time",
+                "order",
+            ]
+        ):
             return "supply_chain"
 
         # Social media data detection
-        if any(col in columns for col in ["post", "engagement", "followers", "likes", "shares", "comments", "hashtag"]):
+        if any(
+            col in columns
+            for col in [
+                "post",
+                "engagement",
+                "followers",
+                "likes",
+                "shares",
+                "comments",
+                "hashtag",
+            ]
+        ):
             return "social_media"
 
         # Website analytics detection
-        if any(col in columns for col in ["pageview", "session", "bounce", "user", "device", "browser", "referrer"]):
+        if any(
+            col in columns
+            for col in [
+                "pageview",
+                "session",
+                "bounce",
+                "user",
+                "device",
+                "browser",
+                "referrer",
+            ]
+        ):
             return "website"
 
         # Customer support detection
-        if any(col in columns for col in ["ticket", "support", "resolution", "response", "priority", "category", "status"]):
+        if any(
+            col in columns
+            for col in [
+                "ticket",
+                "support",
+                "resolution",
+                "response",
+                "priority",
+                "category",
+                "status",
+            ]
+        ):
             return "support"
 
         return "generic"
@@ -212,7 +301,9 @@ class DataAnalyzer:
                 "summary": {
                     "total_records": len(df),
                     "columns": list(df.columns),
-                    "missing_values": {str(k): int(v) for k, v in df.isnull().sum().to_dict().items()},
+                    "missing_values": {
+                        str(k): int(v) for k, v in df.isnull().sum().to_dict().items()
+                    },
                 }
             }
 
@@ -221,25 +312,64 @@ class DataAnalyzer:
                 dept_stats = {}
                 if "salary" in df.columns:
                     dept_stats["salary"] = {
-                        "mean": {str(k): float(v) for k, v in df.groupby("department")["salary"].mean().to_dict().items()},
-                        "median": {str(k): float(v) for k, v in df.groupby("department")["salary"].median().to_dict().items()},
-                        "min": {str(k): float(v) for k, v in df.groupby("department")["salary"].min().to_dict().items()},
-                        "max": {str(k): float(v) for k, v in df.groupby("department")["salary"].max().to_dict().items()},
+                        "mean": {
+                            str(k): float(v)
+                            for k, v in df.groupby("department")["salary"]
+                            .mean()
+                            .to_dict()
+                            .items()
+                        },
+                        "median": {
+                            str(k): float(v)
+                            for k, v in df.groupby("department")["salary"]
+                            .median()
+                            .to_dict()
+                            .items()
+                        },
+                        "min": {
+                            str(k): float(v)
+                            for k, v in df.groupby("department")["salary"]
+                            .min()
+                            .to_dict()
+                            .items()
+                        },
+                        "max": {
+                            str(k): float(v)
+                            for k, v in df.groupby("department")["salary"]
+                            .max()
+                            .to_dict()
+                            .items()
+                        },
                     }
                 if "performance_score" in df.columns:
                     dept_stats["performance_score"] = {
                         "mean": {
-                            str(k): float(v) for k, v in df.groupby("department")["performance_score"].mean().to_dict().items()
+                            str(k): float(v)
+                            for k, v in df.groupby("department")["performance_score"]
+                            .mean()
+                            .to_dict()
+                            .items()
                         },
                         "median": {
                             str(k): float(v)
-                            for k, v in df.groupby("department")["performance_score"].median().to_dict().items()
+                            for k, v in df.groupby("department")["performance_score"]
+                            .median()
+                            .to_dict()
+                            .items()
                         },
                         "min": {
-                            str(k): float(v) for k, v in df.groupby("department")["performance_score"].min().to_dict().items()
+                            str(k): float(v)
+                            for k, v in df.groupby("department")["performance_score"]
+                            .min()
+                            .to_dict()
+                            .items()
                         },
                         "max": {
-                            str(k): float(v) for k, v in df.groupby("department")["performance_score"].max().to_dict().items()
+                            str(k): float(v)
+                            for k, v in df.groupby("department")["performance_score"]
+                            .max()
+                            .to_dict()
+                            .items()
                         },
                     }
                 stats["department_analysis"] = dept_stats
@@ -250,21 +380,39 @@ class DataAnalyzer:
                 if "salary" in df.columns:
                     edu_stats["salary"] = {
                         "mean": {
-                            str(k): float(v) for k, v in df.groupby("education_level")["salary"].mean().to_dict().items()
+                            str(k): float(v)
+                            for k, v in df.groupby("education_level")["salary"]
+                            .mean()
+                            .to_dict()
+                            .items()
                         },
                         "median": {
-                            str(k): float(v) for k, v in df.groupby("education_level")["salary"].median().to_dict().items()
+                            str(k): float(v)
+                            for k, v in df.groupby("education_level")["salary"]
+                            .median()
+                            .to_dict()
+                            .items()
                         },
                     }
                 if "performance_score" in df.columns:
                     edu_stats["performance_score"] = {
                         "mean": {
                             str(k): float(v)
-                            for k, v in df.groupby("education_level")["performance_score"].mean().to_dict().items()
+                            for k, v in df.groupby("education_level")[
+                                "performance_score"
+                            ]
+                            .mean()
+                            .to_dict()
+                            .items()
                         },
                         "median": {
                             str(k): float(v)
-                            for k, v in df.groupby("education_level")["performance_score"].median().to_dict().items()
+                            for k, v in df.groupby("education_level")[
+                                "performance_score"
+                            ]
+                            .median()
+                            .to_dict()
+                            .items()
                         },
                     }
                 stats["education_analysis"] = edu_stats
@@ -283,7 +431,10 @@ class DataAnalyzer:
             return stats
 
         except Exception as e:
-            return {"error": f"Employee data analysis failed: {str(e)}", "traceback": str(e.__traceback__)}
+            return {
+                "error": f"Employee data analysis failed: {str(e)}",
+                "traceback": str(e.__traceback__),
+            }
 
     def _analyze_sales_data(self, df: pd.DataFrame) -> Dict:
         """Analyze sales data and return insights"""
@@ -302,24 +453,34 @@ class DataAnalyzer:
                 stats["sales_metrics"] = {
                     "total_sales": df[sales_col].sum(),
                     "average_sale": df[sales_col].mean(),
-                    "sales_by_period": df.groupby("date")[sales_col].sum().to_dict() if "date" in df.columns else None,
+                    "sales_by_period": df.groupby("date")[sales_col].sum().to_dict()
+                    if "date" in df.columns
+                    else None,
                     "sales_trend": self._calculate_trend(df[sales_col]),
                 }
 
             # Product analysis
             if "product" in df.columns:
                 stats["product_analysis"] = {
-                    "top_products": df.groupby("product")[sales_col].sum().nlargest(5).to_dict()
+                    "top_products": df.groupby("product")[sales_col]
+                    .sum()
+                    .nlargest(5)
+                    .to_dict()
                     if sales_col in df.columns
                     else None,
-                    "product_categories": df["product"].value_counts().to_dict() if "category" in df.columns else None,
+                    "product_categories": df["product"].value_counts().to_dict()
+                    if "category" in df.columns
+                    else None,
                 }
 
             # Customer analysis
             if "customer" in df.columns:
                 stats["customer_analysis"] = {
                     "customer_count": df["customer"].nunique(),
-                    "top_customers": df.groupby("customer")[sales_col].sum().nlargest(5).to_dict()
+                    "top_customers": df.groupby("customer")[sales_col]
+                    .sum()
+                    .nlargest(5)
+                    .to_dict()
                     if sales_col in df.columns
                     else None,
                     "customer_segments": self._analyze_customer_segments(df),
@@ -335,7 +496,10 @@ class DataAnalyzer:
             return stats
 
         except Exception as e:
-            return {"error": f"Sales data analysis failed: {str(e)}", "traceback": str(e.__traceback__)}
+            return {
+                "error": f"Sales data analysis failed: {str(e)}",
+                "traceback": str(e.__traceback__),
+            }
 
     def _analyze_financial_data(self, df: pd.DataFrame) -> Dict:
         """Analyze financial data and return insights"""
@@ -354,7 +518,8 @@ class DataAnalyzer:
                     "total_income": df["income"].sum(),
                     "total_expenses": df["expense"].sum(),
                     "net_profit": df["income"].sum() - df["expense"].sum(),
-                    "profit_margin": (df["income"].sum() - df["expense"].sum()) / df["income"].sum()
+                    "profit_margin": (df["income"].sum() - df["expense"].sum())
+                    / df["income"].sum()
                     if df["income"].sum() > 0
                     else 0,
                 }
@@ -363,15 +528,24 @@ class DataAnalyzer:
             if "cash_flow" in df.columns:
                 stats["cash_flow_analysis"] = {
                     "total_cash_flow": df["cash_flow"].sum(),
-                    "cash_flow_by_period": df.groupby("date")["cash_flow"].sum().to_dict() if "date" in df.columns else None,
+                    "cash_flow_by_period": df.groupby("date")["cash_flow"]
+                    .sum()
+                    .to_dict()
+                    if "date" in df.columns
+                    else None,
                     "cash_flow_trend": self._calculate_trend(df["cash_flow"]),
                 }
 
             # Expense analysis
             if "expense" in df.columns and "category" in df.columns:
                 stats["expense_analysis"] = {
-                    "expense_by_category": df.groupby("category")["expense"].sum().to_dict(),
-                    "top_expense_categories": df.groupby("category")["expense"].sum().nlargest(5).to_dict(),
+                    "expense_by_category": df.groupby("category")["expense"]
+                    .sum()
+                    .to_dict(),
+                    "top_expense_categories": df.groupby("category")["expense"]
+                    .sum()
+                    .nlargest(5)
+                    .to_dict(),
                 }
 
             # Generate visualizations
@@ -384,7 +558,10 @@ class DataAnalyzer:
             return stats
 
         except Exception as e:
-            return {"error": f"Financial data analysis failed: {str(e)}", "traceback": str(e.__traceback__)}
+            return {
+                "error": f"Financial data analysis failed: {str(e)}",
+                "traceback": str(e.__traceback__),
+            }
 
     def _analyze_customer_data(self, df: pd.DataFrame) -> Dict:
         """Analyze customer data and return insights"""
@@ -402,7 +579,9 @@ class DataAnalyzer:
                 stats["demographics"] = {
                     "age_distribution": df["age"].describe().to_dict(),
                     "age_groups": pd.cut(
-                        df["age"], bins=[0, 18, 25, 35, 50, 100], labels=["Under 18", "18-25", "26-35", "36-50", "50+"]
+                        df["age"],
+                        bins=[0, 18, 25, 35, 50, 100],
+                        labels=["Under 18", "18-25", "26-35", "36-50", "50+"],
                     )
                     .value_counts()
                     .to_dict(),
@@ -410,10 +589,14 @@ class DataAnalyzer:
 
             # Customer satisfaction
             if "satisfaction" in df.columns or "rating" in df.columns:
-                satisfaction_col = "satisfaction" if "satisfaction" in df.columns else "rating"
+                satisfaction_col = (
+                    "satisfaction" if "satisfaction" in df.columns else "rating"
+                )
                 stats["satisfaction_analysis"] = {
                     "average_satisfaction": df[satisfaction_col].mean(),
-                    "satisfaction_distribution": df[satisfaction_col].value_counts().to_dict(),
+                    "satisfaction_distribution": df[satisfaction_col]
+                    .value_counts()
+                    .to_dict(),
                     "satisfaction_trend": self._calculate_trend(df[satisfaction_col]),
                 }
 
@@ -421,7 +604,9 @@ class DataAnalyzer:
             if "purchase_frequency" in df.columns:
                 stats["behavior_analysis"] = {
                     "average_purchase_frequency": df["purchase_frequency"].mean(),
-                    "customer_lifetime_value": self._calculate_customer_lifetime_value(df),
+                    "customer_lifetime_value": self._calculate_customer_lifetime_value(
+                        df
+                    ),
                 }
 
             # Generate visualizations
@@ -434,7 +619,10 @@ class DataAnalyzer:
             return stats
 
         except Exception as e:
-            return {"error": f"Customer data analysis failed: {str(e)}", "traceback": str(e.__traceback__)}
+            return {
+                "error": f"Customer data analysis failed: {str(e)}",
+                "traceback": str(e.__traceback__),
+            }
 
     def _analyze_marketing_data(self, df: pd.DataFrame) -> Dict:
         """Analyze marketing data and return insights"""
@@ -453,16 +641,22 @@ class DataAnalyzer:
                     "campaign_performance": df.groupby("campaign")
                     .agg(
                         {
-                            "impressions": "sum" if "impressions" in df.columns else None,
+                            "impressions": "sum"
+                            if "impressions" in df.columns
+                            else None,
                             "clicks": "sum" if "clicks" in df.columns else None,
-                            "conversions": "sum" if "conversions" in df.columns else None,
+                            "conversions": "sum"
+                            if "conversions" in df.columns
+                            else None,
                         }
                     )
                     .to_dict()
                 }
 
                 if "impressions" in df.columns and "clicks" in df.columns:
-                    stats["campaign_analysis"]["ctr"] = (df["clicks"].sum() / df["impressions"].sum()) * 100
+                    stats["campaign_analysis"]["ctr"] = (
+                        df["clicks"].sum() / df["impressions"].sum()
+                    ) * 100
 
             # Channel analysis
             if "channel" in df.columns:
@@ -470,9 +664,13 @@ class DataAnalyzer:
                     "channel_performance": df.groupby("channel")
                     .agg(
                         {
-                            "impressions": "sum" if "impressions" in df.columns else None,
+                            "impressions": "sum"
+                            if "impressions" in df.columns
+                            else None,
                             "clicks": "sum" if "clicks" in df.columns else None,
-                            "conversions": "sum" if "conversions" in df.columns else None,
+                            "conversions": "sum"
+                            if "conversions" in df.columns
+                            else None,
                         }
                     )
                     .to_dict()
@@ -483,7 +681,10 @@ class DataAnalyzer:
                 stats["roi_analysis"] = {
                     "total_cost": df["cost"].sum(),
                     "total_revenue": df["revenue"].sum(),
-                    "roi": ((df["revenue"].sum() - df["cost"].sum()) / df["cost"].sum()) * 100 if df["cost"].sum() > 0 else 0,
+                    "roi": ((df["revenue"].sum() - df["cost"].sum()) / df["cost"].sum())
+                    * 100
+                    if df["cost"].sum() > 0
+                    else 0,
                 }
 
             # Generate visualizations
@@ -496,7 +697,10 @@ class DataAnalyzer:
             return stats
 
         except Exception as e:
-            return {"error": f"Marketing data analysis failed: {str(e)}", "traceback": str(e.__traceback__)}
+            return {
+                "error": f"Marketing data analysis failed: {str(e)}",
+                "traceback": str(e.__traceback__),
+            }
 
     def _calculate_trend(self, series: pd.Series) -> Dict:
         """Calculate trend for a time series"""
@@ -508,7 +712,11 @@ class DataAnalyzer:
             x = np.arange(len(series))
             slope, _ = np.polyfit(x, series, 1)
 
-            return {"trend": "increasing" if slope > 0 else "decreasing", "slope": slope, "strength": abs(slope)}
+            return {
+                "trend": "increasing" if slope > 0 else "decreasing",
+                "slope": slope,
+                "strength": abs(slope),
+            }
         except Exception:
             return {"trend": "calculation_error"}
 
@@ -524,7 +732,11 @@ class DataAnalyzer:
                 m_labels = range(1, 5)
                 m_quartiles = pd.qcut(df["monetary"], q=4, labels=m_labels)
 
-                df["RFM_Score"] = r_quartiles.astype(str) + f_quartiles.astype(str) + m_quartiles.astype(str)
+                df["RFM_Score"] = (
+                    r_quartiles.astype(str)
+                    + f_quartiles.astype(str)
+                    + m_quartiles.astype(str)
+                )
 
                 return {
                     "segment_distribution": df["RFM_Score"].value_counts().to_dict(),
@@ -542,14 +754,24 @@ class DataAnalyzer:
     def _calculate_customer_lifetime_value(self, df: pd.DataFrame) -> Dict:
         """Calculate customer lifetime value if possible"""
         try:
-            if all(col in df.columns for col in ["customer", "purchase_value", "purchase_frequency"]):
-                clv = df.groupby("customer").agg({"purchase_value": "sum", "purchase_frequency": "mean"})
-                return {"average_clv": clv["purchase_value"].mean(), "clv_by_customer": clv["purchase_value"].to_dict()}
+            if all(
+                col in df.columns
+                for col in ["customer", "purchase_value", "purchase_frequency"]
+            ):
+                clv = df.groupby("customer").agg(
+                    {"purchase_value": "sum", "purchase_frequency": "mean"}
+                )
+                return {
+                    "average_clv": clv["purchase_value"].mean(),
+                    "clv_by_customer": clv["purchase_value"].to_dict(),
+                }
             return {"error": "Insufficient data for CLV calculation"}
         except Exception:
             return {"error": "Error in CLV calculation"}
 
-    def _create_visualizations(self, df: pd.DataFrame, analysis_type: str) -> Dict[str, str]:
+    def _create_visualizations(
+        self, df: pd.DataFrame, analysis_type: str
+    ) -> Dict[str, str]:
         """Create and save visualizations based on analysis type"""
         viz_paths = {}
         try:
@@ -580,12 +802,19 @@ class DataAnalyzer:
                         hover_data=["employee_id", "education_level"],
                         title="Interactive Salary vs Tenure by Department",
                     )
-                    fig.add_traces(px.scatter(df, x="tenure", y="salary", trendline="ols").data)
-                    path = os.path.join(interactive_dir, "salary_tenure_interactive.html")
+                    fig.add_traces(
+                        px.scatter(df, x="tenure", y="salary", trendline="ols").data
+                    )
+                    path = os.path.join(
+                        interactive_dir, "salary_tenure_interactive.html"
+                    )
                     fig.write_html(path)
                     viz_paths["salary_tenure_interactive"] = path
 
-                if all(col in df.columns for col in ["performance_score", "salary", "department"]):
+                if all(
+                    col in df.columns
+                    for col in ["performance_score", "salary", "department"]
+                ):
                     # Interactive Performance-Salary Correlation
                     fig = px.scatter(
                         df,
@@ -595,8 +824,14 @@ class DataAnalyzer:
                         hover_data=["employee_id", "education_level"],
                         title="Interactive Performance vs Salary by Department",
                     )
-                    fig.add_traces(px.scatter(df, x="performance_score", y="salary", trendline="ols").data)
-                    path = os.path.join(interactive_dir, "performance_salary_interactive.html")
+                    fig.add_traces(
+                        px.scatter(
+                            df, x="performance_score", y="salary", trendline="ols"
+                        ).data
+                    )
+                    path = os.path.join(
+                        interactive_dir, "performance_salary_interactive.html"
+                    )
                     fig.write_html(path)
                     viz_paths["performance_salary_interactive"] = path
 
@@ -609,30 +844,58 @@ class DataAnalyzer:
                     fig = make_subplots(
                         rows=3,
                         cols=1,
-                        subplot_titles=("Overall Sales Trend", "Sales Trend by Product", "Product Sales Contribution"),
+                        subplot_titles=(
+                            "Overall Sales Trend",
+                            "Sales Trend by Product",
+                            "Product Sales Contribution",
+                        ),
                     )
 
                     # Overall Trend
                     daily_sales = df.groupby("date")["sales"].sum().reset_index()
-                    fig.add_trace(go.Scatter(x=daily_sales["date"], y=daily_sales["sales"], name="Daily Sales"), row=1, col=1)
+                    fig.add_trace(
+                        go.Scatter(
+                            x=daily_sales["date"],
+                            y=daily_sales["sales"],
+                            name="Daily Sales",
+                        ),
+                        row=1,
+                        col=1,
+                    )
 
                     # Product-wise Trend
                     for product in df["product"].unique():
-                        product_data = df[df["product"] == product].groupby("date")["sales"].sum()
-                        fig.add_trace(go.Scatter(x=product_data.index, y=product_data.values, name=product), row=2, col=1)
+                        product_data = (
+                            df[df["product"] == product].groupby("date")["sales"].sum()
+                        )
+                        fig.add_trace(
+                            go.Scatter(
+                                x=product_data.index,
+                                y=product_data.values,
+                                name=product,
+                            ),
+                            row=2,
+                            col=1,
+                        )
 
                     # Product Contribution
                     product_contribution = df.groupby("product")["sales"].sum()
                     fig.add_trace(
                         go.Pie(
-                            labels=product_contribution.index, values=product_contribution.values, name="Product Contribution"
+                            labels=product_contribution.index,
+                            values=product_contribution.values,
+                            name="Product Contribution",
                         ),
                         row=3,
                         col=1,
                     )
 
-                    fig.update_layout(height=1200, title_text="Interactive Sales Decomposition")
-                    path = os.path.join(interactive_dir, "sales_decomposition_interactive.html")
+                    fig.update_layout(
+                        height=1200, title_text="Interactive Sales Decomposition"
+                    )
+                    path = os.path.join(
+                        interactive_dir, "sales_decomposition_interactive.html"
+                    )
                     fig.write_html(path)
                     viz_paths["sales_decomposition_interactive"] = path
 
@@ -650,29 +913,62 @@ class DataAnalyzer:
                         hover_data=["pageviews", "device"],
                         title="Interactive Page Engagement Analysis",
                     )
-                    path = os.path.join(interactive_dir, "page_engagement_interactive.html")
+                    path = os.path.join(
+                        interactive_dir, "page_engagement_interactive.html"
+                    )
                     fig.write_html(path)
                     viz_paths["page_engagement_interactive"] = path
 
                 if all(col in df.columns for col in ["date", "pageviews", "device"]):
                     # Interactive Device Usage Patterns
                     fig = make_subplots(
-                        rows=2, cols=1, subplot_titles=("Daily Pageviews by Device", "Hourly Pageviews by Device")
+                        rows=2,
+                        cols=1,
+                        subplot_titles=(
+                            "Daily Pageviews by Device",
+                            "Hourly Pageviews by Device",
+                        ),
                     )
 
                     # Daily device distribution
                     for device in df["device"].unique():
-                        device_data = df[df["device"] == device].groupby("date")["pageviews"].sum()
-                        fig.add_trace(go.Scatter(x=device_data.index, y=device_data.values, name=device), row=1, col=1)
+                        device_data = (
+                            df[df["device"] == device]
+                            .groupby("date")["pageviews"]
+                            .sum()
+                        )
+                        fig.add_trace(
+                            go.Scatter(
+                                x=device_data.index, y=device_data.values, name=device
+                            ),
+                            row=1,
+                            col=1,
+                        )
 
                     # Hourly device distribution
                     if "hour" in df.columns:
                         for device in df["device"].unique():
-                            hourly_data = df[df["device"] == device].groupby("hour")["pageviews"].sum()
-                            fig.add_trace(go.Bar(x=hourly_data.index, y=hourly_data.values, name=device), row=2, col=1)
+                            hourly_data = (
+                                df[df["device"] == device]
+                                .groupby("hour")["pageviews"]
+                                .sum()
+                            )
+                            fig.add_trace(
+                                go.Bar(
+                                    x=hourly_data.index,
+                                    y=hourly_data.values,
+                                    name=device,
+                                ),
+                                row=2,
+                                col=1,
+                            )
 
-                    fig.update_layout(height=1000, title_text="Interactive Device Usage Patterns")
-                    path = os.path.join(interactive_dir, "device_patterns_interactive.html")
+                    fig.update_layout(
+                        height=1000, title_text="Interactive Device Usage Patterns"
+                    )
+                    path = os.path.join(
+                        interactive_dir, "device_patterns_interactive.html"
+                    )
                     fig.write_html(path)
                     viz_paths["device_patterns_interactive"] = path
 
@@ -680,26 +976,38 @@ class DataAnalyzer:
                 # Existing static visualizations...
 
                 # Interactive support visualizations
-                if all(col in df.columns for col in ["category", "resolution_time", "priority"]):
+                if all(
+                    col in df.columns
+                    for col in ["category", "resolution_time", "priority"]
+                ):
                     # Interactive Resolution Time Analysis
                     fig = make_subplots(
                         rows=2,
                         cols=1,
-                        subplot_titles=("Resolution Time by Category and Priority", "Category Performance Matrix"),
+                        subplot_titles=(
+                            "Resolution Time by Category and Priority",
+                            "Category Performance Matrix",
+                        ),
                     )
 
                     # Resolution time box plot
                     for priority in df["priority"].unique():
                         priority_data = df[df["priority"] == priority]
                         fig.add_trace(
-                            go.Box(y=priority_data["resolution_time"], x=priority_data["category"], name=priority),
+                            go.Box(
+                                y=priority_data["resolution_time"],
+                                x=priority_data["category"],
+                                name=priority,
+                            ),
                             row=1,
                             col=1,
                         )
 
                     # Category performance scatter
                     category_metrics = (
-                        df.groupby("category").agg({"resolution_time": "mean", "satisfaction_score": "mean"}).reset_index()
+                        df.groupby("category")
+                        .agg({"resolution_time": "mean", "satisfaction_score": "mean"})
+                        .reset_index()
                     )
 
                     fig.add_trace(
@@ -714,8 +1022,12 @@ class DataAnalyzer:
                         col=1,
                     )
 
-                    fig.update_layout(height=1000, title_text="Interactive Resolution Time Analysis")
-                    path = os.path.join(interactive_dir, "resolution_analysis_interactive.html")
+                    fig.update_layout(
+                        height=1000, title_text="Interactive Resolution Time Analysis"
+                    )
+                    path = os.path.join(
+                        interactive_dir, "resolution_analysis_interactive.html"
+                    )
                     fig.write_html(path)
                     viz_paths["resolution_analysis_interactive"] = path
 
@@ -747,9 +1059,15 @@ class DataAnalyzer:
 
             # Education impact
             if "education_level" in df.columns and "performance_score" in df.columns:
-                edu_performance = df.groupby("education_level")["performance_score"].mean()
-                if edu_performance.max() - edu_performance.min() > 0.5:  # Arbitrary threshold
-                    recommendations.append("Consider implementing education support programs to improve performance")
+                edu_performance = df.groupby("education_level")[
+                    "performance_score"
+                ].mean()
+                if (
+                    edu_performance.max() - edu_performance.min() > 0.5
+                ):  # Arbitrary threshold
+                    recommendations.append(
+                        "Consider implementing education support programs to improve performance"
+                    )
 
             return recommendations
 
@@ -765,13 +1083,17 @@ class DataAnalyzer:
                 # Sales trend analysis
                 sales_trend = self._calculate_trend(df["sales"])
                 if sales_trend["trend"] == "decreasing":
-                    recommendations.append("Consider implementing promotional strategies to boost sales")
+                    recommendations.append(
+                        "Consider implementing promotional strategies to boost sales"
+                    )
 
                 # Product performance
                 if "product" in df.columns:
                     product_sales = df.groupby("product")["sales"].sum()
                     if product_sales.std() / product_sales.mean() > 0.5:
-                        recommendations.append("High sales variance across products - consider product mix optimization")
+                        recommendations.append(
+                            "High sales variance across products - consider product mix optimization"
+                        )
 
             return recommendations
         except Exception:
@@ -782,14 +1104,20 @@ class DataAnalyzer:
         recommendations = []
         try:
             if "income" in df.columns and "expense" in df.columns:
-                profit_margin = (df["income"].sum() - df["expense"].sum()) / df["income"].sum()
+                profit_margin = (df["income"].sum() - df["expense"].sum()) / df[
+                    "income"
+                ].sum()
                 if profit_margin < 0.1:
-                    recommendations.append("Low profit margin detected - consider cost optimization strategies")
+                    recommendations.append(
+                        "Low profit margin detected - consider cost optimization strategies"
+                    )
 
                 if "expense" in df.columns and "category" in df.columns:
                     expense_by_category = df.groupby("category")["expense"].sum()
                     if expense_by_category.max() / expense_by_category.sum() > 0.4:
-                        recommendations.append("High concentration of expenses in one category - consider diversification")
+                        recommendations.append(
+                            "High concentration of expenses in one category - consider diversification"
+                        )
 
             return recommendations
         except Exception:
@@ -802,11 +1130,15 @@ class DataAnalyzer:
             if "satisfaction" in df.columns:
                 avg_satisfaction = df["satisfaction"].mean()
                 if avg_satisfaction < 3.5:
-                    recommendations.append("Low customer satisfaction - implement customer feedback program")
+                    recommendations.append(
+                        "Low customer satisfaction - implement customer feedback program"
+                    )
 
             if "purchase_frequency" in df.columns:
                 if df["purchase_frequency"].mean() < 2:
-                    recommendations.append("Low purchase frequency - consider loyalty program implementation")
+                    recommendations.append(
+                        "Low purchase frequency - consider loyalty program implementation"
+                    )
 
             return recommendations
         except Exception:
@@ -816,15 +1148,27 @@ class DataAnalyzer:
         """Generate marketing-specific recommendations"""
         recommendations = []
         try:
-            if "campaign" in df.columns and "impressions" in df.columns and "clicks" in df.columns:
-                campaign_ctr = df.groupby("campaign").apply(lambda x: (x["clicks"].sum() / x["impressions"].sum()) * 100)
+            if (
+                "campaign" in df.columns
+                and "impressions" in df.columns
+                and "clicks" in df.columns
+            ):
+                campaign_ctr = df.groupby("campaign").apply(
+                    lambda x: (x["clicks"].sum() / x["impressions"].sum()) * 100
+                )
                 if campaign_ctr.mean() < 2:
-                    recommendations.append("Low campaign CTR - review targeting and messaging strategies")
+                    recommendations.append(
+                        "Low campaign CTR - review targeting and messaging strategies"
+                    )
 
             if "cost" in df.columns and "revenue" in df.columns:
-                roi = ((df["revenue"].sum() - df["cost"].sum()) / df["cost"].sum()) * 100
+                roi = (
+                    (df["revenue"].sum() - df["cost"].sum()) / df["cost"].sum()
+                ) * 100
                 if roi < 100:
-                    recommendations.append("Low marketing ROI - optimize campaign spending and targeting")
+                    recommendations.append(
+                        "Low marketing ROI - optimize campaign spending and targeting"
+                    )
 
             return recommendations
         except Exception:
@@ -847,15 +1191,25 @@ class DataAnalyzer:
                     "total_items": df["quantity"].sum(),
                     "unique_skus": df["sku"].nunique() if "sku" in df.columns else None,
                     "average_quantity": df["quantity"].mean(),
-                    "stock_value": (df["quantity"] * df["unit_price"]).sum() if "unit_price" in df.columns else None,
+                    "stock_value": (df["quantity"] * df["unit_price"]).sum()
+                    if "unit_price" in df.columns
+                    else None,
                 }
 
             # Stock level analysis
             if all(col in df.columns for col in ["quantity", "reorder_point"]):
                 stats["stock_level_analysis"] = {
-                    "items_below_reorder": len(df[df["quantity"] < df["reorder_point"]]),
-                    "stockout_risk": df[df["quantity"] < df["reorder_point"]]["sku"].tolist() if "sku" in df.columns else None,
-                    "overstock_items": df[df["quantity"] > df["reorder_point"] * 2]["sku"].tolist()
+                    "items_below_reorder": len(
+                        df[df["quantity"] < df["reorder_point"]]
+                    ),
+                    "stockout_risk": df[df["quantity"] < df["reorder_point"]][
+                        "sku"
+                    ].tolist()
+                    if "sku" in df.columns
+                    else None,
+                    "overstock_items": df[df["quantity"] > df["reorder_point"] * 2][
+                        "sku"
+                    ].tolist()
                     if "sku" in df.columns
                     else None,
                 }
@@ -864,7 +1218,11 @@ class DataAnalyzer:
             if all(col in df.columns for col in ["quantity", "sales", "period"]):
                 stats["turnover_analysis"] = {
                     "average_turnover": df.groupby("period")
-                    .apply(lambda x: x["sales"].sum() / x["quantity"].mean() if x["quantity"].mean() > 0 else 0)
+                    .apply(
+                        lambda x: x["sales"].sum() / x["quantity"].mean()
+                        if x["quantity"].mean() > 0
+                        else 0
+                    )
                     .to_dict(),
                     "slow_moving_items": self._identify_slow_moving_items(df),
                 }
@@ -872,7 +1230,9 @@ class DataAnalyzer:
             # Warehouse analysis
             if "warehouse" in df.columns:
                 stats["warehouse_analysis"] = {
-                    "items_by_warehouse": df.groupby("warehouse")["quantity"].sum().to_dict(),
+                    "items_by_warehouse": df.groupby("warehouse")["quantity"]
+                    .sum()
+                    .to_dict(),
                     "warehouse_utilization": self._calculate_warehouse_utilization(df),
                 }
 
@@ -886,7 +1246,10 @@ class DataAnalyzer:
             return stats
 
         except Exception as e:
-            return {"error": f"Inventory data analysis failed: {str(e)}", "traceback": str(e.__traceback__)}
+            return {
+                "error": f"Inventory data analysis failed: {str(e)}",
+                "traceback": str(e.__traceback__),
+            }
 
     def _analyze_supply_chain_data(self, df: pd.DataFrame) -> Dict:
         """Analyze supply chain data and return insights"""
@@ -908,7 +1271,10 @@ class DataAnalyzer:
                 }
 
             # Delivery performance
-            if all(col in df.columns for col in ["order_date", "delivery_date", "expected_delivery"]):
+            if all(
+                col in df.columns
+                for col in ["order_date", "delivery_date", "expected_delivery"]
+            ):
                 stats["delivery_analysis"] = {
                     "on_time_delivery_rate": self._calculate_on_time_delivery_rate(df),
                     "average_lead_time": self._calculate_average_lead_time(df),
@@ -921,7 +1287,9 @@ class DataAnalyzer:
                     "order_volume": df.groupby("order_date")["order"].count().to_dict()
                     if "order_date" in df.columns
                     else None,
-                    "order_value": df.groupby("order_date")["order_value"].sum().to_dict()
+                    "order_value": df.groupby("order_date")["order_value"]
+                    .sum()
+                    .to_dict()
                     if "order_value" in df.columns
                     else None,
                     "order_fulfillment_rate": self._calculate_fulfillment_rate(df),
@@ -930,8 +1298,12 @@ class DataAnalyzer:
             # Cost analysis
             if all(col in df.columns for col in ["shipping_cost", "handling_cost"]):
                 stats["cost_analysis"] = {
-                    "total_logistics_cost": (df["shipping_cost"] + df["handling_cost"]).sum(),
-                    "cost_by_supplier": df.groupby("supplier")["shipping_cost"].sum().to_dict()
+                    "total_logistics_cost": (
+                        df["shipping_cost"] + df["handling_cost"]
+                    ).sum(),
+                    "cost_by_supplier": df.groupby("supplier")["shipping_cost"]
+                    .sum()
+                    .to_dict()
                     if "supplier" in df.columns
                     else None,
                     "cost_trends": self._analyze_cost_trends(df),
@@ -947,7 +1319,10 @@ class DataAnalyzer:
             return stats
 
         except Exception as e:
-            return {"error": f"Supply chain data analysis failed: {str(e)}", "traceback": str(e.__traceback__)}
+            return {
+                "error": f"Supply chain data analysis failed: {str(e)}",
+                "traceback": str(e.__traceback__),
+            }
 
     def _analyze_social_media_data(self, df: pd.DataFrame) -> Dict:
         """Analyze social media data and return insights"""
@@ -963,8 +1338,12 @@ class DataAnalyzer:
             # Engagement metrics
             if all(col in df.columns for col in ["likes", "shares", "comments"]):
                 stats["engagement_metrics"] = {
-                    "total_engagement": (df["likes"] + df["shares"] + df["comments"]).sum(),
-                    "average_engagement": (df["likes"] + df["shares"] + df["comments"]).mean(),
+                    "total_engagement": (
+                        df["likes"] + df["shares"] + df["comments"]
+                    ).sum(),
+                    "average_engagement": (
+                        df["likes"] + df["shares"] + df["comments"]
+                    ).mean(),
                     "engagement_by_post": self._calculate_engagement_by_post(df),
                     "engagement_trends": self._analyze_engagement_trends(df),
                 }
@@ -974,7 +1353,9 @@ class DataAnalyzer:
                 stats["content_analysis"] = {
                     "performance_by_type": self._analyze_content_performance(df),
                     "best_performing_content": self._identify_best_content(df),
-                    "content_recommendations": self._generate_content_recommendations(df),
+                    "content_recommendations": self._generate_content_recommendations(
+                        df
+                    ),
                 }
 
             # Audience analysis
@@ -1002,17 +1383,25 @@ class DataAnalyzer:
             return stats
 
         except Exception as e:
-            return {"error": f"Social media data analysis failed: {str(e)}", "traceback": str(e.__traceback__)}
+            return {
+                "error": f"Social media data analysis failed: {str(e)}",
+                "traceback": str(e.__traceback__),
+            }
 
     def _identify_slow_moving_items(self, df: pd.DataFrame) -> Dict:
         """Identify slow moving inventory items"""
         try:
             if all(col in df.columns for col in ["sku", "quantity", "sales"]):
                 turnover = df.groupby("sku").apply(
-                    lambda x: x["sales"].sum() / x["quantity"].mean() if x["quantity"].mean() > 0 else 0
+                    lambda x: x["sales"].sum() / x["quantity"].mean()
+                    if x["quantity"].mean() > 0
+                    else 0
                 )
                 slow_moving = turnover[turnover < turnover.median() * 0.5]
-                return {"slow_moving_skus": slow_moving.index.tolist(), "turnover_rates": slow_moving.to_dict()}
+                return {
+                    "slow_moving_skus": slow_moving.index.tolist(),
+                    "turnover_rates": slow_moving.to_dict(),
+                }
             return {"error": "Insufficient data for slow moving analysis"}
         except Exception:
             return {"error": "Error in slow moving analysis"}
@@ -1021,7 +1410,9 @@ class DataAnalyzer:
         """Calculate warehouse utilization metrics"""
         try:
             if all(col in df.columns for col in ["warehouse", "quantity", "capacity"]):
-                utilization = df.groupby("warehouse").apply(lambda x: (x["quantity"].sum() / x["capacity"].sum()) * 100)
+                utilization = df.groupby("warehouse").apply(
+                    lambda x: (x["quantity"].sum() / x["capacity"].sum()) * 100
+                )
                 return {
                     "utilization_by_warehouse": utilization.to_dict(),
                     "over_utilized": utilization[utilization > 90].index.tolist(),
@@ -1037,11 +1428,17 @@ class DataAnalyzer:
             if "supplier" in df.columns:
                 metrics = {}
                 if "delivery_time" in df.columns:
-                    metrics["average_delivery_time"] = df.groupby("supplier")["delivery_time"].mean().to_dict()
+                    metrics["average_delivery_time"] = (
+                        df.groupby("supplier")["delivery_time"].mean().to_dict()
+                    )
                 if "quality_score" in df.columns:
-                    metrics["quality_rating"] = df.groupby("supplier")["quality_score"].mean().to_dict()
+                    metrics["quality_rating"] = (
+                        df.groupby("supplier")["quality_score"].mean().to_dict()
+                    )
                 if "cost" in df.columns:
-                    metrics["average_cost"] = df.groupby("supplier")["cost"].mean().to_dict()
+                    metrics["average_cost"] = (
+                        df.groupby("supplier")["cost"].mean().to_dict()
+                    )
                 return metrics
             return {"error": "Insufficient data for supplier analysis"}
         except Exception:
@@ -1053,9 +1450,13 @@ class DataAnalyzer:
             if "supplier" in df.columns:
                 risk_factors = {}
                 if "delivery_time" in df.columns:
-                    risk_factors["delivery_risk"] = df.groupby("supplier")["delivery_time"].std().to_dict()
+                    risk_factors["delivery_risk"] = (
+                        df.groupby("supplier")["delivery_time"].std().to_dict()
+                    )
                 if "quality_score" in df.columns:
-                    risk_factors["quality_risk"] = (5 - df.groupby("supplier")["quality_score"].mean()).to_dict()
+                    risk_factors["quality_risk"] = (
+                        5 - df.groupby("supplier")["quality_score"].mean()
+                    ).to_dict()
                 return risk_factors
             return {"error": "Insufficient data for supplier risk assessment"}
         except Exception:
@@ -1074,9 +1475,14 @@ class DataAnalyzer:
     def _calculate_engagement_by_post(self, df: pd.DataFrame) -> Dict:
         """Calculate engagement metrics by post"""
         try:
-            if all(col in df.columns for col in ["post_id", "likes", "shares", "comments"]):
+            if all(
+                col in df.columns for col in ["post_id", "likes", "shares", "comments"]
+            ):
                 engagement = df.groupby("post_id").apply(
-                    lambda x: (x["likes"].sum() + x["shares"].sum() + x["comments"].sum()) / len(x)
+                    lambda x: (
+                        x["likes"].sum() + x["shares"].sum() + x["comments"].sum()
+                    )
+                    / len(x)
                 )
                 return engagement.to_dict()
             return {"error": "Insufficient data for engagement analysis"}
@@ -1089,11 +1495,17 @@ class DataAnalyzer:
             if "post_type" in df.columns:
                 metrics = {}
                 if "likes" in df.columns:
-                    metrics["average_likes"] = df.groupby("post_type")["likes"].mean().to_dict()
+                    metrics["average_likes"] = (
+                        df.groupby("post_type")["likes"].mean().to_dict()
+                    )
                 if "shares" in df.columns:
-                    metrics["average_shares"] = df.groupby("post_type")["shares"].mean().to_dict()
+                    metrics["average_shares"] = (
+                        df.groupby("post_type")["shares"].mean().to_dict()
+                    )
                 if "comments" in df.columns:
-                    metrics["average_comments"] = df.groupby("post_type")["comments"].mean().to_dict()
+                    metrics["average_comments"] = (
+                        df.groupby("post_type")["comments"].mean().to_dict()
+                    )
                 return metrics
             return {"error": "Insufficient data for content analysis"}
         except Exception:
@@ -1107,17 +1519,25 @@ class DataAnalyzer:
                 # Stock level recommendations
                 low_stock = df[df["quantity"] < df["reorder_point"]]
                 if len(low_stock) > 0:
-                    recommendations.append(f"Reorder {len(low_stock)} items that are below reorder point")
+                    recommendations.append(
+                        f"Reorder {len(low_stock)} items that are below reorder point"
+                    )
 
                 # Overstock recommendations
                 overstock = df[df["quantity"] > df["reorder_point"] * 2]
                 if len(overstock) > 0:
-                    recommendations.append(f"Consider promotions for {len(overstock)} overstocked items")
+                    recommendations.append(
+                        f"Consider promotions for {len(overstock)} overstocked items"
+                    )
 
             if "turnover_rate" in df.columns:
-                slow_moving = df[df["turnover_rate"] < df["turnover_rate"].median() * 0.5]
+                slow_moving = df[
+                    df["turnover_rate"] < df["turnover_rate"].median() * 0.5
+                ]
                 if len(slow_moving) > 0:
-                    recommendations.append(f"Review pricing strategy for {len(slow_moving)} slow-moving items")
+                    recommendations.append(
+                        f"Review pricing strategy for {len(slow_moving)} slow-moving items"
+                    )
 
             return recommendations
         except Exception:
@@ -1129,15 +1549,22 @@ class DataAnalyzer:
         try:
             if "supplier" in df.columns and "delivery_time" in df.columns:
                 # Supplier performance recommendations
-                late_deliveries = df[df["delivery_time"] > df["delivery_time"].mean() + df["delivery_time"].std()]
+                late_deliveries = df[
+                    df["delivery_time"]
+                    > df["delivery_time"].mean() + df["delivery_time"].std()
+                ]
                 if len(late_deliveries) > 0:
-                    recommendations.append("Review contracts with suppliers having consistent late deliveries")
+                    recommendations.append(
+                        "Review contracts with suppliers having consistent late deliveries"
+                    )
 
             if "cost" in df.columns and "supplier" in df.columns:
                 # Cost optimization recommendations
                 high_cost_suppliers = df.groupby("supplier")["cost"].mean()
                 if high_cost_suppliers.max() / high_cost_suppliers.mean() > 1.5:
-                    recommendations.append("Consider renegotiating with high-cost suppliers")
+                    recommendations.append(
+                        "Consider renegotiating with high-cost suppliers"
+                    )
 
             return recommendations
         except Exception:
@@ -1150,19 +1577,25 @@ class DataAnalyzer:
             if "post_type" in df.columns and "likes" in df.columns:
                 # Content strategy recommendations
                 best_performing = df.groupby("post_type")["likes"].mean().idxmax()
-                recommendations.append(f"Increase frequency of {best_performing} posts based on engagement")
+                recommendations.append(
+                    f"Increase frequency of {best_performing} posts based on engagement"
+                )
 
             if "hashtags" in df.columns and "likes" in df.columns:
                 # Hashtag recommendations
                 hashtag_performance = df.groupby("hashtags")["likes"].mean()
                 if len(hashtag_performance) > 0:
                     best_hashtags = hashtag_performance.nlargest(3).index.tolist()
-                    recommendations.append(f"Focus on using these high-performing hashtags: {', '.join(best_hashtags)}")
+                    recommendations.append(
+                        f"Focus on using these high-performing hashtags: {', '.join(best_hashtags)}"
+                    )
 
             if "post_time" in df.columns and "likes" in df.columns:
                 # Timing recommendations
                 best_time = df.groupby("post_time")["likes"].mean().idxmax()
-                recommendations.append(f"Schedule more posts during {best_time} for better engagement")
+                recommendations.append(
+                    f"Schedule more posts during {best_time} for better engagement"
+                )
 
             return recommendations
         except Exception:
@@ -1183,13 +1616,19 @@ class DataAnalyzer:
             if "pageviews" in df.columns:
                 stats["traffic_metrics"] = {
                     "total_pageviews": df["pageviews"].sum(),
-                    "unique_visitors": df["user_id"].nunique() if "user_id" in df.columns else None,
+                    "unique_visitors": df["user_id"].nunique()
+                    if "user_id" in df.columns
+                    else None,
                     "average_pageviews": df["pageviews"].mean(),
-                    "bounce_rate": (df["bounce"].sum() / len(df)) * 100 if "bounce" in df.columns else None,
+                    "bounce_rate": (df["bounce"].sum() / len(df)) * 100
+                    if "bounce" in df.columns
+                    else None,
                 }
 
             # User behavior
-            if all(col in df.columns for col in ["session_duration", "pages_per_session"]):
+            if all(
+                col in df.columns for col in ["session_duration", "pages_per_session"]
+            ):
                 stats["user_behavior"] = {
                     "average_session_duration": df["session_duration"].mean(),
                     "average_pages_per_session": df["pages_per_session"].mean(),
@@ -1199,16 +1638,25 @@ class DataAnalyzer:
             # Page performance
             if "page" in df.columns:
                 stats["page_analysis"] = {
-                    "top_pages": df.groupby("page")["pageviews"].sum().nlargest(10).to_dict(),
-                    "page_bounce_rates": df.groupby("page")["bounce"].mean().to_dict() if "bounce" in df.columns else None,
+                    "top_pages": df.groupby("page")["pageviews"]
+                    .sum()
+                    .nlargest(10)
+                    .to_dict(),
+                    "page_bounce_rates": df.groupby("page")["bounce"].mean().to_dict()
+                    if "bounce" in df.columns
+                    else None,
                     "page_conversion_rates": self._calculate_page_conversion_rates(df),
                 }
 
             # Technical metrics
             if "device" in df.columns or "browser" in df.columns:
                 stats["technical_metrics"] = {
-                    "device_distribution": df["device"].value_counts().to_dict() if "device" in df.columns else None,
-                    "browser_distribution": df["browser"].value_counts().to_dict() if "browser" in df.columns else None,
+                    "device_distribution": df["device"].value_counts().to_dict()
+                    if "device" in df.columns
+                    else None,
+                    "browser_distribution": df["browser"].value_counts().to_dict()
+                    if "browser" in df.columns
+                    else None,
                     "load_time_analysis": self._analyze_load_times(df),
                 }
 
@@ -1229,7 +1677,10 @@ class DataAnalyzer:
             return stats
 
         except Exception as e:
-            return {"error": f"Website analytics analysis failed: {str(e)}", "traceback": str(e.__traceback__)}
+            return {
+                "error": f"Website analytics analysis failed: {str(e)}",
+                "traceback": str(e.__traceback__),
+            }
 
     def _analyze_support_data(self, df: pd.DataFrame) -> Dict:
         """Analyze customer support data and return insights"""
@@ -1246,16 +1697,24 @@ class DataAnalyzer:
             if "ticket_id" in df.columns:
                 stats["ticket_metrics"] = {
                     "total_tickets": df["ticket_id"].nunique(),
-                    "tickets_by_status": df["status"].value_counts().to_dict() if "status" in df.columns else None,
-                    "tickets_by_priority": df["priority"].value_counts().to_dict() if "priority" in df.columns else None,
-                    "tickets_by_category": df["category"].value_counts().to_dict() if "category" in df.columns else None,
+                    "tickets_by_status": df["status"].value_counts().to_dict()
+                    if "status" in df.columns
+                    else None,
+                    "tickets_by_priority": df["priority"].value_counts().to_dict()
+                    if "priority" in df.columns
+                    else None,
+                    "tickets_by_category": df["category"].value_counts().to_dict()
+                    if "category" in df.columns
+                    else None,
                 }
 
             # Response time analysis
             if all(col in df.columns for col in ["created_at", "first_response"]):
                 stats["response_analysis"] = {
                     "average_response_time": self._calculate_average_response_time(df),
-                    "response_time_by_priority": self._analyze_response_times_by_priority(df),
+                    "response_time_by_priority": self._analyze_response_times_by_priority(
+                        df
+                    ),
                     "sla_compliance": self._calculate_sla_compliance(df),
                 }
 
@@ -1263,17 +1722,25 @@ class DataAnalyzer:
             if "resolution_time" in df.columns:
                 stats["resolution_analysis"] = {
                     "average_resolution_time": df["resolution_time"].mean(),
-                    "resolution_by_category": df.groupby("category")["resolution_time"].mean().to_dict()
+                    "resolution_by_category": df.groupby("category")["resolution_time"]
+                    .mean()
+                    .to_dict()
                     if "category" in df.columns
                     else None,
-                    "first_contact_resolution": self._calculate_first_contact_resolution(df),
+                    "first_contact_resolution": self._calculate_first_contact_resolution(
+                        df
+                    ),
                 }
 
             # Customer satisfaction
             if "satisfaction_score" in df.columns:
                 stats["satisfaction_analysis"] = {
                     "average_satisfaction": df["satisfaction_score"].mean(),
-                    "satisfaction_by_category": df.groupby("category")["satisfaction_score"].mean().to_dict()
+                    "satisfaction_by_category": df.groupby("category")[
+                        "satisfaction_score"
+                    ]
+                    .mean()
+                    .to_dict()
                     if "category" in df.columns
                     else None,
                     "satisfaction_trends": self._analyze_satisfaction_trends(df),
@@ -1283,10 +1750,16 @@ class DataAnalyzer:
             if "agent" in df.columns:
                 stats["agent_analysis"] = {
                     "tickets_per_agent": df["agent"].value_counts().to_dict(),
-                    "agent_resolution_times": df.groupby("agent")["resolution_time"].mean().to_dict()
+                    "agent_resolution_times": df.groupby("agent")["resolution_time"]
+                    .mean()
+                    .to_dict()
                     if "resolution_time" in df.columns
                     else None,
-                    "agent_satisfaction_scores": df.groupby("agent")["satisfaction_score"].mean().to_dict()
+                    "agent_satisfaction_scores": df.groupby("agent")[
+                        "satisfaction_score"
+                    ]
+                    .mean()
+                    .to_dict()
                     if "satisfaction_score" in df.columns
                     else None,
                 }
@@ -1301,18 +1774,32 @@ class DataAnalyzer:
             return stats
 
         except Exception as e:
-            return {"error": f"Customer support analysis failed: {str(e)}", "traceback": str(e.__traceback__)}
+            return {
+                "error": f"Customer support analysis failed: {str(e)}",
+                "traceback": str(e.__traceback__),
+            }
 
     def _calculate_user_engagement(self, df: pd.DataFrame) -> Dict:
         """Calculate user engagement metrics"""
         try:
-            if all(col in df.columns for col in ["user_id", "session_duration", "pages_per_session"]):
-                engagement = df.groupby("user_id").agg({"session_duration": "mean", "pages_per_session": "mean"})
+            if all(
+                col in df.columns
+                for col in ["user_id", "session_duration", "pages_per_session"]
+            ):
+                engagement = df.groupby("user_id").agg(
+                    {"session_duration": "mean", "pages_per_session": "mean"}
+                )
                 return {
                     "high_engagement_users": len(
                         engagement[
-                            (engagement["session_duration"] > engagement["session_duration"].mean())
-                            & (engagement["pages_per_session"] > engagement["pages_per_session"].mean())
+                            (
+                                engagement["session_duration"]
+                                > engagement["session_duration"].mean()
+                            )
+                            & (
+                                engagement["pages_per_session"]
+                                > engagement["pages_per_session"].mean()
+                            )
                         ]
                     ),
                     "engagement_score": engagement.mean().to_dict(),
@@ -1327,7 +1814,11 @@ class DataAnalyzer:
             if all(col in df.columns for col in ["page", "conversions"]):
                 return (
                     df.groupby("page")
-                    .apply(lambda x: (x["conversions"].sum() / x["pageviews"].sum()) * 100 if "pageviews" in x.columns else 0)
+                    .apply(
+                        lambda x: (x["conversions"].sum() / x["pageviews"].sum()) * 100
+                        if "pageviews" in x.columns
+                        else 0
+                    )
                     .to_dict()
                 )
             return {"error": "Insufficient data for conversion analysis"}
@@ -1340,10 +1831,14 @@ class DataAnalyzer:
             if "load_time" in df.columns:
                 return {
                     "average_load_time": df["load_time"].mean(),
-                    "slow_pages": df[df["load_time"] > df["load_time"].mean() + df["load_time"].std()]["page"].tolist()
+                    "slow_pages": df[
+                        df["load_time"] > df["load_time"].mean() + df["load_time"].std()
+                    ]["page"].tolist()
                     if "page" in df.columns
                     else None,
-                    "load_time_by_device": df.groupby("device")["load_time"].mean().to_dict()
+                    "load_time_by_device": df.groupby("device")["load_time"]
+                    .mean()
+                    .to_dict()
                     if "device" in df.columns
                     else None,
                 }
@@ -1359,13 +1854,18 @@ class DataAnalyzer:
                     {
                         "bounce": "mean",
                         "conversions": "mean",
-                        "session_duration": "mean" if "session_duration" in df.columns else None,
+                        "session_duration": "mean"
+                        if "session_duration" in df.columns
+                        else None,
                     }
                 )
                 return {
                     "high_quality_sources": source_quality[
                         (source_quality["bounce"] < source_quality["bounce"].mean())
-                        & (source_quality["conversions"] > source_quality["conversions"].mean())
+                        & (
+                            source_quality["conversions"]
+                            > source_quality["conversions"].mean()
+                        )
                     ].index.tolist(),
                     "source_metrics": source_quality.to_dict(),
                 }
@@ -1378,7 +1878,8 @@ class DataAnalyzer:
         try:
             if all(col in df.columns for col in ["created_at", "first_response"]):
                 response_times = (
-                    pd.to_datetime(df["first_response"]) - pd.to_datetime(df["created_at"])
+                    pd.to_datetime(df["first_response"])
+                    - pd.to_datetime(df["created_at"])
                 ).dt.total_seconds() / 3600
                 return response_times.mean()
             return 0.0
@@ -1388,9 +1889,13 @@ class DataAnalyzer:
     def _analyze_response_times_by_priority(self, df: pd.DataFrame) -> Dict:
         """Analyze response times by ticket priority"""
         try:
-            if all(col in df.columns for col in ["priority", "created_at", "first_response"]):
+            if all(
+                col in df.columns
+                for col in ["priority", "created_at", "first_response"]
+            ):
                 response_times = (
-                    pd.to_datetime(df["first_response"]) - pd.to_datetime(df["created_at"])
+                    pd.to_datetime(df["first_response"])
+                    - pd.to_datetime(df["created_at"])
                 ).dt.total_seconds() / 3600
                 return df.groupby("priority")[response_times].mean().to_dict()
             return {"error": "Insufficient data for priority analysis"}
@@ -1400,15 +1905,21 @@ class DataAnalyzer:
     def _calculate_sla_compliance(self, df: pd.DataFrame) -> Dict:
         """Calculate SLA compliance rates"""
         try:
-            if all(col in df.columns for col in ["created_at", "first_response", "sla_target"]):
+            if all(
+                col in df.columns
+                for col in ["created_at", "first_response", "sla_target"]
+            ):
                 response_times = (
-                    pd.to_datetime(df["first_response"]) - pd.to_datetime(df["created_at"])
+                    pd.to_datetime(df["first_response"])
+                    - pd.to_datetime(df["created_at"])
                 ).dt.total_seconds() / 3600
                 compliance = (response_times <= df["sla_target"]).mean() * 100
                 return {
                     "overall_compliance": compliance,
                     "compliance_by_priority": df.groupby("priority")
-                    .apply(lambda x: (x["response_time"] <= x["sla_target"]).mean() * 100)
+                    .apply(
+                        lambda x: (x["response_time"] <= x["sla_target"]).mean() * 100
+                    )
                     .to_dict()
                     if "priority" in df.columns
                     else None,
@@ -1443,17 +1954,25 @@ class DataAnalyzer:
             if "bounce" in df.columns and "page" in df.columns:
                 high_bounce_pages = df.groupby("page")["bounce"].mean()
                 if high_bounce_pages.max() > 70:  # Arbitrary threshold
-                    recommendations.append(f"Review content on pages with bounce rates above 70%")
+                    recommendations.append(
+                        f"Review content on pages with bounce rates above 70%"
+                    )
 
             if "load_time" in df.columns:
-                slow_pages = df[df["load_time"] > df["load_time"].mean() + df["load_time"].std()]
+                slow_pages = df[
+                    df["load_time"] > df["load_time"].mean() + df["load_time"].std()
+                ]
                 if len(slow_pages) > 0:
-                    recommendations.append(f"Optimize {len(slow_pages)} pages with slow load times")
+                    recommendations.append(
+                        f"Optimize {len(slow_pages)} pages with slow load times"
+                    )
 
             if "conversions" in df.columns and "page" in df.columns:
                 low_conversion_pages = df.groupby("page")["conversions"].mean()
                 if low_conversion_pages.min() < low_conversion_pages.mean() * 0.5:
-                    recommendations.append("Review conversion optimization on low-performing pages")
+                    recommendations.append(
+                        "Review conversion optimization on low-performing pages"
+                    )
 
             return recommendations
         except Exception:
@@ -1466,17 +1985,23 @@ class DataAnalyzer:
             if "resolution_time" in df.columns and "category" in df.columns:
                 slow_categories = df.groupby("category")["resolution_time"].mean()
                 if slow_categories.max() > slow_categories.mean() * 1.5:
-                    recommendations.append(f"Review support process for {slow_categories.idxmax()} category")
+                    recommendations.append(
+                        f"Review support process for {slow_categories.idxmax()} category"
+                    )
 
             if "satisfaction_score" in df.columns and "agent" in df.columns:
                 agent_satisfaction = df.groupby("agent")["satisfaction_score"].mean()
                 if agent_satisfaction.min() < 3.5:  # Arbitrary threshold
-                    recommendations.append("Provide additional training for agents with low satisfaction scores")
+                    recommendations.append(
+                        "Provide additional training for agents with low satisfaction scores"
+                    )
 
             if "first_contact_resolution" in df.columns:
                 fcr_rate = (df["first_contact_resolution"].sum() / len(df)) * 100
                 if fcr_rate < 70:  # Arbitrary threshold
-                    recommendations.append("Implement measures to improve first contact resolution rate")
+                    recommendations.append(
+                        "Implement measures to improve first contact resolution rate"
+                    )
 
             return recommendations
         except Exception:
@@ -1489,7 +2014,9 @@ class DataAnalyzer:
                 "summary": {
                     "total_records": len(df),
                     "columns": list(df.columns),
-                    "missing_values": {str(k): int(v) for k, v in df.isnull().sum().to_dict().items()},
+                    "missing_values": {
+                        str(k): int(v) for k, v in df.isnull().sum().to_dict().items()
+                    },
                 }
             }
 
@@ -1513,7 +2040,10 @@ class DataAnalyzer:
                 stats["categorical_analysis"] = {
                     str(col): {
                         "unique_values": int(df[col].nunique()),
-                        "most_common": {str(k): int(v) for k, v in df[col].value_counts().head(5).to_dict().items()},
+                        "most_common": {
+                            str(k): int(v)
+                            for k, v in df[col].value_counts().head(5).to_dict().items()
+                        },
                     }
                     for col in categorical_cols
                 }
@@ -1544,7 +2074,10 @@ class DataAnalyzer:
             return stats
 
         except Exception as e:
-            return {"error": f"Generic data analysis failed: {str(e)}", "traceback": str(e.__traceback__)}
+            return {
+                "error": f"Generic data analysis failed: {str(e)}",
+                "traceback": str(e.__traceback__),
+            }
 
     def _generate_generic_recommendations(self, df: pd.DataFrame) -> List[str]:
         """Generate generic recommendations based on data analysis"""
@@ -1555,7 +2088,9 @@ class DataAnalyzer:
             if missing_values.any():
                 high_missing = missing_values[missing_values > len(df) * 0.1]
                 if len(high_missing) > 0:
-                    recommendations.append(f"Consider addressing missing values in columns: {', '.join(high_missing.index)}")
+                    recommendations.append(
+                        f"Consider addressing missing values in columns: {', '.join(high_missing.index)}"
+                    )
 
             # Check for potential outliers in numeric columns
             numeric_cols = df.select_dtypes(include=["int64", "float64"]).columns
@@ -1563,13 +2098,17 @@ class DataAnalyzer:
                 z_scores = abs((df[col] - df[col].mean()) / df[col].std())
                 outliers = df[z_scores > 3]
                 if len(outliers) > 0:
-                    recommendations.append(f"Potential outliers detected in column '{col}'")
+                    recommendations.append(
+                        f"Potential outliers detected in column '{col}'"
+                    )
 
             # Check for data quality issues
             categorical_cols = df.select_dtypes(include=["object", "category"]).columns
             for col in categorical_cols:
                 if df[col].nunique() == len(df):
-                    recommendations.append(f"Column '{col}' appears to be unique identifiers - consider if this is intended")
+                    recommendations.append(
+                        f"Column '{col}' appears to be unique identifiers - consider if this is intended"
+                    )
 
             return recommendations
 

@@ -41,9 +41,13 @@ def create_env_file():
         if use_found == "y":
             credentials_path = str(key_files[0].absolute())
         else:
-            credentials_path = input("   Enter full path to your credentials JSON file: ").strip()
+            credentials_path = input(
+                "   Enter full path to your credentials JSON file: "
+            ).strip()
     else:
-        credentials_path = input("   Enter full path to your credentials JSON file: ").strip()
+        credentials_path = input(
+            "   Enter full path to your credentials JSON file: "
+        ).strip()
 
     if not credentials_path or not Path(credentials_path).exists():
         print(f"❌ Credentials file not found: {credentials_path}")

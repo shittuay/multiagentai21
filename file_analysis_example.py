@@ -19,9 +19,14 @@ def analyze_file(file_path: str, request: str):
 
         # Determine which agent to use based on the request
         agent_type = None
-        if any(word in request.lower() for word in ["analyze", "data", "insights", "report", "chart"]):
+        if any(
+            word in request.lower()
+            for word in ["analyze", "data", "insights", "report", "chart"]
+        ):
             agent_type = AgentType.DATA_ANALYSIS
-        elif any(word in request.lower() for word in ["automate", "workflow", "process"]):
+        elif any(
+            word in request.lower() for word in ["automate", "workflow", "process"]
+        ):
             agent_type = AgentType.AUTOMATION
         elif any(word in request.lower() for word in ["create", "write", "content"]):
             agent_type = AgentType.CONTENT_CREATION
