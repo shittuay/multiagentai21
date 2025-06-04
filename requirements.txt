@@ -57,3 +57,11 @@ python-magic-bin>=0.4.14; sys_platform == 'win32'
 isort>=5.12.0
 pre-commit>=3.3.3
 chardet>=5.2.0
+
+# Testing dependencies
+pytest==7.4.3
+pytest-cov==4.1.0
+flake8==6.1.0
+black==23.11.0
+build==1.0.3
+twine==4.0.2
