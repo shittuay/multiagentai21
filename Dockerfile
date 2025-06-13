@@ -18,14 +18,11 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Create src directory
 RUN mkdir -p /app/src
 
-# Copy credentials file first and rename it
-COPY multiagentai21-9a8fc-firebase-adminsdk-fbsvc-72f0130c73.json /app/src/multiagentai21-key.json
+# Copy src directory explicitly
+COPY src /app/src
 
 # Copy application code
 COPY . .
-
-# Set proper permissions
-RUN chmod 644 /app/src/multiagentai21-key.json
 
 # Expose port
 EXPOSE 8080
