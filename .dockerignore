@@ -1,14 +1,14 @@
 # Git
-.git
+.git/
 .gitignore
 
 # Python
-__pycache__
+**/__pycache__/
 *.pyc
 *.pyo
 *.pyd
 .Python
-env
+env/
 pip-log.txt
 pip-delete-this-directory.txt
 .tox
@@ -19,7 +19,6 @@ nosetests.xml
 coverage.xml
 *.cover
 *.log
-.git
 .mypy_cache
 .pytest_cache
 .hypothesis
@@ -46,7 +45,6 @@ Thumbs.db
 
 # Project specific
 temp_analysis/
-*.key.json
 .env
 .streamlit/secrets.toml
 test_*.py
@@ -54,5 +52,7 @@ test_*.py
 !README.md
 
 # Docker
-Dockerfile
-.dockerignore 
+.dockerignore
+
+# Note: Removed *.key.json exclusion since you're using secrets management
+# Note: Removed Dockerfile exclusion since it shouldn't be excluded
