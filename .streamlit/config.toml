@@ -1,0 +1,31 @@
+[server]
+# Enable CORS for Cloudflare integration
+enableCORS = true
+enableXsrfProtection = false
+headless = true
+# Set the port (Streamlit default is 8501)
+port = 8501
+# Allow external access
+address = "0.0.0.0"
+# Enable file watcher for development
+fileWatcherType = "auto"
+
+[browser]
+# Disable automatic browser opening
+gatherUsageStats = false
+serverAddress = "localhost"
+serverPort = 8501
+
+[theme]
+# Custom theme for better appearance
+primaryColor = "#3b82f6"
+backgroundColor = "#f8fafc"
+secondaryBackgroundColor = "#ffffff"
+textColor = "#1a202c"
+font = "Inter"
+
+[runner]
+# Enable magic commands
+magicEnabled = true
+# Enable fast reruns
+fastReruns = true 

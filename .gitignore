@@ -1,0 +1,111 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual Environment
+.venv/
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+.cursor/
+
+# Logs
+*.log
+logs/
+multiagentai21.log
+
+# Environment Variables and Secrets
+.env
+.env.local
+.env.*.local
+.env.development
+.env.test
+.env.production
+env_template.txt
+
+# Streamlit Secrets
+.streamlit/secrets.toml
+.streamlit/secrets.json
+
+# Google Cloud and API Keys
+*-key.json
+credentials.json
+multiagentai21-key.json
+service-account-key.json
+*.pem
+*.p12
+*.key
+
+# API Keys and Tokens
+api_keys.txt
+tokens.txt
+secrets.txt
+
+# Local development
+.DS_Store
+Thumbs.db
+*.tmp
+*.temp
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+
+# Cache directories
+.cache/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+*.backup
+
+# Chat history and user data
+chat_history/
+user_data/
+sessions/
+
+# Firebase credentials
+multiagentai21-key.json
+multiagentai21-9a8fc-firebase-adminsdk-fbsvc-72f0130c73.json
+*firebase-adminsdk*.json
+*firebase-credentials*.json 
