@@ -1,3 +1,7 @@
+import sys
+import os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), 'src')))
+
 import json
 import logging
 import os
@@ -25,9 +29,6 @@ from src.auth import (
     get_current_user
 )
 
-import sys
-import os
-sys.path.append(os.path.join(os.path.dirname(__file__), 'src'))
 
 
 # Configure logging
