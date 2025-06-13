@@ -15,20 +15,20 @@ COPY requirements.txt .
 # Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Create src directory
-RUN mkdir -p /app/src
-
-# Copy src directory explicitly
-COPY src /app/src
-
-# Copy application code
+# Copy application code and src directory
 COPY . .
+
+# *** DEBUGGING STEP: List contents of /app to verify file copying ***
+RUN ls -R /app
+# *******************************************************************
+
+# Ensure src is in PYTHONPATH and treated as a package
+ENV PYTHONPATH=/app:/app/src
 
 # Expose port
 EXPOSE 8080
 
 # Set environment variables
-ENV PYTHONPATH=/app
 ENV STREAMLIT_SERVER_PORT=8080
 ENV STREAMLIT_SERVER_ADDRESS=0.0.0.0
 ENV STREAMLIT_SERVER_HEADLESS=true
