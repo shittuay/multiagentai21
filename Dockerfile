@@ -7,6 +7,7 @@ WORKDIR /app
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
     gcc \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements first for better caching
@@ -18,17 +19,29 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application code and src directory
 COPY . .
 
-# *** DEBUGGING STEP: List contents of /app to verify file copying ***
-RUN ls -R /app
-# *******************************************************************
+# *** EXTENSIVE DEBUGGING FOR CLOUD RUN ***
+RUN echo "=== Current working directory ===" && pwd
+RUN echo "=== Listing /app contents ===" && ls -la /app
+RUN echo "=== Listing src/ contents ===" && ls -la /app/src/
+RUN echo "=== Checking __init__.py exists ===" && test -f /app/src/__init__.py && echo "EXISTS" || echo "MISSING"
+RUN echo "=== Content of __init__.py ===" && cat /app/src/__init__.py
+RUN echo "=== Checking auth.py exists ===" && test -f /app/src/auth.py && echo "EXISTS" || echo "MISSING"
+RUN echo "=== Python version ===" && python --version
+RUN echo "=== Python path ===" && python -c "import sys; print('\n'.join(sys.path))"
+RUN echo "=== Testing basic Python import ===" && python -c "print('Python working')"
+RUN echo "=== Testing src import ===" && python -c "import src; print('src import successful')" || echo "src import FAILED"
+RUN echo "=== Testing src.auth import ===" && python -c "import src.auth; print('src.auth import successful')" || echo "src.auth import FAILED"
+RUN echo "=== Checking for syntax errors in __init__.py ===" && python -m py_compile src/__init__.py && echo "NO SYNTAX ERRORS" || echo "SYNTAX ERRORS FOUND"
+RUN echo "=== Checking for syntax errors in auth.py ===" && python -m py_compile src/auth.py && echo "NO SYNTAX ERRORS" || echo "SYNTAX ERRORS FOUND"
+# **********************************************
 
-# Ensure src is in PYTHONPATH and treated as a package
-ENV PYTHONPATH=/app:/app/src
+# Set PYTHONPATH
+ENV PYTHONPATH=/app
 
 # Expose port
 EXPOSE 8080
 
-# Set environment variables
+# Set environment variables for Streamlit
 ENV STREAMLIT_SERVER_PORT=8080
 ENV STREAMLIT_SERVER_ADDRESS=0.0.0.0
 ENV STREAMLIT_SERVER_HEADLESS=true
@@ -40,4 +53,4 @@ HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:8080/_stcore/health || exit 1
 
 # Run the application
-CMD ["streamlit", "run", "app.py", "--server.port=8080", "--server.address=0.0.0.0"] 
+CMD ["streamlit", "run", "app.py", "--server.port=8080", "--server.address=0.0.0.0"]
