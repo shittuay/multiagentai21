@@ -1,11 +1,13 @@
 import sys
 import os
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), 'src')))
+
+# Add the project root to Python path, not the src directory
+project_root = os.path.dirname(os.path.abspath(__file__))
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
 
 import json
 import logging
-import os
-import sys
 import tempfile
 import time
 import webbrowser
@@ -13,7 +15,6 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 import atexit
-
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
@@ -28,7 +29,6 @@ from src.auth import (
     is_authenticated,
     get_current_user
 )
-
 
 
 # Configure logging
