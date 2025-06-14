@@ -19,39 +19,48 @@ class DataAnalyzer:
         """Initialize the data analyzer."""
         self.data = None
         self.analysis_results = {}
-        self.temp_files = [] # To keep track of temporary files
+        # self.temp_files = [] # No longer needed as we're storing HTML directly
 
-    def analyze_data(self, data: pd.DataFrame) -> Dict:
+    def analyze_data(self, data: pd.DataFrame, selected_analysis_types: Optional[List[str]] = None) -> Dict:
         """Analyze the provided data and return insights."""
+        if selected_analysis_types is None:
+            selected_analysis_types = ["summary", "insights", "visualizations", "recommendations", "department_analysis", "education_analysis"]
+
         try:
             self.data = data
-            self.analysis_results = {
-                "summary": self._generate_summary(),
-                "insights": self._generate_insights()
-            }
+            self.analysis_results = {}
+
+            if "summary" in selected_analysis_types:
+                self.analysis_results["summary"] = self._generate_summary()
+            if "insights" in selected_analysis_types:
+                self.analysis_results["insights"] = self._generate_insights()
+
             # Add dummy data for department and education analysis if not present for testing purposes
-            if 'Department' in self.data.columns and 'Salary' in self.data.columns:
+            # Only run if explicitly selected and columns exist
+            if "department_analysis" in selected_analysis_types and 'Department' in self.data.columns and 'Salary' in self.data.columns:
                 self.analysis_results["department_analysis"] = self._analyze_by_department()
-            if 'Education' in self.data.columns and 'Salary' in self.data.columns:
+            if "education_analysis" in selected_analysis_types and 'Education' in self.data.columns and 'Salary' in self.data.columns:
                 self.analysis_results["education_analysis"] = self._analyze_by_education()
 
-            # Generate visualizations dynamically
-            self.analysis_results["visualizations"] = self._generate_visualizations()
+            # Generate visualizations dynamically only if selected
+            if "visualizations" in selected_analysis_types:
+                self.analysis_results["visualizations"] = self._generate_visualizations()
 
-            self.analysis_results["recommendations"] = self.get_recommendations()
+            if "recommendations" in selected_analysis_types:
+                self.analysis_results["recommendations"] = self.get_recommendations()
 
             return self.analysis_results
         except Exception as e:
             logger.error(f"Error analyzing data: {e}")
             return {"error": str(e)}
 
-    def analyze_file(self, file_path: str) -> Dict:
+    def analyze_file(self, file_path: str, selected_analysis_types: Optional[List[str]] = None) -> Dict:
         """Reads a file, analyzes its data, and returns insights."""
         try:
             logger.info(f"Reading file for analysis: {file_path}")
             # Explicitly specify UTF-8 encoding to avoid decoding errors
             df = pd.read_csv(file_path, encoding='utf-8')
-            return self.analyze_data(df)
+            return self.analyze_data(df, selected_analysis_types) # Pass selected_analysis_types
         except UnicodeDecodeError as e:
             logger.error(f"UnicodeDecodeError reading file {file_path}: {e}", exc_info=True)
             return {"error": f"Error reading file. Please ensure your CSV file is saved with UTF-8 encoding. Original error: {str(e)}"}
@@ -108,7 +117,8 @@ class DataAnalyzer:
             logger.info("No data or empty data for visualization generation.")
             return visualizations
 
-        logger.info(f"Data head for visualization generation:\n{self.data.head()}")
+        # Remove the extra logging for data head, as it's not needed now
+        # logger.info(f"Data head for visualization generation:\n{self.data.head()}")
 
         # Example: Scatter plot if at least two numeric columns exist
         numeric_cols = self.data.select_dtypes(include=['int64', 'float64']).columns
@@ -118,8 +128,9 @@ class DataAnalyzer:
             x_col = numeric_cols[0]
             y_col = numeric_cols[1]
             logger.info(f"Attempting to generate scatter plot for {y_col} vs {x_col}")
-            logger.info(f"Unique values for {x_col}: {self.data[x_col].unique()}")
-            logger.info(f"Unique values for {y_col}: {self.data[y_col].unique()}")
+            # Remove the extra logging for unique values
+            # logger.info(f"Unique values for {x_col}: {self.data[x_col].unique()}")
+            # logger.info(f"Unique values for {y_col}: {self.data[y_col].unique()}")
 
             try:
                 fig = px.scatter(self.data, x=x_col, y=y_col, title=f'{y_col} vs {x_col}')
@@ -133,7 +144,8 @@ class DataAnalyzer:
             # Example: Histogram if only one numeric column
             x_col = numeric_cols[0]
             logger.info(f"Attempting to generate histogram for {x_col}")
-            logger.info(f"Unique values for {x_col}: {self.data[x_col].unique()}")
+            # Remove the extra logging for unique values
+            # logger.info(f"Unique values for {x_col}: {self.data[x_col].unique()}")
             try:
                 fig = px.histogram(self.data, x=x_col, title=f'Distribution of {x_col}')
                 # Store the HTML content directly
@@ -145,7 +157,6 @@ class DataAnalyzer:
         else:
             logger.info("Not enough numeric columns to generate a scatter plot or histogram.")
 
-        # Add other types of visualizations here as needed (e.g., bar charts for categorical data)
         logger.info(f"Final visualizations generated: {list(visualizations.keys())}")
         return visualizations
 

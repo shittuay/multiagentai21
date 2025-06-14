@@ -1,9 +1,9 @@
 import sys
 import os
 
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), 'src')))     
-
-
+project_root = os.path.dirname(os.path.abspath(__file__))
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
 
 
 # Add the project root to Python path, not the src directory
@@ -934,6 +934,25 @@ def display_data_analysis_section():
     """Display the data analysis section of the app"""
     st.markdown('<div class="page-content-container">', unsafe_allow_html=True)
     st.header("📊 Data Analysis Dashboard")
+    
+    # Analysis type selection
+    st.subheader("Select Analysis Types")
+    analysis_options = {
+        "Summary": "summary",
+        "Insights": "insights",
+        "Visualizations": "visualizations",
+        "Department Analysis": "department_analysis",
+        "Education Analysis": "education_analysis",
+        "Recommendations": "recommendations"
+    }
+    selected_analysis_keys = st.multiselect(
+        "Choose the types of analysis to perform:",
+        options=list(analysis_options.keys()),
+        default=list(analysis_options.keys()), # Select all by default
+        key="analysis_type_selection"
+    )
+    selected_analysis_types = [analysis_options[key] for key in selected_analysis_keys]
+
     # File upload section
     uploaded_file = st.file_uploader(
         "Upload your data file (CSV format)",
@@ -957,9 +976,10 @@ def display_data_analysis_section():
             # Initialize analyzer
             analyzer = DataAnalyzer()
 
-            # Perform analysis
+            # Perform analysis with selected types
             with st.spinner("Analyzing your data..."):
-                results = analyzer.analyze_file(file_path)
+                # Pass selected_analysis_types to analyze_file
+                results = analyzer.analyze_file(file_path, selected_analysis_types=selected_analysis_types)
 
                 if "error" in results:
                     st.error(f"Analysis failed: {results['error']}")
@@ -982,6 +1002,8 @@ def display_data_analysis_section():
                     os.remove(file_path)
             except Exception as e:
                 logger.error(f"Error removing uploaded file {file_path}: {e}")
+
+    st.markdown('</div>', unsafe_allow_html=True) # Close page-content-container
 
 
 def display_analytics_dashboard():
