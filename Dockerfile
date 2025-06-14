@@ -25,14 +25,14 @@ RUN echo "=== Listing /app contents ===" && ls -la /app
 RUN echo "=== Listing src/ contents ===" && ls -la /app/src/
 RUN echo "=== Checking __init__.py exists ===" && test -f /app/src/__init__.py && echo "EXISTS" || echo "MISSING"
 RUN echo "=== Content of __init__.py ===" && cat /app/src/__init__.py
-RUN echo "=== Checking auth.py exists ===" && test -f /app/src/auth.py && echo "EXISTS" || echo "MISSING"
+RUN echo "=== Checking auth_manager.py exists ===" && test -f /app/src/auth_manager.py && echo "EXISTS" || echo "MISSING"
 RUN echo "=== Python version ===" && python --version
 RUN echo "=== Python path ===" && python -c "import sys; print('\n'.join(sys.path))"
 RUN echo "=== Testing basic Python import ===" && python -c "print('Python working')"
 RUN echo "=== Testing src import ===" && python -c "import src; print('src import successful')" || echo "src import FAILED"
-RUN echo "=== Testing src.auth import ===" && python -c "import src.auth; print('src.auth import successful')" || echo "src.auth import FAILED"
+RUN echo "=== Testing src.auth_manager import ===" && python -c "import src.auth_manager; print('src.auth_manager import successful')" || echo "src.auth_manager import FAILED"
 RUN echo "=== Checking for syntax errors in __init__.py ===" && python -m py_compile src/__init__.py && echo "NO SYNTAX ERRORS" || echo "SYNTAX ERRORS FOUND"
-RUN echo "=== Checking for syntax errors in auth.py ===" && python -m py_compile src/auth.py && echo "NO SYNTAX ERRORS" || echo "SYNTAX ERRORS FOUND"
+RUN echo "=== Checking for syntax errors in auth_manager.py ===" && python -m py_compile src/auth_manager.py && echo "NO SYNTAX ERRORS" || echo "SYNTAX ERRORS FOUND"
 # **********************************************
 
 # Set PYTHONPATH

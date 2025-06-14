@@ -737,13 +737,12 @@ def display_agent_selection():
 
 def display_chat_messages():
     """Display chat messages in the main area."""
+    # Add the warning as an assistant message to chat history when it's empty
     if not st.session_state.chat_history:
-        # Add the warning as a system message to chat history when it's empty
         st.session_state.chat_history.append({
-            "role": "system", 
+            "role": "assistant", 
             "content": "MultiAgentAI21 can make mistakes. Always verify important information."
         })
-        # No return here, so the message gets displayed by the loop below
 
     # Display chat messages (no explicit header for conversation count)
     # The messages will fill the available space dynamically
@@ -1220,6 +1219,19 @@ def process_user_request(user_input: str):
         return {"content": error_msg, "data": None}
 
 
+def display_footer():
+    """Display the application footer."""
+    st.markdown("---")
+    st.markdown(
+        """
+    <div style='text-align: center; color: #6b7280;'>
+        <p>🚀 Powered by MultiAgentAI21 | CopyRight @2025</p>
+    </div>
+    """,
+        unsafe_allow_html=True,
+    )
+
+
 def main():
     """Main application entry point"""
     try:
@@ -1294,19 +1306,11 @@ def main():
 
         logger.info("Main application completed successfully")
 
-        # Footer - Moved here to ensure it's at the bottom of the main content area after all other page elements
-        st.markdown("---")
-        st.markdown(
-            """
-    <div style='text-align: center; color: #6b7280;'>
-        <p>🚀 Powered by MultiAgentAI21 | CopyRight @2025</p>
-    </div>
-    """,
-            unsafe_allow_html=True,
-        )
-
         # Clean up temporary files when the app is closed
         atexit.register(cleanup_analysis_files)
+
+        # Display the global footer
+        display_footer()
 
     except Exception as e:
         logger.error(f"Error in main application: {e}", exc_info=True)
@@ -1320,4 +1324,4 @@ if __name__ == "__main__":
         main()
     except Exception as e:
         logger.error(f"Fatal error: {e}", exc_info=True)
-        st.error("A fatal error occurred. Please check the logs for details.") 
+        st.error("A fatal error occurred. Please check the logs for details.")
