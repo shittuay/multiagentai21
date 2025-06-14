@@ -24,7 +24,7 @@ import plotly.graph_objects as go
 import streamlit as st
 
 # Import authentication module
-from src.auth import (
+from src.auth_manager import (
     initialize_firebase,
     login_required,
     login_page,

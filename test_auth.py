@@ -6,7 +6,7 @@ from unittest.mock import patch, MagicMock
 
 # Only import what actually exists in src.auth
 try:
-    from src.auth import initialize_firebase
+    from src.auth_manager import initialize_firebase
     print("Successfully imported: initialize_firebase")
 except ImportError as e:
     print(f"Failed to import initialize_firebase: {e}")
