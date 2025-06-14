@@ -16,34 +16,13 @@ def initialize_firebase():
         if not firebase_admin._apps:
             logger.info("Initializing Firebase Admin SDK...")
             
-            # Try multiple possible credential file locations
-            possible_paths = [
-                'multiagentai21-key.json',  # Current directory
-                'multiagentai21-9a8fc-firebase-adminsdk-fbsvc-72f0130c73.json',  # Alternative name
-                os.path.join(os.path.dirname(__file__), 'multiagentai21-key.json'),  # In src directory
-                os.path.join(os.path.dirname(__file__), 'multiagentai21-9a8fc-firebase-adminsdk-fbsvc-72f0130c73.json'),  # In src directory
-                '/app/multiagentai21-key.json',  # Docker root
-                '/app/src/multiagentai21-key.json',  # Docker src directory
-                '/app/multiagentai21-9a8fc-firebase-adminsdk-fbsvc-72f0130c73.json',  # Docker root alternative
-                '/app/src/multiagentai21-9a8fc-firebase-adminsdk-fbsvc-72f0130c73.json',  # Docker src alternative
-                r"C:\Users\shitt\Downloads\multiagentai21-9a8fc-firebase-adminsdk-fbsvc-72f0130c73.json"  # Windows path
-            ]
+            # The expected path for the secret mounted by Google Cloud Run
+            cred_path = '/app/src/multiagentai21-key.json'
             
-            # Log all paths being checked
-            logger.info("Checking for credentials file in the following locations:")
-            for path in possible_paths:
-                logger.info(f"Checking: {path}")
-                if os.path.exists(path):
-                    logger.info(f"Found credentials at: {path}")
+            logger.info(f"Attempting to load Firebase credentials from: {cred_path}")
             
-            cred_path = None
-            for path in possible_paths:
-                if os.path.exists(path):
-                    cred_path = path
-                    logger.info(f"Using Firebase credentials from: {path}")
-                    break
-            
-            if cred_path:
+            if os.path.exists(cred_path):
+                logger.info(f"Credential file found at: {cred_path}")
                 try:
                     # Initialize with the credentials file
                     cred = credentials.Certificate(cred_path)
@@ -54,26 +33,29 @@ def initialize_firebase():
                     logger.info(f"Firebase initialized successfully with app: {app.name}")
                     
                 except Exception as e:
-                    logger.error(f"Error initializing Firebase with credential file: {e}", exc_info=True)
-                    raise ValueError(f"Error initializing Firebase: {e}")
+                    logger.error(f"Error initializing Firebase with credential file at {cred_path}: {e}", exc_info=True)
+                    # Read the file content if it exists but failed to load as JSON
+                    try:
+                        with open(cred_path, 'r') as f:
+                            content = f.read()
+                        logger.error(f"Content of {cred_path} (first 200 chars): {content[:200]}")
+                    except Exception as fe:
+                        logger.error(f"Could not read content of {cred_path}: {fe}")
+                    raise ValueError(f"Error initializing Firebase: {e}. Check if the secret content is valid JSON.")
             else:
-                # List all files in current directory and src directory for debugging
                 current_dir = os.getcwd()
                 src_dir = os.path.join(current_dir, 'src')
                 
-                logger.error(f"Current directory contents ({current_dir}):")
-                if os.path.exists(current_dir):
-                    logger.error(str(os.listdir(current_dir)))
+                logger.error(f"Credential file NOT found at expected path: {cred_path}")
+                logger.error(f"Current working directory: {current_dir}")
                 
-                logger.error(f"Source directory contents ({src_dir}):")
-                if os.path.exists(src_dir):
-                    logger.error(str(os.listdir(src_dir)))
+                logger.error(f"Contents of /app (current directory): {os.listdir('/app') if os.path.exists('/app') else 'N/A'}")
+                logger.error(f"Contents of /app/src: {os.listdir('/app/src') if os.path.exists('/app/src') else 'N/A'}")
                 
                 raise ValueError(
-                    "Firebase credentials file not found. Please ensure the credentials file exists in one of these locations:\n" + 
-                    "\n".join(possible_paths) + 
-                    "\n\nCurrent directory: " + current_dir +
-                    "\nSource directory: " + src_dir
+                    f"Firebase credentials file not found at expected path: {cred_path}. " +
+                    "Ensure the secret is correctly mounted in Cloud Run. " +
+                    f"Current directory: {current_dir}, src directory: {src_dir}"
                 )
                 
         else:
