@@ -738,23 +738,15 @@ def display_agent_selection():
 def display_chat_messages():
     """Display chat messages in the main area."""
     if not st.session_state.chat_history:
-        st.info("💬 Start a conversation by selecting an agent and typing a message!")
-        return
+        # Add the warning as a system message to chat history when it's empty
+        st.session_state.chat_history.append({
+            "role": "system", 
+            "content": "MultiAgentAI21 can make mistakes. Always verify important information."
+        })
+        # No return here, so the message gets displayed by the loop below
 
-    # Debug information (only show in development)
-    if st.checkbox("🔍 Show Debug Info", key="debug_chat"):
-        st.write(f"**Debug Info:**")
-        st.write(f"- Chat ID: {st.session_state.current_chat_id}")
-        st.write(f"- Messages loaded: {len(st.session_state.chat_history)}")
-        st.write(f"- Agent type: {st.session_state.selected_agent}")
-        st.write(f"- Agent locked: {st.session_state.agent_locked}")
-        st.write("**Message structure:**")
-        for i, msg in enumerate(st.session_state.chat_history):
-            st.write(f"  {i+1}. {msg.get('role', 'unknown')}: {msg.get('content', '')[:50]}...")
-
-    # Display chat messages
-    st.subheader(f"💬 Conversation ({len(st.session_state.chat_history)} messages)")
-    
+    # Display chat messages (no explicit header for conversation count)
+    # The messages will fill the available space dynamically
     for i, message in enumerate(st.session_state.chat_history):
         with st.chat_message(message["role"]):
             st.write(message["content"])
@@ -839,42 +831,25 @@ def process_and_display_user_message(user_input):
 
 
 def display_chat_interface():
-    """Display the main chat interface."""
-    # Initialize session state if needed
-    if "current_chat_id" not in st.session_state:
-        st.session_state.current_chat_id = f"chat_{int(time.time())}"
-    if "chat_history" not in st.session_state:
-        st.session_state.chat_history = []
-    if "agent_locked" not in st.session_state:
-        st.session_state.agent_locked = False
-    if "selected_agent" not in st.session_state:
-        st.session_state.selected_agent = None
-
-    # Display chat history in sidebar
-    display_chat_history_sidebar()
-
-    # Main chat area
+    """Display the main chat interface"""
     st.markdown('<div class="page-content-container">', unsafe_allow_html=True)
-    st.header("🤖 Agent Chat")
+    st.header("💬 Chat with MultiAgentAI21")
 
-    # Display current chat ID and message count
-    message_count = len(st.session_state.chat_history)
-    st.caption(f"Chat ID: {st.session_state.current_chat_id} | Messages: {message_count}")
-
-    # Agent selection
+    # Agent selection (at the top of the chat area)
     display_agent_selection()
 
-    # Display chat messages
+    # Display chat messages (includes system warning if history is empty)
     display_chat_messages()
-    st.markdown('</div>', unsafe_allow_html=True) # Close page-content-container
 
-    # Chat input (outside the container, usually at the bottom)
-    logger.info("DEBUG: Checking for chat input...")
-    if user_input := st.chat_input("Type your message here..."):
-        logger.info(f"DEBUG: Chat input received: {user_input[:50]}...") # Log the received input
+    # Chat input at the bottom of the main chat area
+    # This is the single, primary chat input for the page
+    user_input = st.chat_input("Type your message here...")
+    if user_input:
         process_and_display_user_message(user_input)
-    else:
-        logger.info("DEBUG: No chat input received.")
+
+    # The sidebar chat history is handled in main() as it's a global element
+    # No more redundant containers or headers here
+    st.markdown('</div>', unsafe_allow_html=True) # Close the page-content-container
 
 
 def show_agent_examples():
