@@ -105,39 +105,48 @@ class DataAnalyzer:
         """Generate a set of common visualizations based on available data."""
         visualizations = {}
         if self.data is None or self.data.empty:
+            logger.info("No data or empty data for visualization generation.")
             return visualizations
+
+        logger.info(f"Data head for visualization generation:\n{self.data.head()}")
 
         # Example: Scatter plot if at least two numeric columns exist
         numeric_cols = self.data.select_dtypes(include=['int64', 'float64']).columns
+        logger.info(f"Numeric columns found: {list(numeric_cols)}")
+
         if len(numeric_cols) >= 2:
             x_col = numeric_cols[0]
             y_col = numeric_cols[1]
+            logger.info(f"Attempting to generate scatter plot for {y_col} vs {x_col}")
+            logger.info(f"Unique values for {x_col}: {self.data[x_col].unique()}")
+            logger.info(f"Unique values for {y_col}: {self.data[y_col].unique()}")
+
             try:
                 fig = px.scatter(self.data, x=x_col, y=y_col, title=f'{y_col} vs {x_col}')
-                with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.html', encoding='utf-8') as tmp_file:
-                    fig.write_html(tmp_file.name)
-                    visualizations["scatter_plot"] = tmp_file.name
-                    self.temp_files.append(tmp_file.name)
-                logger.info(f"Generated scatter plot: {tmp_file.name}")
+                # Store the HTML content directly
+                html_content = fig.to_html(include_plotlyjs='cdn', full_html=False)
+                visualizations["scatter_plot"] = html_content
+                logger.info("Successfully generated scatter plot HTML content")
             except Exception as e:
-                logger.error(f"Error generating scatter plot: {e}")
+                logger.error(f"Error generating scatter plot for {y_col} vs {x_col}: {e}", exc_info=True)
         elif len(numeric_cols) == 1:
             # Example: Histogram if only one numeric column
             x_col = numeric_cols[0]
+            logger.info(f"Attempting to generate histogram for {x_col}")
+            logger.info(f"Unique values for {x_col}: {self.data[x_col].unique()}")
             try:
                 fig = px.histogram(self.data, x=x_col, title=f'Distribution of {x_col}')
-                with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.html', encoding='utf-8') as tmp_file:
-                    fig.write_html(tmp_file.name)
-                    visualizations["histogram"] = tmp_file.name
-                    self.temp_files.append(tmp_file.name)
-                logger.info(f"Generated histogram: {tmp_file.name}")
+                # Store the HTML content directly
+                html_content = fig.to_html(include_plotlyjs='cdn', full_html=False)
+                visualizations["histogram"] = html_content
+                logger.info("Successfully generated histogram HTML content")
             except Exception as e:
-                logger.error(f"Error generating histogram: {e}")
+                logger.error(f"Error generating histogram for {x_col}: {e}", exc_info=True)
         else:
             logger.info("Not enough numeric columns to generate a scatter plot or histogram.")
 
         # Add other types of visualizations here as needed (e.g., bar charts for categorical data)
-
+        logger.info(f"Final visualizations generated: {list(visualizations.keys())}")
         return visualizations
 
     def _analyze_by_department(self) -> Dict:
@@ -195,11 +204,14 @@ class DataAnalyzer:
 
     def cleanup(self):
         """Clean up any temporary files created during analysis."""
-        logger.info("Cleaning up temporary files...")
-        for f_path in self.temp_files:
-            if os.path.exists(f_path):
-                try:
-                    os.remove(f_path)
-                    logger.info(f"Removed temporary file: {f_path}")
-                except Exception as e:
-                    logger.error(f"Error removing temporary file {f_path}: {e}") 
+        # No longer needed as we're not using temporary files
+        pass
+
+    def get_temp_files(self):
+        """Get the list of temporary files."""
+        # No longer needed as we're not using temporary files
+        return []
+
+    def __del__(self):
+        """Destructor to ensure cleanup when the object is destroyed."""
+        self.cleanup() 

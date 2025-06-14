@@ -577,6 +577,10 @@ if "current_chat_id" not in st.session_state:
     st.session_state.current_chat_id = datetime.now().strftime("%Y%m%d_%H%M%S")
 if "available_chats" not in st.session_state:
     st.session_state.available_chats = get_available_chats()
+if "last_analysis_results" not in st.session_state:
+    st.session_state.last_analysis_results = None
+if "analysis_temp_files" not in st.session_state:
+    st.session_state.analysis_temp_files = []
 
 
 def check_environment() -> list:
@@ -846,14 +850,6 @@ def display_chat_interface():
     if "selected_agent" not in st.session_state:
         st.session_state.selected_agent = None
 
-    # Only load chat history if we don't already have it loaded
-    # This prevents overriding chat history when loading from sidebar
-    if not st.session_state.chat_history:
-        loaded_history = load_chat_history(st.session_state.current_chat_id)
-        if loaded_history:
-            st.session_state.chat_history = loaded_history
-            logger.info(f"Loaded chat history for {st.session_state.current_chat_id}: {len(loaded_history)} messages")
-
     # Display chat history in sidebar
     display_chat_history_sidebar()
 
@@ -921,37 +917,220 @@ def show_agent_examples():
             process_user_request(example)
 
 
+def cleanup_analysis_files():
+    """Clean up temporary analysis files."""
+    if st.session_state.analysis_temp_files:
+        for file_path in st.session_state.analysis_temp_files:
+            try:
+                if os.path.exists(file_path):
+                    os.remove(file_path)
+                    logger.info(f"Removed temporary file: {file_path}")
+            except Exception as e:
+                logger.error(f"Error removing temporary file {file_path}: {e}")
+        st.session_state.analysis_temp_files = []
+
+
+def display_data_analysis_section():
+    """Display the data analysis section of the app"""
+    st.markdown('<div class="page-content-container">', unsafe_allow_html=True)
+    st.header("📊 Data Analysis Dashboard")
+    # File upload section
+    uploaded_file = st.file_uploader(
+        "Upload your data file (CSV format)",
+        type=["csv"],
+        help="Upload a CSV file for analysis",
+    )
+    
+    if uploaded_file is not None:
+        try:
+            # Clean up any existing temporary files
+            cleanup_analysis_files()
+            
+            # Save the uploaded file temporarily
+            temp_dir = os.path.join(os.getcwd(), "temp_analysis")
+            os.makedirs(temp_dir, exist_ok=True)
+            file_path = os.path.join(temp_dir, uploaded_file.name)
+
+            with open(file_path, "wb") as f:
+                f.write(uploaded_file.getvalue())
+
+            # Initialize analyzer
+            analyzer = DataAnalyzer()
+
+            # Perform analysis
+            with st.spinner("Analyzing your data..."):
+                results = analyzer.analyze_file(file_path)
+
+                if "error" in results:
+                    st.error(f"Analysis failed: {results['error']}")
+                    st.session_state.last_analysis_results = None
+                    return
+
+                # Store results and temporary files in session state
+                st.session_state.last_analysis_results = results
+                st.session_state.analysis_temp_files = analyzer.get_temp_files()
+                st.success("Data analysis completed successfully!")
+
+        except Exception as e:
+            st.error(f"Error during analysis: {e}")
+            logger.error(f"Error during analysis: {e}", exc_info=True)
+            st.session_state.last_analysis_results = None
+        finally:
+            # Clean up the uploaded file
+            try:
+                if os.path.exists(file_path):
+                    os.remove(file_path)
+            except Exception as e:
+                logger.error(f"Error removing uploaded file {file_path}: {e}")
+
+
 def display_analytics_dashboard():
     """Display enhanced analytics dashboard"""
     st.markdown('<div class="page-content-container">', unsafe_allow_html=True)
     st.header("📈 Analytics Dashboard")
-    if not st.session_state.chat_history:
-        st.info("📊 No analytics data available yet. Start chatting to see metrics!")
-        st.markdown('</div>', unsafe_allow_html=True) # Close page-content-container
+
+    # Check if there are analysis results stored in session state
+    if not st.session_state.last_analysis_results:
+        st.info("📊 No analytics data available yet. Please go to 'Data Analysis' to upload and analyze a file first.")
+        st.markdown('</div>', unsafe_allow_html=True)
         return
+
+    # Use the stored analysis results
+    results = st.session_state.last_analysis_results
 
     st.markdown('<div class="metric-container">', unsafe_allow_html=True)
 
-    # Calculate metrics
+    # Calculate metrics - these should ideally come directly from 'results["summary"]'
+    # Fallback to direct calculation if structure isn't perfect
+    total_records = results["summary"]["total_records"]
+    columns_analyzed = len(results["summary"]["columns"])
+    missing_values_count = sum(results["summary"]["missing_values"].values())
+    
+    # Adjust for potential missing metrics if chat history is used for avg_response_time/success_rate
+    # Assuming chat_history is still used for agent usage chart later
     total_requests = len(st.session_state.chat_history)
-    avg_response_time = sum(chat.get("execution_time", 0) for chat in st.session_state.chat_history) / total_requests
-    success_rate = (sum(1 for chat in st.session_state.chat_history if chat.get("success", True)) / total_requests) * 100
+    avg_response_time = sum(chat.get("execution_time", 0) for chat in st.session_state.chat_history) / total_requests if total_requests > 0 else 0
+    success_rate = (sum(1 for chat in st.session_state.chat_history if chat.get("success", True)) / total_requests) * 100 if total_requests > 0 else 0
+
 
     col1, col2, col3 = st.columns(3)
 
     with col1:
-        st.metric("Total Requests", total_requests, delta=None)
+        st.metric("Total Records", total_records, delta=None)
 
     with col2:
-        st.metric("Avg Response Time", f"{avg_response_time:.2f}s", delta=None)
+        st.metric("Columns Analyzed", columns_analyzed, delta=None)
 
     with col3:
-        st.metric("Success Rate", f"{success_rate:.1f}%", delta=None)
+        st.metric("Missing Values", missing_values_count, delta=None)
 
     st.markdown("</div>", unsafe_allow_html=True)
 
-    # Agent usage chart
+    # Display recommendations
+    if "recommendations" in results and results["recommendations"]:
+        st.markdown("### 💡 Recommendations")
+        for rec in results["recommendations"]:
+            st.info(rec)
+
+    # Display department analysis if available
+    if "department_analysis" in results:
+        st.markdown("### 👥 Department Analysis")
+        dept_analysis = results["department_analysis"]
+
+        if "salary" in dept_analysis:
+            st.markdown("#### Salary Distribution by Department")
+            salary_data = dept_analysis["salary"]
+            if isinstance(salary_data.get("mean"), dict):
+                fig = go.Figure()
+                for dept, stats in salary_data["mean"].items():
+                    fig.add_trace(
+                        go.Box(
+                            y=[stats],
+                            name=dept,
+                            boxpoints="all",
+                            jitter=0.3,
+                            pointpos=-1.8,
+                        )
+                    )
+                fig.update_layout(
+                    title="Salary Distribution by Department",
+                    yaxis_title="Salary",
+                    showlegend=True,
+                )
+                st.plotly_chart(fig, use_container_width=True)
+            else:
+                st.warning("Department salary data format not as expected.")
+
+        if "performance_score" in dept_analysis:
+            st.markdown("#### Performance Scores by Department")
+            perf_data = dept_analysis["performance_score"]
+            if isinstance(perf_data.get("mean"), dict):
+                depts = list(perf_data["mean"].keys())
+                metrics = ["mean", "median", "min", "max"]
+                values = [[perf_data[m].get(d, 0) for d in depts] for m in metrics] # Ensure .get(d, 0) for safety
+
+                fig = go.Figure(
+                    data=go.Heatmap(
+                        z=values,
+                        x=depts,
+                        y=metrics,
+                        colorscale="RdYlGn",
+                        text=[[f"{v:.2f}" for v in row] for row in values],
+                        texttemplate="%{text}",
+                        textfont={"size": 14},
+                    )
+                )
+                fig.update_layout(
+                    title="Performance Metrics by Department",
+                    xaxis_title="Department",
+                    yaxis_title="Metric",
+                )
+                st.plotly_chart(fig, use_container_width=True)
+            else:
+                st.warning("Department performance data format not as expected.")
+
+    # Display education analysis if available
+    if "education_analysis" in results:
+        st.markdown("### 🎓 Education Analysis")
+        edu_analysis = results["education_analysis"]
+
+        if "salary" in edu_analysis and isinstance(edu_analysis["salary"].get("mean"), dict):
+            edu_data = pd.DataFrame(
+                {
+                    "Education": list(edu_analysis["salary"]["mean"].keys()),
+                    "Mean Salary": list(edu_analysis["salary"]["mean"].values()),
+                    "Median Salary": list(edu_analysis["salary"]["median"].values()),
+                }
+            )
+
+            fig = px.bar(
+                edu_data,
+                x="Education",
+                y=["Mean Salary", "Median Salary"],
+                barmode="group",
+                title="Salary Distribution by Education Level",
+            )
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.warning("Education salary data format not as expected.")
+
+    # Display interactive visualizations
+    if "visualizations" in results and results["visualizations"]:
+        st.markdown("### 📊 Interactive Visualizations")
+        for viz_name, viz_content in results["visualizations"].items():
+            st.markdown(f"#### {viz_name.replace('_', ' ').title()}")
+            try:
+                if isinstance(viz_content, str):
+                    st.components.v1.html(viz_content, height=600)
+                else:
+                    st.warning(f"Invalid visualization content for {viz_name}")
+            except Exception as e:
+                st.error(f"Error displaying visualization {viz_name}: {e}")
+                logger.error(f"Error displaying visualization {viz_name}: {e}", exc_info=True)
+
+    # Agent usage chart (still relies on chat_history)
     if len(st.session_state.chat_history) > 1:
+        st.markdown("### 📊 Agent Usage")
         agent_usage = {}
         for chat in st.session_state.chat_history:
             agent_type = chat.get("agent_type", "unknown")
@@ -971,6 +1150,8 @@ def display_analytics_dashboard():
             title_font_color="#1a202c",
         )
         st.plotly_chart(fig, use_container_width=True)
+
+    st.markdown('</div>', unsafe_allow_html=True) # Close page-content-container
 
 
 def process_user_request(user_input: str):
@@ -1042,168 +1223,6 @@ def process_user_request(user_input: str):
         return {"content": error_msg, "data": None}
 
 
-def display_data_analysis_section():
-    """Display the data analysis section of the app"""
-    st.markdown('<div class="page-content-container">', unsafe_allow_html=True)
-    st.header("📊 Data Analysis Dashboard")
-    # File upload section
-    uploaded_file = st.file_uploader(
-        "Upload your data file (CSV format)",
-        type=["csv"],
-        help="Upload a CSV file for analysis",
-    )
-    st.markdown('</div>', unsafe_allow_html=True) # Close page-content-container
-
-    if uploaded_file is not None:
-        try:
-            # Save the uploaded file temporarily
-            temp_dir = os.path.join(os.getcwd(), "temp_analysis")
-            os.makedirs(temp_dir, exist_ok=True)
-            file_path = os.path.join(temp_dir, uploaded_file.name)
-
-            with open(file_path, "wb") as f:
-                f.write(uploaded_file.getvalue())
-
-            # Initialize analyzer
-            analyzer = DataAnalyzer()
-
-            # Perform analysis
-            with st.spinner("Analyzing your data..."):
-                results = analyzer.analyze_file(file_path)
-
-                if "error" in results:
-                    st.error(f"Analysis failed: {results['error']}")
-                    return
-
-                # Display summary
-                st.markdown("### 📈 Analysis Summary")
-                if "summary" in results:
-                    summary = results["summary"]
-                    col1, col2, col3 = st.columns(3)
-                    with col1:
-                        st.metric("Total Records", summary["total_records"])
-                    with col2:
-                        st.metric("Columns Analyzed", len(summary["columns"]))
-                    with col3:
-                        missing = sum(summary["missing_values"].values())
-                        st.metric("Missing Values", missing)
-
-                # Display recommendations
-                if "recommendations" in results and results["recommendations"]:
-                    st.markdown("### 💡 Recommendations")
-                    for rec in results["recommendations"]:
-                        st.info(rec)
-
-                # Display department analysis if available
-                if "department_analysis" in results:
-                    st.markdown("### 👥 Department Analysis")
-                    dept_analysis = results["department_analysis"]
-
-                    if "salary" in dept_analysis:
-                        st.markdown("#### Salary Distribution by Department")
-                        salary_data = dept_analysis["salary"]
-
-                        # Create salary box plot
-                        fig = go.Figure()
-                        for dept, stats in salary_data["mean"].items():
-                            fig.add_trace(
-                                go.Box(
-                                    y=[stats],
-                                    name=dept,
-                                    boxpoints="all",
-                                    jitter=0.3,
-                                    pointpos=-1.8,
-                                )
-                            )
-                        fig.update_layout(
-                            title="Salary Distribution by Department",
-                            yaxis_title="Salary",
-                            showlegend=True,
-                        )
-                        st.plotly_chart(fig, use_container_width=True)
-
-                    if "performance_score" in dept_analysis:
-                        st.markdown("#### Performance Scores by Department")
-                        perf_data = dept_analysis["performance_score"]
-
-                        # Create performance heatmap
-                        depts = list(perf_data["mean"].keys())
-                        metrics = ["mean", "median", "min", "max"]
-                        values = [[perf_data[m][d] for d in depts] for m in metrics]
-
-                        fig = go.Figure(
-                            data=go.Heatmap(
-                                z=values,
-                                x=depts,
-                                y=metrics,
-                                colorscale="RdYlGn",
-                                text=[[f"{v:.2f}" for v in row] for row in values],
-                                texttemplate="%{text}",
-                                textfont={"size": 14},
-                            )
-                        )
-                        fig.update_layout(
-                            title="Performance Metrics by Department",
-                            xaxis_title="Department",
-                            yaxis_title="Metric",
-                        )
-                        st.plotly_chart(fig, use_container_width=True)
-
-                # Display education analysis if available
-                if "education_analysis" in results:
-                    st.markdown("### 🎓 Education Analysis")
-                    edu_analysis = results["education_analysis"]
-
-                    if "salary" in edu_analysis:
-                        st.markdown("#### Salary by Education Level")
-                        edu_data = pd.DataFrame(
-                            {
-                                "Education": list(edu_analysis["salary"]["mean"].keys()),
-                                "Mean Salary": list(edu_analysis["salary"]["mean"].values()),
-                                "Median Salary": list(edu_analysis["salary"]["median"].values()),
-                            }
-                        )
-
-                        fig = px.bar(
-                            edu_data,
-                            x="Education",
-                            y=["Mean Salary", "Median Salary"],
-                            barmode="group",
-                            title="Salary Distribution by Education Level",
-                        )
-                        st.plotly_chart(fig, use_container_width=True)
-
-                # Display interactive visualizations
-                if "visualizations" in results:
-                    st.markdown("### 📊 Interactive Visualizations")
-                    for viz_name, viz_path in results["visualizations"].items():
-                        if viz_path.endswith(".html"):
-                            st.markdown(f"#### {viz_name.replace('_', ' ').title()}")
-                            with open(viz_path, "r") as f:
-                                html_content = f.read()
-                            st.components.v1.html(html_content, height=600)
-
-                # Save results
-                results_file = f"analysis_results_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
-                with open(results_file, "w") as f:
-                    json.dump(results, f, indent=2)
-                st.download_button(
-                    label="Download Analysis Results",
-                    data=json.dumps(results, indent=2),
-                    file_name=results_file,
-                    mime="application/json",
-                )
-
-        except Exception as e:
-            st.error(f"Error during analysis: {str(e)}")
-        finally:
-            # Cleanup
-            try:
-                analyzer.cleanup()
-            except:
-                pass
-
-
 def main():
     """Main application entry point"""
     try:
@@ -1243,6 +1262,16 @@ def main():
             # Prevent further execution that requires the agent
             return # Stop main function execution if agent is not initialized
 
+        # Load chat history upfront for all pages that might use it
+        # Ensure current_chat_id is set before loading
+        if "current_chat_id" not in st.session_state:
+            st.session_state.current_chat_id = datetime.now().strftime("%Y%m%d_%H%M%S")
+        if "chat_history" not in st.session_state or not st.session_state.chat_history: # Only load if empty or not present
+             loaded_history = load_chat_history(st.session_state.current_chat_id)
+             if loaded_history:
+                 st.session_state.chat_history = loaded_history
+                 logger.info(f"Loaded chat history for {st.session_state.current_chat_id}: {len(loaded_history)} messages in main.")
+
         # Display header
         logger.info("Displaying header...")
         display_enhanced_header()
@@ -1278,6 +1307,9 @@ def main():
     """,
             unsafe_allow_html=True,
         )
+
+        # Clean up temporary files when the app is closed
+        atexit.register(cleanup_analysis_files)
 
     except Exception as e:
         logger.error(f"Error in main application: {e}", exc_info=True)
