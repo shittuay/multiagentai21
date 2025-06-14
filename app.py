@@ -552,6 +552,7 @@ def get_available_chats() -> list:
                     
                 except Exception as e:
                     logger.error(f"Error reading chat file {file}: {e}")
+                    st.sidebar.error(f"Error loading chat: {file} - {str(e)}")
                     continue
         
         # Sort by last updated (most recent first)
@@ -1225,7 +1226,7 @@ def display_footer():
     st.markdown(
         """
     <div style='text-align: center; color: #6b7280;'>
-        <p>🚀 Powered by MultiAgentAI21 | CopyRight @2025</p>
+        <p></p>
     </div>
     """,
         unsafe_allow_html=True,
