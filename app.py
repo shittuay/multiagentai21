@@ -141,7 +141,7 @@ st.markdown(
         backdrop-filter: blur(20px);
         border-radius: 20px;
         padding: 3rem 2rem;
-        margin-bottom: 2rem;
+        margin-bottom: 0.5rem;
         border: 1px solid rgba(0, 0, 0, 0.1);
         text-align: center;
         box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
@@ -439,6 +439,16 @@ st.markdown(
 
     .css-1xarl3l .metric-value {
         color: #1a202c !important;
+    }
+
+    .page-content-container {
+        background: rgba(255, 255, 255, 0.95);
+        backdrop-filter: blur(20px);
+        border-radius: 20px;
+        padding: 2.5rem;
+        margin-bottom: 2rem;
+        border: 1px solid rgba(0, 0, 0, 0.1);
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
     }
 </style>
 """,
@@ -848,7 +858,8 @@ def display_chat_interface():
     display_chat_history_sidebar()
 
     # Main chat area
-    st.title("MultiAgentAI21 Chat")
+    st.markdown('<div class="page-content-container">', unsafe_allow_html=True)
+    st.header("🤖 Agent Chat")
 
     # Display current chat ID and message count
     message_count = len(st.session_state.chat_history)
@@ -859,8 +870,9 @@ def display_chat_interface():
 
     # Display chat messages
     display_chat_messages()
+    st.markdown('</div>', unsafe_allow_html=True) # Close page-content-container
 
-    # Chat input
+    # Chat input (outside the container, usually at the bottom)
     logger.info("DEBUG: Checking for chat input...")
     if user_input := st.chat_input("Type your message here..."):
         logger.info(f"DEBUG: Chat input received: {user_input[:50]}...") # Log the received input
@@ -871,7 +883,11 @@ def display_chat_interface():
 
 def show_agent_examples():
     """Show examples based on selected agent"""
+    st.markdown('<div class="page-content-container">', unsafe_allow_html=True)
+    st.header("📚 Agent Examples")
     if not st.session_state.selected_agent:
+        st.info("Please select an agent in the 'Agent Chat' section to see examples.")
+        st.markdown('</div>', unsafe_allow_html=True) # Close page-content-container
         return
 
     examples = {
@@ -907,8 +923,11 @@ def show_agent_examples():
 
 def display_analytics_dashboard():
     """Display enhanced analytics dashboard"""
+    st.markdown('<div class="page-content-container">', unsafe_allow_html=True)
+    st.header("📈 Analytics Dashboard")
     if not st.session_state.chat_history:
         st.info("📊 No analytics data available yet. Start chatting to see metrics!")
+        st.markdown('</div>', unsafe_allow_html=True) # Close page-content-container
         return
 
     st.markdown('<div class="metric-container">', unsafe_allow_html=True)
@@ -1025,22 +1044,15 @@ def process_user_request(user_input: str):
 
 def display_data_analysis_section():
     """Display the data analysis section of the app"""
-    st.markdown(
-        """
-    <div class='main-header'>
-        <h1>📊 Data Analysis Dashboard</h1>
-        <p>Upload your data files for comprehensive analysis and insights</p>
-    </div>
-    """,
-        unsafe_allow_html=True,
-    )
-
+    st.markdown('<div class="page-content-container">', unsafe_allow_html=True)
+    st.header("📊 Data Analysis Dashboard")
     # File upload section
     uploaded_file = st.file_uploader(
         "Upload your data file (CSV format)",
         type=["csv"],
         help="Upload a CSV file for analysis",
     )
+    st.markdown('</div>', unsafe_allow_html=True) # Close page-content-container
 
     if uploaded_file is not None:
         try:
@@ -1053,7 +1065,7 @@ def display_data_analysis_section():
                 f.write(uploaded_file.getvalue())
 
             # Initialize analyzer
-            analyzer = DataAnalyzer(temp_dir=temp_dir)
+            analyzer = DataAnalyzer()
 
             # Perform analysis
             with st.spinner("Analyzing your data..."):
@@ -1256,6 +1268,17 @@ def main():
 
         logger.info("Main application completed successfully")
 
+        # Footer - Moved here to ensure it's at the bottom of the main content area after all other page elements
+        st.markdown("---")
+        st.markdown(
+            """
+    <div style='text-align: center; color: #6b7280;'>
+        <p>🚀 Powered by MultiAgentAI21 | CopyRight @2025</p>
+    </div>
+    """,
+            unsafe_allow_html=True,
+        )
+
     except Exception as e:
         logger.error(f"Error in main application: {e}", exc_info=True)
         st.error(f"An error occurred: {str(e)}")
@@ -1268,15 +1291,4 @@ if __name__ == "__main__":
         main()
     except Exception as e:
         logger.error(f"Fatal error: {e}", exc_info=True)
-        st.error("A fatal error occurred. Please check the logs for details.")
-
-# Footer
-st.markdown("---")
-st.markdown(
-    """
-<div style='text-align: center; color: #6b7280;'>
-    <p>🚀 Powered by MultiAgentAI21 | CopyRight @2025</p>
-</div>
-""",
-    unsafe_allow_html=True,
-) 
+        st.error("A fatal error occurred. Please check the logs for details.") 

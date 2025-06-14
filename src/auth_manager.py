@@ -16,45 +16,77 @@ def initialize_firebase():
         if not firebase_admin._apps:
             logger.info("Initializing Firebase Admin SDK...")
             
-            # The expected path for the secret mounted by Google Cloud Run
-            cred_path = '/app/src/multiagentai21-key.json'
-            
-            logger.info(f"Attempting to load Firebase credentials from: {cred_path}")
-            
-            if os.path.exists(cred_path):
-                logger.info(f"Credential file found at: {cred_path}")
+            # --- Option 1: Load from environment variable (preferred for Cloud Run) ---
+            credentials_json_str = os.getenv("FIREBASE_ADMIN_SDK_JSON")
+            if credentials_json_str:
+                logger.info("Found FIREBASE_ADMIN_SDK_JSON environment variable.")
                 try:
-                    # Initialize with the credentials file
-                    cred = credentials.Certificate(cred_path)
-                    logger.info("Successfully created credentials object")
-                    
-                    # Initialize the app
+                    credentials_info = json.loads(credentials_json_str)
+                    cred = credentials.Certificate(credentials_info)
+                    logger.info("Successfully created credentials object from environment variable.")
                     app = firebase_admin.initialize_app(cred)
-                    logger.info(f"Firebase initialized successfully with app: {app.name}")
-                    
+                    logger.info(f"Firebase initialized successfully with app: {app.name} from environment variable.")
+                    return
+                except json.JSONDecodeError as e:
+                    logger.error(f"JSON decoding error for FIREBASE_ADMIN_SDK_JSON: {e}", exc_info=True)
+                    raise ValueError(f"Invalid JSON in FIREBASE_ADMIN_SDK_JSON: {e}")
                 except Exception as e:
-                    logger.error(f"Error initializing Firebase with credential file at {cred_path}: {e}", exc_info=True)
-                    # Read the file content if it exists but failed to load as JSON
+                    logger.error(f"Error initializing Firebase from environment variable: {e}", exc_info=True)
+                    raise ValueError(f"Failed to initialize Firebase from environment variable: {e}")
+            
+            # --- Option 2: Load from file (for local development and Cloud Run fallback) ---
+            # Explicitly add the user's specific absolute path for local testing
+            project_root_abs_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..')) # Go up one level from src to project root
+            firebase_key_filename = 'multiagentai21-9a8fc-firebase-adminsdk-fbsvc-72f0130c73.json'
+            local_specific_path = os.path.join(project_root_abs_path, firebase_key_filename)
+
+            possible_paths = [
+                local_specific_path, # Try the absolute path explicitly first
+                '/app/src/multiagentai21-key.json', # Expected path in Cloud Run when mounted as a secret
+                os.path.join(os.path.dirname(__file__), 'multiagentai21-key.json'), # In src directory (if renamed)
+                os.path.join(os.path.dirname(__file__), 'multiagentai21-9a8fc-firebase-adminsdk-fbsvc-72f0130c73.json'),
+                'multiagentai21-key.json', # Current directory (e.g., if app.py is run directly)
+                'multiagentai21-9a8fc-firebase-adminsdk-fbsvc-72f0130c73.json', # Current directory
+            ]
+
+            cred_path_found = None
+            for path in possible_paths:
+                logger.info(f"Checking for credentials file at: {path}")
+                if os.path.exists(path):
+                    cred_path_found = path
+                    break
+
+            if cred_path_found:
+                logger.info(f"Credential file found at: {cred_path_found}")
+                try:
+                    cred = credentials.Certificate(cred_path_found)
+                    logger.info("Successfully created credentials object from file.")
+                    app = firebase_admin.initialize_app(cred)
+                    logger.info(f"Firebase initialized successfully with app: {app.name} from file.")
+                    return
+                except Exception as e:
+                    logger.error(f"Error initializing Firebase with credential file at {cred_path_found}: {e}", exc_info=True)
                     try:
-                        with open(cred_path, 'r') as f:
+                        with open(cred_path_found, 'r') as f:
                             content = f.read()
-                        logger.error(f"Content of {cred_path} (first 200 chars): {content[:200]}")
+                        logger.error(f"Content of {cred_path_found} (first 200 chars): {content[:200]}")
                     except Exception as fe:
-                        logger.error(f"Could not read content of {cred_path}: {fe}")
-                    raise ValueError(f"Error initializing Firebase: {e}. Check if the secret content is valid JSON.")
+                        logger.error(f"Could not read content of {cred_path_found}: {fe}")
+                    raise ValueError(f"Error initializing Firebase from file: {e}. Check if the secret content is valid JSON.")
             else:
                 current_dir = os.getcwd()
                 src_dir = os.path.join(current_dir, 'src')
                 
-                logger.error(f"Credential file NOT found at expected path: {cred_path}")
+                logger.error(f"Credential file NOT found in any checked path.")
                 logger.error(f"Current working directory: {current_dir}")
-                
-                logger.error(f"Contents of /app (current directory): {os.listdir('/app') if os.path.exists('/app') else 'N/A'}")
-                logger.error(f"Contents of /app/src: {os.listdir('/app/src') if os.path.exists('/app/src') else 'N/A'}")
+                logger.error(f"Contents of {current_dir}: {os.listdir(current_dir) if os.path.exists(current_dir) else 'N/A'}")
+                logger.error(f"Contents of {src_dir}: {os.listdir(src_dir) if os.path.exists(src_dir) else 'N/A'}")
                 
                 raise ValueError(
-                    f"Firebase credentials file not found at expected path: {cred_path}. " +
-                    "Ensure the secret is correctly mounted in Cloud Run. " +
+                    f"Firebase credentials not found via environment variable or any local/mounted file path. " +
+                    "Please ensure FIREBASE_ADMIN_SDK_JSON is set as an environment variable (for Cloud Run) " +
+                    f"or the file '{firebase_key_filename}' " +
+                    "(or 'multiagentai21-key.json') is placed in the project root or src directory locally. " +
                     f"Current directory: {current_dir}, src directory: {src_dir}"
                 )
                 
