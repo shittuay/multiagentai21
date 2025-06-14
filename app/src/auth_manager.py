@@ -97,8 +97,6 @@ def initialize_firebase():
         logger.error(f"Firebase initialization failed: {str(e)}", exc_info=True)
         raise ValueError(f"Failed to initialize Firebase: {str(e)}")
 
-# Initialize Firebase when the module is imported
-initialize_firebase()
 
 def is_authenticated():
     """Check if user is authenticated"""
