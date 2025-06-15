@@ -1086,6 +1086,18 @@ def main_app():
         logger.info("Displaying header...")
         display_enhanced_header()
 
+        # Initialize the agent system (ensure this runs only once)
+        if st.session_state.agent is None:
+            logger.info("Agent system not yet initialized in session state. Attempting to get it.")
+            st.session_state.agent = get_agent_system()
+            if st.session_state.agent:
+                logger.info("Agent system successfully initialized and assigned to session state.")
+            else:
+                logger.error("Failed to get agent system. Further agent operations will fail.")
+                st.error("Failed to initialize the agent system. Please check logs and environment variables.")
+                return # Stop if agent system couldn't be initialized
+
+
         # Create sidebar navigation
         logger.info("Setting up navigation...")
         st.sidebar.title("Navigation")
