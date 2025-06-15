@@ -104,149 +104,125 @@ def create_user(email, password):
 
 # Streamlit-specific functions for UI
 def login_page():
-    # Use a container to center the content and apply custom styling
-    with st.container():
-        st.markdown(
-            """
-            <div class="login-container">
-                <h1 class="login-title">MultiAgentAI21</h1>
-                
-                <div class="login-mode-toggle-container">
-                    <span class="login-mode-label">Login Mode</span>
-                    <label class="switch">
-                        <input type="checkbox" id="loginModeToggle" class="st-d3" checked>
-                        <span class="slider round"></span>
-                    </label>
-                </div>
+    # Outer container for the entire login page to apply background and centering
+    st.markdown(
+        """
+        <div class="login-page-container">
+        """,
+        unsafe_allow_html=True
+    )
 
-                <div id="loginForm" class="auth-form-card">
+    # Use a narrower container for the actual login form
+    with st.container(border=False):
+        col1, col2, col3 = st.columns([1, 2, 1])
+        with col2: # Center content in the middle column
+            st.markdown(
+                """
+                <div class="auth-form-card">
+                    <h1 class="login-title">MultiAgentAI21</h1>
+                
+                    <div class="login-mode-toggle-container">
+                        <span class="login-mode-label">Login Mode</span>
+                        <label class="switch">
+                            <input type="checkbox" id="loginModeToggle" checked>
+                            <span class="slider round"></span>
+                        </label>
+                    </div>
+
                     <h2 class="form-card-title">Welcome Back</h2>
                     <p class="form-card-subtitle">Sign in to your account</p>
+                """,
+                unsafe_allow_html=True
+            )
 
-                    <div class="input-group">
-                        <label for="email_address">Email Address</label>
-                        <input type="email" id="email_address" placeholder="you@example.com" class="st-d3" key="login_email_input">
-                    </div>
+            # Use Streamlit's native input fields
+            email = st.text_input("Email Address", placeholder="you@example.com", key="login_email_input", label_visibility="collapsed")
+            password = st.text_input("Password", type="password", placeholder="••••••••", key="login_password_input", label_visibility="collapsed")
+            
+            # Placeholder for the label which is styled by CSS
+            st.markdown('<label class="input-label-placeholder" for="login_email_input">Email Address</label>', unsafe_allow_html=True)
+            st.markdown('<label class="input-label-placeholder" for="login_password_input">Password</label>', unsafe_allow_html=True)
 
-                    <div class="input-group password-input-group">
-                        <label for="password_input">Password</label>
-                        <input type="password" id="password_input" placeholder="••••••••" class="st-d3" key="login_password_input">
-                        <span class="password-toggle-icon" onclick="togglePasswordVisibility('password_input', this)">👁️</span>
-                    </div>
 
+            st.markdown(
+                """
                     <div class="forgot-password">
                         <a href="#" class="forgot-password-link">Forgot password?</a>
                     </div>
-                    
-                    <button class="st-d3 custom-button primary-button" key="signin_button_ui">Sign In</button>
+                """,
+                unsafe_allow_html=True
+            )
 
-                    <div class="social-login-separator">OR</div>
-
-                    <button class="st-d3 custom-button github-button" key="github_button_ui">
-                        <img src="https://img.icons8.com/ios-filled/24/ffffff/github.png" class="button-icon" alt="GitHub icon"/>
-                        Sign in with GitHub
-                    </button>
-                    <button class="st-d3 custom-button google-button" key="google_button_ui">
-                        <img src="https://img.icons8.com/color/24/000000/google-logo.png" class="button-icon" alt="Google icon"/>
-                        Sign in with Google
-                    </button>
-                </div>
-
-                <p class="signup-link-text">
-                    Don't have an account? <a href="#" class="form-card-subtitle" onclick="toggleAuthMode()">Sign up</a>
-                </p>
-            </div>
-
-            <script>
-                function togglePasswordVisibility(inputId, iconElement) {
-                    var input = document.getElementById(inputId);
-                    if (input.type === "password") {
-                        input.type = "text";
-                        iconElement.textContent = "🔒"; // Change icon to locked
-                    } else {
-                        input.type = "password";
-                        iconElement.textContent = "👁️"; // Change icon back to eye
-                    }
-                }
-
-                function toggleAuthMode() {
-                    // This function would typically communicate back to Streamlit
-                    // or toggle visibility of login/signup forms.
-                    // For now, it's a placeholder.
-                    // A real implementation would involve setting a session_state variable
-                    // and rerunning Streamlit.
-                    console.log("Toggle Auth Mode clicked!");
-                }
-            </script>
-            """,
-            unsafe_allow_html=True
-        )
-
-    # --- Streamlit's internal handling for login/signup (hidden/moved to the side for UI) ---
-    # We will use hidden Streamlit components to capture input and trigger actions
-    # This ensures the Python backend logic still works with the custom HTML/CSS frontend
-    st.session_state.login_mode_active = True # Default to login mode as per image
-
-    # These are hidden/off-screen elements to capture the actual Streamlit input values
-    email_address_val = st.text_input("Email Address Hidden", label_visibility="collapsed", key="hidden_login_email_address_val")
-    password_val = st.text_input("Password Hidden", type="password", label_visibility="collapsed", key="hidden_login_password_val")
-    
-    # We will use custom Javascript to push values from custom HTML inputs to these hidden Streamlit inputs
-    # and trigger clicks on the hidden Streamlit buttons.
-    # This requires a bit more advanced JS interaction, but for now, the UI is visual.
-    
-    # Placeholder for Streamlit buttons that *actually* trigger the Python logic
-    # These will not be displayed, but their existence allows Streamlit to handle the callback
-    if st.button("Actual Sign In", key="actual_signin_button", help="This button is hidden and triggered by custom JS"):
-        if email_address_val and password_val:
-            user, message = authenticate_user(email_address_val, password_val)
-            if user:
-                st.session_state["authenticated"] = True
-                st.session_state["user_email"] = email_address_val
-                st.session_state["user_uid"] = user.uid
-                st.session_state["auth_message"] = "Login successful!"
-                st.rerun()
-            else:
-                st.error(message)
-        else:
-            st.error("Please enter both email and password.")
-
-    # Signup functionality (kept as simple Streamlit components for now)
-    if st.session_state.get("show_signup_form", False):
-        st.subheader("Create a New Account")
-        new_email = st.text_input("New Email Address", key="signup_email")
-        new_password = st.text_input("New Password", type="password", key="signup_password")
-        confirm_password = st.text_input("Confirm New Password", type="password", key="confirm_password")
-
-        if st.button("Sign Up Now", key="signup_button_actual"):
-            if new_email and new_password and confirm_password:
-                if new_password == confirm_password:
-                    user, message = create_user(new_email, new_password)
+            # Use Streamlit's native button and apply custom styling via CSS
+            if st.button("Sign In", key="signin_button_ui"):
+                if email and password:
+                    user, message = authenticate_user(email, password)
                     if user:
-                        st.success(message)
                         st.session_state["authenticated"] = True
-                        st.session_state["user_email"] = new_email
+                        st.session_state["user_email"] = email
                         st.session_state["user_uid"] = user.uid
-                        st.session_state["auth_message"] = "Account created and logged in!"
+                        st.session_state["auth_message"] = "Login successful!"
                         st.rerun()
                     else:
                         st.error(message)
                 else:
-                    st.error("Passwords do not match.")
-            else:
-                st.error("Please fill in all fields.")
+                    st.error("Please enter both email and password.")
 
-    # This is a hacky way to toggle for now. A more robust solution involves
-    # JavaScript sending events back to Streamlit or using st.experimental_set_query_params
-    # or a dedicated Streamlit component.
-    if st.button("Toggle Signup/Login View (Dev Only)", key="toggle_view"):
-        st.session_state.show_signup_form = not st.session_state.get("show_signup_form", False)
-        st.rerun()
+            st.markdown(
+                """
+                    <div class="social-login-separator">OR</div>
+                """,
+                unsafe_allow_html=True
+            )
 
-    # The actual user input values and actions would need to be captured via custom HTML's
-    # JS and sent back to Streamlit, e.g., using st.experimental_set_query_params
-    # or custom components. For this direct modification, the focus is on the visual
-    # replication using provided static elements and the basic Streamlit integration.
+            # Social login buttons - using Streamlit buttons with custom CSS for icons/styling
+            st.button("Sign in with GitHub", key="github_button_ui", help="Sign in with GitHub", icon="github") # Uses FontAwesome via Streamlit
+            st.button("Sign in with Google", key="google_button_ui", help="Sign in with Google", icon="google") # Uses FontAwesome via Streamlit
+
+            st.markdown(
+                """
+                </div> <!-- Close auth-form-card -->
+
+                <p class="signup-link-text">
+                    Don't have an account? <a href="#" class="form-card-subtitle">Sign up</a>
+                </p>
+                """,
+                unsafe_allow_html=True
+            )
+    
+    st.markdown(
+        """
+        </div> <!-- Close login-page-container -->
+        """,
+        unsafe_allow_html=True
+    )
+    
+    # Simple placeholder for signup tab functionality (can be expanded)
+    # This will be visually hidden by the CSS, but its presence allows toggling logic
+    if st.session_state.get("show_signup_form", False): # Default to False, toggle via JS
+        with st.container():
+            st.subheader("Create a New Account")
+            new_email = st.text_input("New Email Address", key="signup_email")
+            new_password = st.text_input("New Password", type="password", key="signup_password")
+            confirm_password = st.text_input("Confirm New Password", type="password", key="confirm_password")
+
+            if st.button("Sign Up Now", key="signup_button_actual"):
+                if new_email and new_password and confirm_password:
+                    if new_password == confirm_password:
+                        user, message = create_user(new_email, new_password)
+                        if user:
+                            st.success(message)
+                            st.session_state["authenticated"] = True
+                            st.session_state["user_email"] = new_email
+                            st.session_state["user_uid"] = user.uid
+                            st.session_state["auth_message"] = "Account created and logged in!"
+                            st.rerun()
+                        else:
+                            st.error(message)
+                    else:
+                        st.error("Passwords do not match.")
+                else:
+                    st.error("Please fill in all fields.")
 
 
 def logout():
@@ -263,8 +239,6 @@ def login_required(func):
     def wrapper(*args, **kwargs):
         if not is_authenticated():
             login_page()
-            # It's important to return None or st.stop() to prevent the main app from running
-            # when the user is not authenticated.
             st.stop() # Use st.stop() to halt execution of the decorated function entirely
         return func(*args, **kwargs)
     return wrapper
@@ -311,4 +285,3 @@ initialize_firebase()
 
 # Set up Google Application Credentials (for other Google Cloud APIs)
 setup_google_application_credentials()
-

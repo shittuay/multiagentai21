@@ -179,13 +179,23 @@ st.markdown(
     """
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+    @import url('https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css'); /* For social icons */
 
-    .stApp {
-        background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+    html, body, [data-testid="stAppViewContainer"] {
+        margin: 0;
+        padding: 0;
+        width: 100%;
+        height: 100%;
         font-family: 'Inter', sans-serif;
         color: #1a202c;
+        background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%); /* Main app background */
     }
 
+    .stApp {
+        background: none; /* Let html, body handle the main background */
+    }
+
+    /* --- General App Styles (from previous versions) --- */
     .main-header {
         background: rgba(255, 255, 255, 0.95);
         backdrop-filter: blur(20px);
@@ -381,6 +391,7 @@ st.markdown(
         gap: 0.5rem;
     }
 
+    /* Target Streamlit's native button directly */
     .stButton > button {
         background: linear-gradient(135deg, #3b82f6, #1d4ed8);
         border: none;
@@ -450,7 +461,7 @@ st.markdown(
     }
 
     /* Sidebar styling */
-    .css-1d391kg {
+    .css-1d391kg { /* This is a common class for Streamlit sidebar background */
         background: rgba(255, 255, 255, 0.95);
         backdrop-filter: blur(20px);
     }
@@ -483,7 +494,7 @@ st.markdown(
     }
 
     /* Metric styling */
-    .css-1xarl3l {
+    .css-1xarl3l { /* Specific to Streamlit metrics */
         color: #1a202c !important;
     }
 
@@ -501,20 +512,30 @@ st.markdown(
         box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
     }
 
-    /* --- New Login Page Styles --- */
-    .login-container {
+    /* --- Refined Login Page Styles --- */
+    .login-page-container {
         display: flex;
         flex-direction: column;
         align-items: center;
         justify-content: center;
-        min-height: 80vh; /* Adjust as needed */
+        min-height: 100vh; /* Full viewport height */
         background: linear-gradient(135deg, #e0f2f7 0%, #c1dff0 100%); /* Light blue gradient */
         padding: 2rem;
-        border-radius: 20px;
-        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
-        margin: 2rem auto;
-        max-width: 500px; /* Max width for the login container */
-        width: 90%;
+        position: absolute; /* Take full control of positioning */
+        top: 0;
+        left: 0;
+        width: 100%;
+        box-sizing: border-box; /* Include padding in width/height */
+    }
+
+    .auth-form-card {
+        background: #ffffff; /* White background for the card */
+        padding: 2.5rem 2rem;
+        border-radius: 15px;
+        box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
+        width: 100%;
+        max-width: 380px; /* Width of the form card */
+        margin: 0 auto; /* Center the card horizontally */
         text-align: center;
     }
 
@@ -528,6 +549,7 @@ st.markdown(
     .login-mode-toggle-container {
         display: flex;
         align-items: center;
+        justify-content: center; /* Center toggle */
         gap: 0.8rem;
         margin-bottom: 2rem;
         background: rgba(255, 255, 255, 0.7);
@@ -606,16 +628,6 @@ st.markdown(
     }
 
 
-    .auth-form-card {
-        background: #ffffff; /* White background for the card */
-        padding: 2.5rem 2rem;
-        border-radius: 15px;
-        box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
-        width: 100%;
-        max-width: 380px; /* Width of the form card */
-        margin-bottom: 2rem;
-    }
-
     .form-card-title {
         font-size: 1.8rem !important;
         font-weight: 700 !important;
@@ -629,21 +641,8 @@ st.markdown(
         margin-bottom: 2rem !important;
     }
 
-    .input-group {
-        margin-bottom: 1.5rem;
-        text-align: left;
-    }
-
-    .input-group label {
-        display: block;
-        font-size: 0.9rem;
-        color: #4a5568;
-        margin-bottom: 0.5rem;
-        font-weight: 500;
-    }
-    
-    /* Target Streamlit's native input fields */
-    .st-d3 input[type="email"], .st-d3 input[type="password"] {
+    /* Styling for Streamlit's text input components */
+    [data-testid="stTextInput"] > div > div > input {
         width: 100%;
         padding: 0.8rem 1rem;
         border: 1px solid #cbd5e0;
@@ -652,26 +651,30 @@ st.markdown(
         color: #1a202c;
         background-color: #f8fafc;
         transition: border-color 0.3s ease, box-shadow 0.3s ease;
+        margin-bottom: 1.5rem; /* Space between inputs */
     }
 
-    .st-d3 input[type="email"]:focus, .st-d3 input[type="password"]:focus {
+    [data-testid="stTextInput"] > div > div > input:focus {
         border-color: #3b82f6;
         box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
         outline: none;
     }
-
-    .password-input-group {
-        position: relative;
+    
+    /* Hide the default Streamlit label for text inputs used in custom layout */
+    [data-testid="stTextInput"] label {
+        display: none;
     }
 
-    .password-toggle-icon {
-        position: absolute;
-        right: 15px;
-        top: 60%;
-        transform: translateY(-50%);
-        cursor: pointer;
-        color: #6b7280;
-        font-size: 1.1rem;
+    /* Custom label placeholder for inputs */
+    .input-label-placeholder {
+        display: block;
+        font-size: 0.9rem;
+        color: #4a5568;
+        margin-bottom: 0.5rem;
+        font-weight: 500;
+        text-align: left; /* Align with input */
+        margin-top: -1rem; /* Adjust to sit above input */
+        margin-left: 0.5rem; /* Indent slightly */
     }
 
     .forgot-password {
@@ -691,8 +694,9 @@ st.markdown(
         text-decoration: underline;
     }
 
-    /* Custom Buttons */
-    .custom-button {
+    /* Custom Button styling for Streamlit buttons */
+    /* Target buttons by their data-testid or class */
+    [data-testid="stButton"] > button {
         width: 100%;
         padding: 0.9rem 1.5rem;
         border: none;
@@ -706,16 +710,16 @@ st.markdown(
         justify-content: center;
         gap: 0.75rem;
         margin-bottom: 1rem;
-        text-decoration: none; /* For links styled as buttons */
-        color: white; /* Default text color for custom buttons */
+        text-decoration: none;
+        color: white !important; /* Ensure text color is white */
     }
 
-    .custom-button.primary-button {
+    /* Specific button styles */
+    [key="signin_button_ui"] > button {
         background: linear-gradient(135deg, #5e72e4, #825ee4); /* Purple gradient from image */
         box-shadow: 0 5px 15px rgba(130, 94, 228, 0.3);
     }
-
-    .custom-button.primary-button:hover {
+    [key="signin_button_ui"] > button:hover {
         transform: translateY(-3px);
         box-shadow: 0 8px 20px rgba(130, 94, 228, 0.4);
         background: linear-gradient(135deg, #4c63d0, #714ce0);
@@ -747,34 +751,37 @@ st.markdown(
         right: 0;
     }
 
-    .custom-button.github-button {
+    /* Style for Streamlit buttons with specific keys (for social logins) */
+    [key="github_button_ui"] > button {
         background: linear-gradient(135deg, #2d3748, #4a5568); /* Dark gray/black for GitHub */
         box-shadow: 0 5px 15px rgba(45, 55, 72, 0.3);
     }
-    .custom-button.github-button:hover {
+    [key="github_button_ui"] > button:hover {
         transform: translateY(-3px);
         box-shadow: 0 8px 20px rgba(45, 55, 72, 0.4);
         background: linear-gradient(135deg, #1a202c, #2d3748);
     }
 
-    .custom-button.google-button {
+    [key="google_button_ui"] > button {
         background: linear-gradient(135deg, #db4437, #e67c73); /* Reddish for Google */
         box-shadow: 0 5px 15px rgba(219, 68, 55, 0.3);
     }
-    .custom-button.google-button:hover {
+    [key="google_button_ui"] > button:hover {
         transform: translateY(-3px);
         box-shadow: 0 8px 20px rgba(219, 68, 55, 0.4);
         background: linear-gradient(135deg, #c73c2e, #d36960);
     }
-
-    .button-icon {
-        width: 24px;
-        height: 24px;
+    
+    /* Make button icons white for dark buttons */
+    [key="github_button_ui"] > button svg {
+        filter: brightness(0) invert(1); /* Makes SVG white */
     }
+
 
     .signup-link-text {
         font-size: 1rem;
         color: #6b7280;
+        margin-top: 1rem; /* Space from buttons */
     }
 
     .signup-link-text a {
@@ -785,6 +792,28 @@ st.markdown(
 
     .signup-link-text a:hover {
         text-decoration: underline;
+    }
+
+    /* Hide the Streamlit native sidebar toggle for the login page */
+    .css-1y4qm0u { /* Specific class for sidebar toggle button */
+        display: none !important;
+    }
+
+    /* If you want to hide the Streamlit header/footer/sidebar on the login page completely */
+    [data-testid="stToolbar"],
+    [data-testid="stSidebar"],
+    [data-testid="stDecoration"],
+    .st-emotion-cache-1jm61g7 { /* Adjust as Streamlit classes change */
+        display: none !important;
+    }
+    
+    /* Ensure Streamlit main container takes full width for login page */
+    [data-testid="stAppViewContainer"] > .css-1dp5vir {
+        max-width: 100vw !important;
+        padding: 0 !important;
+    }
+    [data-testid="stVerticalBlock"] {
+        gap: 0rem; /* Remove default gaps if they break custom layout */
     }
 </style>
 """,
@@ -867,7 +896,7 @@ def get_available_chats() -> list:
                         chat_data = json.load(f)
                     
                     chat_id = chat_data.get("chat_id", file.replace('.json', ''))
-                    created_at = chat_data.get("created_at", datetime.now().isoformat())
+                    created_at = datetime.fromisoformat(chat_data['created_at']).strftime("%Y-%m-%d %H:%M")
                     last_updated = chat_data.get("last_updated", created_at)
                     messages = chat_data.get("messages", [])
                     
@@ -1345,7 +1374,6 @@ def display_analytics_dashboard():
 def display_footer():
     """Display the global footer."""
     st.markdown("---")
-    # Changed "Powered by MultiAgentAI21" to "Powered by Gemini" and added the warning message
     st.markdown("<p style='text-align: center; font-size: small;'>Powered by Gemini | MultiAgentAI21 can make mistakes. Always verify important information.</p>", unsafe_allow_html=True)
 
 
@@ -1428,10 +1456,9 @@ if __name__ == "__main__":
     try:
         logger.info("Entering main execution block.")
         if not is_authenticated():
-            main_app() # Call main_app directly to display the login page from auth_manager
+            login_page()
         else:
             main_app()
     except Exception as e:
         logger.critical(f"Critical error in main application execution: {e}", exc_info=True)
         st.error(f"A critical error prevented the application from running: {str(e)}")
-
