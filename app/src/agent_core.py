@@ -581,31 +581,38 @@ class ContentCreatorAgent(BaseAgent):
         else:
             return "general"
 
-    def _generate_blog_post(self, prompt: str, chat_history: Optional[List[Dict]] = None) -> str: # ADDED chat_history
+    def _generate_blog_post(self, prompt: str, chat_history: Optional[List[Dict]] = None) -> str:
         """Generate a blog post using Gemini API."""
-        blog_prompt = f"""You are a professional content writer and SEO expert. Create a comprehensive, engaging blog post about: {prompt}
-
-REQUIREMENTS:
-1. **Headline**: Create a compelling, SEO-optimized headline (H1)
-2. **Introduction**: Hook the reader with a strong opening (2-3 paragraphs)
-3. **Main Content**: Develop 5-7 key points with supporting evidence
-4. **Subheadings**: Use clear H2 and H3 headings for structure
-5. **Examples & Data**: Include relevant statistics, case studies, or examples
-6. **Actionable Tips**: Provide practical advice readers can implement
-7. **Conclusion**: Summarize key takeaways with a clear call-to-action
-8. **SEO Elements**: Include relevant keywords naturally throughout
-9. **Length**: Target 800-1200 words
-10. **Tone**: Professional yet engaging, authoritative but accessible
-
-STRUCTURE:
-- Compelling headline
-- Engaging introduction with hook
-- Main content with clear sections
-- Practical examples and tips
-- Strong conclusion with CTA
-- Relevant internal/external links (mention where they should go)
-
-Format with proper markdown: # for H1, ## for H2, ### for H3, **bold** for emphasis, and bullet points where appropriate."""
+        # Strengthen the prompt to ensure the model adheres to the exact topic
+        blog_prompt = f"""
+        You are a professional content writer and SEO expert.
+        
+        **STRICTLY ADHERE TO THE FOLLOWING TOPIC**: {prompt}
+        
+        Create a comprehensive, engaging blog post. Do NOT deviate from this topic.
+        
+        REQUIREMENTS:
+        1. **Headline**: Create a compelling, SEO-optimized headline (H1)
+        2. **Introduction**: Hook the reader with a strong opening (2-3 paragraphs)
+        3. **Main Content**: Develop 5-7 key points with supporting evidence
+        4. **Subheadings**: Use clear H2 and H3 headings for structure
+        5. **Examples & Data**: Include relevant statistics, case studies, or examples
+        6. **Actionable Tips**: Provide practical advice readers can implement
+        7. **Conclusion**: Summarize key takeaways with a clear call-to-action
+        8. **SEO Elements**: Include relevant keywords naturally throughout
+        9. **Length**: Target 800-1200 words
+        10. **Tone**: Professional yet engaging, authoritative but accessible
+        
+        STRUCTURE:
+        - Compelling headline
+        - Engaging introduction with hook
+        - Main content with clear sections
+        - Practical examples and tips
+        - Strong conclusion with CTA
+        - Relevant internal/external links (mention where they should go)
+        
+        Format with proper markdown: # for H1, ## for H2, ### for H3, **bold** for emphasis, and bullet points where appropriate.
+        """
 
         return self._process_with_model(blog_prompt, chat_history) # PASSED chat_history
 
@@ -635,7 +642,7 @@ Follow these guidelines:
 2. Include an executive summary
 3. Use clear subheadings
 4. Provide in-depth analysis with examples
-5. Include expert quotes or insights
+3. Include expert quotes or insights
 6. Add relevant statistics and data
 7. End with actionable takeaways
 8. Target length: 1500-2000 words
@@ -822,8 +829,8 @@ class MultiAgentCodingAI:
             self.db = FirestoreClient()
             logger.info("Database connection initialized successfully")
         except Exception as e:
-            logger.warning(f"Could not initialize database: {e}")
-            self.db = None
+                logger.warning(f"Could not initialize database: {e}")
+                self.db = None
 
     def _initialize_agents(self):
         """Initialize all available agents."""
