@@ -1,101 +1,150 @@
 import sys
 import os
-
-project_root = os.path.dirname(os.path.abspath(__file__))
-if project_root not in sys.path:
-    sys.path.insert(0, project_root)
-
-
-# Add the project root to Python path, not the src directory
-# project_root = os.path.dirname(os.path.abspath(__file__))
-# if project_root not in sys.path:
-#     sys.path.insert(0, project_root)
-
-import json
-import logging
-import tempfile
-import time
-import webbrowser
-from datetime import datetime
 from pathlib import Path
-from typing import Optional
+import logging
+import streamlit as st
 import atexit
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
-import streamlit as st
-
-# Import authentication module
-from src.auth_manager import (
-    initialize_firebase,
-    login_required,
-    login_page,
-    logout,
-    is_authenticated,
-    get_current_user
-)
+import json
+import tempfile
+import time # Import time for timestamping
 
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Initialize Firebase
-try:
-    initialize_firebase()
-except Exception as e:
-    logger.error(f"Failed to initialize Firebase: {e}")
+logger.info("Application starting...")
 
 # Add the project root to Python path
 project_root = Path(__file__).resolve().parent
-sys.path.insert(0, str(project_root))
-logger.info(f"Project root: {project_root}")
-logger.info(f"Python path: {sys.path}")
+if str(project_root) not in sys.path:
+    sys.sys.path.insert(0, str(project_root))
 
-# --- BEGIN Google Cloud Credentials Setup ---
-_GCLOUD_TEMP_KEY_FILE = None
+logger.info(f"Project root (app.py detected as): {project_root}")
+logger.info(f"Python path (sys.path) before import: {sys.path}")
 
-def _setup_gcloud_credentials_from_json() -> Optional[str]:
-    """Reads GCLOUD_APPLICATION_CREDENTIALS_JSON and sets GOOGLE_APPLICATION_CREDENTIALS."""
-    global _GCLOUD_TEMP_KEY_FILE
-    credentials_json = os.getenv("GOOGLE_APPLICATION_CREDENTIALS_JSON")
+# --- START ADDED DEBUGGING FOR MODULE NOT FOUND ERROR ---
+# Explicitly check for the existence of src/auth_manager.py and related paths
+logger.info("--- START DEBUGGING PATHS & FILES ---")
 
-    if credentials_json:
-        try:
-            logger.info("Found GOOGLE_APPLICATION_CREDENTIALS_JSON. Writing to temporary file.")
-            # Create a temporary file to store the credentials
-            _GCLOUD_TEMP_KEY_FILE = tempfile.NamedTemporaryFile(mode='w', delete=False, encoding='utf-8')
-            _GCLOUD_TEMP_KEY_FILE.write(credentials_json)
-            _GCLOUD_TEMP_KEY_FILE.close() # Close to ensure content is written to disk
-
-            # Set the GOOGLE_APPLICATION_CREDENTIALS environment variable
-            os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = _GCLOUD_TEMP_KEY_FILE.name
-            logger.info(f"GOOGLE_APPLICATION_CREDENTIALS set to: {_GCLOUD_TEMP_KEY_FILE.name}")
-            return _GCLOUD_TEMP_KEY_FILE.name
-        except Exception as e:
-            logger.error(f"Error setting up GCloud credentials from JSON: {e}", exc_info=True)
-    else:
-        logger.info("GOOGLE_APPLICATION_CREDENTIALS_JSON not found. Relying on default credential discovery.")
-    return None
-
-def _cleanup_temp_key_file():
-    """Clean up the temporary key file."""
-    global _GCLOUD_TEMP_KEY_FILE
-    if _GCLOUD_TEMP_KEY_FILE and os.path.exists(_GCLOUD_TEMP_KEY_FILE.name):
-        os.remove(_GCLOUD_TEMP_KEY_FILE.name)
-        logger.info(f"Cleaned up temporary key file: {_GCLOUD_TEMP_KEY_FILE.name}")
-        _GCLOUD_TEMP_KEY_FILE = None
-
-# Register cleanup function to run on app exit
-atexit.register(_cleanup_temp_key_file)
-
-# Call the setup function at the very beginning of the application
-_setup_gcloud_credentials_from_json()
-# --- END Google Cloud Credentials Setup ---
+# Check if 'src' directory exists relative to project_root
+src_dir_path = project_root / "src"
+logger.info(f"Checking for 'src' directory at: {src_dir_path}")
+if src_dir_path.exists():
+    logger.info(f"'src' directory EXISTS at {src_dir_path}")
+    logger.info(f"Contents of 'src' directory ({src_dir_path}): {[p.name for p in src_dir_path.iterdir()]}")
+else:
+    logger.error(f"'src' directory DOES NOT EXIST at {src_dir_path}")
+    logger.error(f"Contents of project_root ({project_root}): {[p.name for p in project_root.iterdir()]}")
 
 
-# Load environment variables (removed load_dotenv() as it's not needed in Cloud Run)
-logger.info("Environment variables should be set by deployment environment")
+# Check for auth_manager.py inside src
+auth_manager_path = src_dir_path / "auth_manager.py"
+logger.info(f"Checking for 'auth_manager.py' at: {auth_manager_path}")
+if auth_manager_path.exists():
+    logger.info(f"'auth_manager.py' EXISTS at {auth_manager_path}")
+else:
+    logger.error(f"'auth_manager.py' DOES NOT EXIST at {auth_manager_path}")
+
+
+# Check for __init__.py inside src
+init_py_path = src_dir_path / "__init__.py"
+logger.info(f"Checking for '__init__.py' at: {init_py_path}")
+if init_py_path.exists():
+    logger.info(f"'__init__.py' EXISTS at {init_py_path}")
+else:
+    logger.error(f"'__init__.py' DOES NOT EXIST at {init_py_path}")
+
+logger.info("--- END DEBUGGING PATHS & FILES ---")
+# --- END ADDED DEBUGGING ---
+
+
+# Import authentication module
+try:
+    from src.auth_manager import (
+        initialize_firebase,
+        login_required,
+        login_page,
+        logout,
+        is_authenticated,
+        get_current_user,
+        setup_google_application_credentials # Import this to call it early
+    )
+    logger.info("Successfully imported src.auth_manager.")
+except ModuleNotFoundError as e:
+    logger.critical(f"ModuleNotFoundError: {e} - Cannot find 'src.auth_manager'. This indicates a pathing issue.", exc_info=True)
+    st.error(f"Application failed to start due to a missing module. Please contact support. Error: {e}")
+    st.stop() # Stop Streamlit execution if essential module is missing
+except Exception as e:
+    logger.critical(f"An unexpected error occurred during src.auth_manager import: {e}", exc_info=True)
+    st.error(f"Application failed to start due to an unexpected import error. Error: {e}")
+    st.stop()
+
+
+# Initialize Firebase (this call should be after imports and inside app.py)
+try:
+    initialize_firebase()
+    logger.info("Firebase initialization completed successfully in app.py.")
+except Exception as e:
+    logger.critical(f"Failed to initialize Firebase in app.py: {e}", exc_info=True)
+    st.error(f"An error occurred during Firebase initialization: {str(e)}")
+    st.stop() # Stop the app if Firebase init fails
+
+# Call setup_google_application_credentials early to ensure GOOGLE_APPLICATION_CREDENTIALS is set
+# This is called *after* initialize_firebase in auth_manager.py is executed,
+# so the `os.getenv("GOOGLE_APPLICATION_CREDENTIALS")` check will pass.
+setup_google_application_credentials()
+
+# --- NEW: Environment check function to consolidate warnings ---
+def check_environment():
+    issues = []
+    
+    # Check for Firebase API Key (client-side config)
+    if not os.getenv("FIREBASE_API_KEY"):
+        issues.append("FIREBASE_API_KEY is not set")
+    if not os.getenv("FIREBASE_AUTH_DOMAIN"):
+        issues.append("FIREBASE_AUTH_DOMAIN is not set")
+    if not os.getenv("FIREBASE_PROJECT_ID"):
+        issues.append("FIREBASE_PROJECT_ID is not set")
+    if not os.getenv("FIREBASE_STORAGE_BUCKET"):
+        issues.append("FIREBASE_STORAGE_BUCKET is not set")
+    if not os.getenv("FIREBASE_MESSAGING_SENDER_ID"):
+        issues.append("FIREBASE_MESSAGING_SENDER_ID is not set")
+    if not os.getenv("FIREBASE_APP_ID"):
+        issues.append("FIREBASE_APP_ID is not set")
+
+    # Check for Google API Key (for Gemini etc.)
+    if not os.getenv("GOOGLE_API_KEY"):
+        issues.append("GOOGLE_API_KEY is not set")
+    
+    # Check for Google Cloud Project ID
+    if not os.getenv("GOOGLE_CLOUD_PROJECT"):
+        issues.append("GOOGLE_CLOUD_PROJECT is not set")
+
+    # IMPORTANT: Check GOOGLE_APPLICATION_CREDENTIALS, which is set by auth_manager.py
+    # This is the path to the service account key file.
+    if not os.getenv("GOOGLE_APPLICATION_CREDENTIALS"):
+        issues.append("GOOGLE_APPLICATION_CREDENTIALS is not set (expected a file path to service account key)")
+    
+    return issues
+
+# Display environment warnings at the top if any issues exist
+environment_issues = check_environment()
+if environment_issues:
+    st.error("Environment issues detected:")
+    for issue in environment_issues:
+        st.error(f"- {issue}")
+    logger.error(f"Environment issues found: {environment_issues}")
+else:
+    logger.info("All essential environment variables appear to be set.")
+# --- END NEW ENVIRONMENT CHECK ---
+
+
+# Load environment variables (removed _setup_gcloud_credentials_from_json() and _cleanup_temp_key_file() as auth_manager.py now handles this)
+logger.info("Environment variables should be set by deployment environment or handled by auth_manager.")
 
 try:
     logger.info("Attempting to import modules...")
@@ -584,22 +633,8 @@ if "analysis_temp_files" not in st.session_state:
     st.session_state.analysis_temp_files = []
 
 
-def check_environment() -> list:
-    """Checks if essential environment variables are set."""
-    issues = []
-    if not os.getenv("GOOGLE_API_KEY"):
-        issues.append("GOOGLE_API_KEY is not set")
-    # Check for GOOGLE_CLOUD_PROJECT (used by Google Cloud libraries)
-    if not os.getenv("GOOGLE_CLOUD_PROJECT"):
-        issues.append("GOOGLE_CLOUD_PROJECT is not set")
-    # Check for GOOGLE_APPLICATION_CREDENTIALS_JSON (used by FirestoreClient)
-    if not os.getenv("GOOGLE_APPLICATION_CREDENTIALS_JSON"):
-        issues.append("GOOGLE_APPLICATION_CREDENTIALS_JSON is not set")
-    return issues
-
-
 # Use st.cache_resource to create and cache the MultiAgentCodingAI instance
-# @st.cache_resource(ttl=3600, max_entries=1)  # Temporarily disabled for testing
+# @st.cache_resource(ttl=3600, max_entries=1)   # Temporarily disabled for testing
 def get_agent_system():
     """Create and return the MultiAgentCodingAI instance (cached resource)"""
     try:
@@ -941,347 +976,106 @@ def display_data_analysis_section():
             cleanup_analysis_files()
             
             # Save the uploaded file temporarily
-            temp_dir = os.path.join(os.getcwd(), "temp_analysis")
+            temp_dir = os.path.join(project_root, "temp_uploads")
             os.makedirs(temp_dir, exist_ok=True)
-            file_path = os.path.join(temp_dir, uploaded_file.name)
+            temp_file_path = os.path.join(temp_dir, uploaded_file.name)
+            with open(temp_file_path, "wb") as f:
+                f.write(uploaded_file.getbuffer())
+            st.session_state.analysis_temp_files.append(temp_file_path) # Track for cleanup
 
-            with open(file_path, "wb") as f:
-                f.write(uploaded_file.getvalue())
+            st.success(f"File '{uploaded_file.name}' uploaded successfully!")
+            logger.info(f"Uploaded file saved to: {temp_file_path}")
 
-            # Initialize analyzer
-            analyzer = DataAnalyzer()
+            # Instantiate DataAnalyzer
+            data_analyzer = DataAnalyzer()
 
-            # Perform analysis with selected types
-            with st.spinner("Analyzing your data..."):
-                # Pass selected_analysis_types to analyze_file
-                results = analyzer.analyze_file(file_path, selected_analysis_types=selected_analysis_types)
+            # Perform analysis
+            with st.spinner("Analyzing data... This may take a moment."):
+                results = data_analyzer.analyze_data(temp_file_path, selected_analysis_types)
+                st.session_state.last_analysis_results = results # Store results for display
 
-                if "error" in results:
-                    st.error(f"Analysis failed: {results['error']}")
-                    st.session_state.last_analysis_results = None
-                    return
-
-                # Store results and temporary files in session state
-                st.session_state.last_analysis_results = results
-                st.session_state.analysis_temp_files = analyzer.get_temp_files()
-                st.success("Data analysis completed successfully!")
+            if st.session_state.last_analysis_results:
+                st.subheader("Analysis Results:")
+                for analysis_type, content in st.session_state.last_analysis_results.items():
+                    if content:
+                        st.markdown(f"**{analysis_type.replace('_', ' ').title()}**")
+                        if analysis_type == "visualizations" and isinstance(content, dict):
+                            # Handle plotly figures from data_analysis.py
+                            for plot_name, fig_json in content.items():
+                                try:
+                                    fig = go.Figure(json.loads(fig_json))
+                                    st.plotly_chart(fig, use_container_width=True)
+                                except json.JSONDecodeError:
+                                    st.warning(f"Could not load plot '{plot_name}'. Invalid JSON.")
+                                    st.json(fig_json) # Show raw JSON for debugging
+                        else:
+                            st.write(content)
+                    else:
+                        st.info(f"No {analysis_type.replace('_', ' ')} results to display.")
+            else:
+                st.warning("No analysis results were generated.")
 
         except Exception as e:
-            st.error(f"Error during analysis: {e}")
-            logger.error(f"Error during analysis: {e}", exc_info=True)
-            st.session_state.last_analysis_results = None
-        finally:
-            # Clean up the uploaded file
-            try:
-                if os.path.exists(file_path):
-                    os.remove(file_path)
-            except Exception as e:
-                logger.error(f"Error removing uploaded file {file_path}: {e}")
+            st.error(f"Error during data analysis: {e}")
+            logger.error(f"Error during data analysis: {e}", exc_info=True)
+            if "Authentication" in str(e) or "credentials" in str(e):
+                st.warning("It looks like there might be a Google Cloud authentication issue. Please ensure your `google_application_credentials_key.json` is correct and properly mounted.")
 
     st.markdown('</div>', unsafe_allow_html=True) # Close page-content-container
 
 
 def display_analytics_dashboard():
-    """Display enhanced analytics dashboard"""
+    """Display an analytics dashboard."""
     st.markdown('<div class="page-content-container">', unsafe_allow_html=True)
     st.header("📈 Analytics Dashboard")
+    st.write("Visualize your data with interactive charts.")
+    st.info("Integrate Plotly or Matplotlib for dynamic dashboards.")
 
-    # Check if there are analysis results stored in session state
-    if not st.session_state.last_analysis_results:
-        st.info("📊 No analytics data available yet. Please go to 'Data Analysis' to upload and analyze a file first.")
-        st.markdown('</div>', unsafe_allow_html=True)
-        return
+    # Mock data for demonstration
+    data = {
+        'Category': ['A', 'B', 'C', 'D', 'E'],
+        'Value1': [10, 20, 15, 25, 30],
+        'Value2': [12, 18, 22, 10, 28]
+    }
+    df = pd.DataFrame(data)
 
-    # Use the stored analysis results
-    results = st.session_state.last_analysis_results
+    st.subheader("Sample Bar Chart")
+    fig = px.bar(df, x='Category', y='Value1', title='Category vs Value1')
+    st.plotly_chart(fig)
 
-    st.markdown('<div class="metric-container">', unsafe_allow_html=True)
-
-    # Calculate metrics - these should ideally come directly from 'results["summary"]'
-    # Fallback to direct calculation if structure isn't perfect
-    total_records = results["summary"]["total_records"]
-    columns_analyzed = len(results["summary"]["columns"])
-    missing_values_count = sum(results["summary"]["missing_values"].values())
-    
-    # Adjust for potential missing metrics if chat history is used for avg_response_time/success_rate
-    # Assuming chat_history is still used for agent usage chart later
-    total_requests = len(st.session_state.chat_history)
-    avg_response_time = sum(chat.get("execution_time", 0) for chat in st.session_state.chat_history) / total_requests if total_requests > 0 else 0
-    success_rate = (sum(1 for chat in st.session_state.chat_history if chat.get("success", True)) / total_requests) * 100 if total_requests > 0 else 0
-
-
-    col1, col2, col3 = st.columns(3)
-
-    with col1:
-        st.metric("Total Records", total_records, delta=None)
-
-    with col2:
-        st.metric("Columns Analyzed", columns_analyzed, delta=None)
-
-    with col3:
-        st.metric("Missing Values", missing_values_count, delta=None)
-
-    st.markdown("</div>", unsafe_allow_html=True)
-
-    # Display recommendations
-    if "recommendations" in results and results["recommendations"]:
-        st.markdown("### 💡 Recommendations")
-        for rec in results["recommendations"]:
-            st.info(rec)
-
-    # Display department analysis if available
-    if "department_analysis" in results:
-        st.markdown("### 👥 Department Analysis")
-        dept_analysis = results["department_analysis"]
-
-        if "salary" in dept_analysis:
-            st.markdown("#### Salary Distribution by Department")
-            salary_data = dept_analysis["salary"]
-            if isinstance(salary_data.get("mean"), dict):
-                fig = go.Figure()
-                for dept, stats in salary_data["mean"].items():
-                    fig.add_trace(
-                        go.Box(
-                            y=[stats],
-                            name=dept,
-                            boxpoints="all",
-                            jitter=0.3,
-                            pointpos=-1.8,
-                        )
-                    )
-                fig.update_layout(
-                    title="Salary Distribution by Department",
-                    yaxis_title="Salary",
-                    showlegend=True,
-                )
-                st.plotly_chart(fig, use_container_width=True)
-            else:
-                st.warning("Department salary data format not as expected.")
-
-        if "performance_score" in dept_analysis:
-            st.markdown("#### Performance Scores by Department")
-            perf_data = dept_analysis["performance_score"]
-            if isinstance(perf_data.get("mean"), dict):
-                depts = list(perf_data["mean"].keys())
-                metrics = ["mean", "median", "min", "max"]
-                values = [[perf_data[m].get(d, 0) for d in depts] for m in metrics] # Ensure .get(d, 0) for safety
-
-                fig = go.Figure(
-                    data=go.Heatmap(
-                        z=values,
-                        x=depts,
-                        y=metrics,
-                        colorscale="RdYlGn",
-                        text=[[f"{v:.2f}" for v in row] for row in values],
-                        texttemplate="%{text}",
-                        textfont={"size": 14},
-                    )
-                )
-                fig.update_layout(
-                    title="Performance Metrics by Department",
-                    xaxis_title="Department",
-                    yaxis_title="Metric",
-                )
-                st.plotly_chart(fig, use_container_width=True)
-            else:
-                st.warning("Department performance data format not as expected.")
-
-    # Display education analysis if available
-    if "education_analysis" in results:
-        st.markdown("### 🎓 Education Analysis")
-        edu_analysis = results["education_analysis"]
-
-        if "salary" in edu_analysis and isinstance(edu_analysis["salary"].get("mean"), dict):
-            edu_data = pd.DataFrame(
-                {
-                    "Education": list(edu_analysis["salary"]["mean"].keys()),
-                    "Mean Salary": list(edu_analysis["salary"]["mean"].values()),
-                    "Median Salary": list(edu_analysis["salary"]["median"].values()),
-                }
-            )
-
-            fig = px.bar(
-                edu_data,
-                x="Education",
-                y=["Mean Salary", "Median Salary"],
-                barmode="group",
-                title="Salary Distribution by Education Level",
-            )
-            st.plotly_chart(fig, use_container_width=True)
-        else:
-            st.warning("Education salary data format not as expected.")
-
-    # Display interactive visualizations
-    if "visualizations" in results and results["visualizations"]:
-        st.markdown("### 📊 Interactive Visualizations")
-        for viz_name, viz_content in results["visualizations"].items():
-            st.markdown(f"#### {viz_name.replace('_', ' ').title()}")
-            try:
-                if isinstance(viz_content, str):
-                    st.components.v1.html(viz_content, height=600)
-                else:
-                    st.warning(f"Invalid visualization content for {viz_name}")
-            except Exception as e:
-                st.error(f"Error displaying visualization {viz_name}: {e}")
-                logger.error(f"Error displaying visualization {viz_name}: {e}", exc_info=True)
-
-    # Agent usage chart (still relies on chat_history)
-    if len(st.session_state.chat_history) > 1:
-        st.markdown("### 📊 Agent Usage")
-        agent_usage = {}
-        for chat in st.session_state.chat_history:
-            agent_type = chat.get("agent_type", "unknown")
-            agent_usage[agent_type] = agent_usage.get(agent_type, 0) + 1
-
-        # Create pie chart with better colors for white background
-        fig = px.pie(
-            values=list(agent_usage.values()),
-            names=list(agent_usage.keys()),
-            title="Agent Usage Distribution",
-            color_discrete_sequence=["#3b82f6", "#22c55e", "#f59e0b", "#8b5cf6"],
-        )
-        fig.update_layout(
-            paper_bgcolor="rgba(255,255,255,0.95)",
-            plot_bgcolor="rgba(255,255,255,0.95)",
-            font_color="#1a202c",
-            title_font_color="#1a202c",
-        )
-        st.plotly_chart(fig, use_container_width=True)
-
-    st.markdown('</div>', unsafe_allow_html=True) # Close page-content-container
-
-
-def process_user_request(user_input: str):
-    """Process user request with the multi-agent system"""
-    if not st.session_state.agent:
-        st.error("Agent system not initialized!")
-        return {"content": "Agent system not initialized!", "data": None}
-
-    if not st.session_state.selected_agent:
-        st.error("Please select an agent first!")
-        return {"content": "Please select an agent first!", "data": None}
-
-    try:
-        with st.spinner("🤖 Processing your request..."):
-            # Debug logging
-            logger.info(f"Selected agent type: {st.session_state.selected_agent}")
-            logger.info(f"Available agent types: {[t.value for t in AgentType]}")
-
-            # Lock the agent selection after first message
-            st.session_state.agent_locked = True
-
-            # Prepare context from recent conversations
-            context = {}
-            if len(st.session_state.chat_history) > 0:
-                context["previous_requests"] = [
-                    msg["content"] for msg in st.session_state.chat_history[-3:] if msg["role"] == "user"
-                ]
-
-            # Get the agent type enum value
-            try:
-                # Convert the stored string value to AgentType enum
-                agent_type = AgentType(st.session_state.selected_agent)
-                logger.info(f"Using agent type: {agent_type.value}")
-            except ValueError as e:
-                logger.error(f"Invalid agent type: {st.session_state.selected_agent}")
-                st.error(f"Invalid agent type selected. Please select a valid agent.")
-                return {
-                    "content": "Invalid agent type selected. Please select a valid agent.",
-                    "data": None,
-                }
-
-            # Route request to selected agent
-            start_time = time.time()
-            response = st.session_state.agent.route_request(user_input, agent_type, context)
-            execution_time = time.time() - start_time
-
-            # Create response dictionary with proper content handling
-            response_dict = {
-                "content": response.content if response and response.content else "No response received",
-                "data": response.data if response and hasattr(response, "data") else None,
-            }
-
-            # Show success message
-            if response and getattr(response, "success", False):
-                st.success(f"✅ Response from {agent_type.value.title()} Agent")
-                # Display the response content immediately
-                st.write(response_dict["content"])
-            else:
-                error_msg = getattr(response, "error_message", "Unknown error occurred")
-                st.error(f"❌ Error: {error_msg}")
-                response_dict["content"] = f"Error: {error_msg}"
-
-            return response_dict
-
-    except Exception as e:
-        error_msg = f"Failed to process request: {str(e)}"
-        logger.error(error_msg, exc_info=True)
-        st.error(f"❌ {error_msg}")
-        return {"content": error_msg, "data": None}
+    st.subheader("Sample Scatter Plot")
+    fig2 = px.scatter(df, x='Value1', y='Value2', color='Category', title='Value1 vs Value2 by Category')
+    st.plotly_chart(fig2)
+    st.markdown('</div>', unsafe_allow_html=True)
 
 
 def display_footer():
-    """Display the application footer."""
+    """Display the global footer."""
     st.markdown("---")
-    st.markdown(
-        """
-    <div style='text-align: center; color: #6b7280;'>
-        <p></p>
-    </div>
-    """,
-        unsafe_allow_html=True,
-    )
+    st.markdown("<p style='text-align: center; font-size: small;'>Powered by MultiAgentAI21</p>", unsafe_allow_html=True)
 
 
-def main():
-    """Main application entry point"""
-    try:
-        logger.info("Starting main application...")
-
-        # Check authentication
-        if not is_authenticated():
-            login_page()
-            return
-
-        # Display user info in sidebar
+def user_profile_sidebar():
+    """Display user profile in sidebar"""
+    if is_authenticated():
         user = get_current_user()
         with st.sidebar:
-            st.write(f"Welcome, {user['email']}")
-            if st.button("Logout"):
+            st.markdown("---")
+            st.markdown("### User Profile")
+            st.write(f"**Name:** {user.get('display_name', 'N/A')}")
+            st.write(f"**Email:** {user.get('email', 'N/A')}")
+            
+            if user.get('provider'):
+                st.write(f"**Provider:** {user.get('provider').title()}")
+            
+            if st.button("Logout", key="sidebar_logout"):
                 logout()
-                return
 
-        # Check environment
-        logger.info("Checking environment...")
-        issues = check_environment()
-        if issues:
-            logger.error(f"Environment issues found: {issues}")
-            st.error("Environment issues detected:")
-            for issue in issues:
-                st.error(f"- {issue}")
-            st.stop()
 
-        # Initialize agent
-        logger.info("Initializing agent...")
-        st.session_state.agent = get_agent_system()
-
-        # Check if agent initialization was successful
-        if st.session_state.agent is None:
-            st.error("❌ Failed to initialize the multi-agent system. Please check the logs for details.")
-            logger.error("Multi-agent system is None after initialization.")
-            # Prevent further execution that requires the agent
-            return # Stop main function execution if agent is not initialized
-
-        # Load chat history upfront for all pages that might use it
-        # Ensure current_chat_id is set before loading
-        if "current_chat_id" not in st.session_state:
-            st.session_state.current_chat_id = datetime.now().strftime("%Y%m%d_%H%M%S")
-        if "chat_history" not in st.session_state or not st.session_state.chat_history: # Only load if empty or not present
-             loaded_history = load_chat_history(st.session_state.current_chat_id)
-             if loaded_history:
-                 st.session_state.chat_history = loaded_history
-                 logger.info(f"Loaded chat history for {st.session_state.current_chat_id}: {len(loaded_history)} messages in main.")
-
+# Main application logic
+@login_required # Ensure this decorator works after import
+def main_app():
+    try:
         # Display header
         logger.info("Displaying header...")
         display_enhanced_header()
@@ -1289,6 +1083,11 @@ def main():
         # Create sidebar navigation
         logger.info("Setting up navigation...")
         st.sidebar.title("Navigation")
+        
+        # Display user profile and chat history in sidebar (if logged in)
+        user_profile_sidebar()
+        display_chat_history_sidebar() # Moved from main_app to a separate function
+
         page = st.sidebar.radio(
             "Select a page",
             ["🤖 Agent Chat", "📊 Data Analysis", "📈 Analytics Dashboard", "📚 Examples"],
@@ -1303,8 +1102,8 @@ def main():
         elif page == "📈 Analytics Dashboard":
             display_analytics_dashboard()
         elif page == "📚 Examples":
-            show_agent_examples()
-
+            show_agent_examples() # Changed to show_agent_examples
+        
         logger.info("Main application completed successfully")
 
         # Clean up temporary files when the app is closed
@@ -1321,8 +1120,12 @@ def main():
 
 if __name__ == "__main__":
     try:
-        logger.info("Starting application...")
-        main()
+        logger.info("Entering main execution block.")
+        if not is_authenticated():
+            login_page()
+        else:
+            main_app()
     except Exception as e:
-        logger.error(f"Fatal error: {e}", exc_info=True)
-        st.error("A fatal error occurred. Please check the logs for details.")
+        logger.critical(f"Critical error in main application execution: {e}", exc_info=True)
+        st.error(f"A critical error prevented the application from running: {str(e)}")
+
