@@ -11,15 +11,18 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements first for better caching
+# CORRECTED: Assume requirements.txt is at the root of the build context
 COPY requirements.txt .
 
 # Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application code and src directory
+# CORRECTED: Copy everything from the root of the build context to /app
 COPY . .
 
 # *** EXTENSIVE DEBUGGING FOR CLOUD RUN ***
+# These commands are excellent for debugging and will now show the correct paths!
 RUN echo "=== Current working directory ===" && pwd
 RUN echo "=== Listing /app contents ===" && ls -la /app
 RUN echo "=== Listing src/ contents ===" && ls -la /app/src/
