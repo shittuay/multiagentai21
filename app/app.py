@@ -864,6 +864,7 @@ def process_and_display_user_message(user_input):
 
     # Save updated chat history
     save_chat_history(st.session_state.current_chat_id, st.session_state.chat_history)
+    st.rerun() # Added this line to force a re-render after message processing
 
 
 def display_chat_interface():
@@ -1146,3 +1147,4 @@ if __name__ == "__main__":
     except Exception as e:
         logger.critical(f"Critical error in main application execution: {e}", exc_info=True)
         st.error(f"A critical error prevented the application from running: {str(e)}")
+
