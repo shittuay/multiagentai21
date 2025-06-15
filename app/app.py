@@ -174,7 +174,7 @@ except Exception as e:
     st.error(f"Error setting up page: {e}")
     st.stop()
 
-# Enhanced CSS for modern white interface
+# Enhanced CSS for modern white interface and login page
 st.markdown(
     """
 <style>
@@ -499,6 +499,292 @@ st.markdown(
         margin-bottom: 2rem;
         border: 1px solid rgba(0, 0, 0, 0.1);
         box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+    }
+
+    /* --- New Login Page Styles --- */
+    .login-container {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        min-height: 80vh; /* Adjust as needed */
+        background: linear-gradient(135deg, #e0f2f7 0%, #c1dff0 100%); /* Light blue gradient */
+        padding: 2rem;
+        border-radius: 20px;
+        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
+        margin: 2rem auto;
+        max-width: 500px; /* Max width for the login container */
+        width: 90%;
+        text-align: center;
+    }
+
+    .login-title {
+        font-size: 2.8rem !important;
+        font-weight: 800 !important;
+        color: #1a202c !important;
+        margin-bottom: 1.5rem !important;
+    }
+
+    .login-mode-toggle-container {
+        display: flex;
+        align-items: center;
+        gap: 0.8rem;
+        margin-bottom: 2rem;
+        background: rgba(255, 255, 255, 0.7);
+        padding: 0.5rem 1.5rem;
+        border-radius: 25px;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+    }
+
+    .login-mode-label {
+        font-size: 1rem;
+        font-weight: 600;
+        color: #4a5568;
+    }
+
+    /* Custom Switch (Toggle) Styles - copied from common web patterns */
+    .switch {
+      position: relative;
+      display: inline-block;
+      width: 45px; /* Adjust width/height as needed */
+      height: 25px;
+    }
+
+    .switch input { 
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+
+    .slider {
+      position: absolute;
+      cursor: pointer;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background-color: #ccc;
+      -webkit-transition: .4s;
+      transition: .4s;
+      border-radius: 25px; /* Make it rounded */
+    }
+
+    .slider:before {
+      position: absolute;
+      content: "";
+      height: 19px;
+      width: 19px;
+      left: 3px;
+      bottom: 3px;
+      background-color: white;
+      -webkit-transition: .4s;
+      transition: .4s;
+      border-radius: 50%; /* Make the circle round */
+    }
+
+    input:checked + .slider {
+      background-color: #2196F3; /* Blue when checked */
+    }
+
+    input:focus + .slider {
+      box-shadow: 0 0 1px #2196F3;
+    }
+
+    input:checked + .slider:before {
+      -webkit-transform: translateX(20px); /* Move slider dot */
+      -ms-transform: translateX(20px);
+      transform: translateX(20px);
+    }
+
+    /* Rounded sliders */
+    .slider.round {
+      border-radius: 25px;
+    }
+
+    .slider.round:before {
+      border-radius: 50%;
+    }
+
+
+    .auth-form-card {
+        background: #ffffff; /* White background for the card */
+        padding: 2.5rem 2rem;
+        border-radius: 15px;
+        box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
+        width: 100%;
+        max-width: 380px; /* Width of the form card */
+        margin-bottom: 2rem;
+    }
+
+    .form-card-title {
+        font-size: 1.8rem !important;
+        font-weight: 700 !important;
+        color: #1a202c !important;
+        margin-bottom: 0.5rem !important;
+    }
+
+    .form-card-subtitle {
+        font-size: 1rem !important;
+        color: #6b7280 !important;
+        margin-bottom: 2rem !important;
+    }
+
+    .input-group {
+        margin-bottom: 1.5rem;
+        text-align: left;
+    }
+
+    .input-group label {
+        display: block;
+        font-size: 0.9rem;
+        color: #4a5568;
+        margin-bottom: 0.5rem;
+        font-weight: 500;
+    }
+    
+    /* Target Streamlit's native input fields */
+    .st-d3 input[type="email"], .st-d3 input[type="password"] {
+        width: 100%;
+        padding: 0.8rem 1rem;
+        border: 1px solid #cbd5e0;
+        border-radius: 10px; /* Rounded corners for inputs */
+        font-size: 1rem;
+        color: #1a202c;
+        background-color: #f8fafc;
+        transition: border-color 0.3s ease, box-shadow 0.3s ease;
+    }
+
+    .st-d3 input[type="email"]:focus, .st-d3 input[type="password"]:focus {
+        border-color: #3b82f6;
+        box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+        outline: none;
+    }
+
+    .password-input-group {
+        position: relative;
+    }
+
+    .password-toggle-icon {
+        position: absolute;
+        right: 15px;
+        top: 60%;
+        transform: translateY(-50%);
+        cursor: pointer;
+        color: #6b7280;
+        font-size: 1.1rem;
+    }
+
+    .forgot-password {
+        text-align: right;
+        margin-bottom: 1.5rem;
+    }
+
+    .forgot-password-link {
+        color: #3b82f6;
+        font-size: 0.9rem;
+        text-decoration: none;
+        transition: color 0.2s ease;
+    }
+
+    .forgot-password-link:hover {
+        color: #1d4ed8;
+        text-decoration: underline;
+    }
+
+    /* Custom Buttons */
+    .custom-button {
+        width: 100%;
+        padding: 0.9rem 1.5rem;
+        border: none;
+        border-radius: 12px;
+        font-weight: 600;
+        font-size: 1.1rem;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.75rem;
+        margin-bottom: 1rem;
+        text-decoration: none; /* For links styled as buttons */
+        color: white; /* Default text color for custom buttons */
+    }
+
+    .custom-button.primary-button {
+        background: linear-gradient(135deg, #5e72e4, #825ee4); /* Purple gradient from image */
+        box-shadow: 0 5px 15px rgba(130, 94, 228, 0.3);
+    }
+
+    .custom-button.primary-button:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 8px 20px rgba(130, 94, 228, 0.4);
+        background: linear-gradient(135deg, #4c63d0, #714ce0);
+    }
+
+    .social-login-separator {
+        text-align: center;
+        margin: 1.5rem 0;
+        font-size: 0.9rem;
+        color: #a0aec0;
+        position: relative;
+    }
+
+    .social-login-separator::before,
+    .social-login-separator::after {
+        content: '';
+        position: absolute;
+        top: 50%;
+        width: 40%;
+        height: 1px;
+        background: #e2e8f0;
+    }
+
+    .social-login-separator::before {
+        left: 0;
+    }
+
+    .social-login-separator::after {
+        right: 0;
+    }
+
+    .custom-button.github-button {
+        background: linear-gradient(135deg, #2d3748, #4a5568); /* Dark gray/black for GitHub */
+        box-shadow: 0 5px 15px rgba(45, 55, 72, 0.3);
+    }
+    .custom-button.github-button:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 8px 20px rgba(45, 55, 72, 0.4);
+        background: linear-gradient(135deg, #1a202c, #2d3748);
+    }
+
+    .custom-button.google-button {
+        background: linear-gradient(135deg, #db4437, #e67c73); /* Reddish for Google */
+        box-shadow: 0 5px 15px rgba(219, 68, 55, 0.3);
+    }
+    .custom-button.google-button:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 8px 20px rgba(219, 68, 55, 0.4);
+        background: linear-gradient(135deg, #c73c2e, #d36960);
+    }
+
+    .button-icon {
+        width: 24px;
+        height: 24px;
+    }
+
+    .signup-link-text {
+        font-size: 1rem;
+        color: #6b7280;
+    }
+
+    .signup-link-text a {
+        color: #3b82f6;
+        text-decoration: none;
+        font-weight: 600;
+    }
+
+    .signup-link-text a:hover {
+        text-decoration: underline;
     }
 </style>
 """,
@@ -864,7 +1150,7 @@ def process_and_display_user_message(user_input):
 
     # Save updated chat history
     save_chat_history(st.session_state.current_chat_id, st.session_state.chat_history)
-    st.rerun() # Added this line to force a re-render after message processing
+    st.rerun()
 
 
 def display_chat_interface():
@@ -1059,7 +1345,8 @@ def display_analytics_dashboard():
 def display_footer():
     """Display the global footer."""
     st.markdown("---")
-    st.markdown("<p style='text-align: center; font-size: small;'>Powered by MultiAgentAI21</p>", unsafe_allow_html=True)
+    # Changed "Powered by MultiAgentAI21" to "Powered by Gemini" and added the warning message
+    st.markdown("<p style='text-align: center; font-size: small;'>Powered by Gemini | MultiAgentAI21 can make mistakes. Always verify important information.</p>", unsafe_allow_html=True)
 
 
 def user_profile_sidebar():
@@ -1141,7 +1428,7 @@ if __name__ == "__main__":
     try:
         logger.info("Entering main execution block.")
         if not is_authenticated():
-            login_page()
+            main_app() # Call main_app directly to display the login page from auth_manager
         else:
             main_app()
     except Exception as e:
