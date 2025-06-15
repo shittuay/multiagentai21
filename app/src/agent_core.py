@@ -87,13 +87,34 @@ class BaseAgent(ABC):
             logger.error(f"Error initializing model: {e}")
             raise
 
-    def _process_with_model(self, prompt: str) -> str:
-        """Process prompt with the AI model."""
+    def _process_with_model(self, prompt: str, chat_history: Optional[List[Dict]] = None) -> str:
+        """Process prompt with the AI model, including chat history."""
         try:
             if not self.model:
                 raise ValueError("Model not initialized")
             
-            response = self.model.generate_content(prompt)
+            # Build the chat history for the model
+            # Gemini's generate_content expects a list of {role: ..., parts: [...]}
+            contents = []
+            if chat_history:
+                for message in chat_history:
+                    # Skip empty content or initial system warnings from app.py
+                    if not message.get("content"):
+                        continue
+                    if "MultiAgentAI21 can make mistakes" in message["content"]:
+                        continue
+
+                    # Map your 'user' and 'assistant' roles to Gemini's 'user' and 'model'
+                    if message["role"] == "user":
+                        contents.append({"role": "user", "parts": [message["content"]]})
+                    elif message["role"] == "assistant":
+                        contents.append({"role": "model", "parts": [message["content"]]})
+            
+            # Add the current prompt as the last user message
+            contents.append({"role": "user", "parts": [prompt]})
+            
+            # Use generate_content with the entire 'contents' list
+            response = self.model.generate_content(contents)
             
             if hasattr(response, 'text') and response.text:
                 return response.text.strip()
@@ -127,7 +148,7 @@ In the meantime, here's a general approach to your request:
                 return f"I encountered an error while processing your request: {str(e)}. Please try again or rephrase your question."
 
     @abstractmethod
-    def process(self, input_data: str) -> AgentResponse:
+    def process(self, input_data: str, chat_history: Optional[List[Dict]] = None) -> AgentResponse: # ADDED chat_history
         """Process input data and return a response."""
         pass
 
@@ -140,7 +161,7 @@ class AnalysisAgent(BaseAgent):
         super().__init__(AgentType.DATA_ANALYSIS)
         self.analyzer = DataAnalyzer() if 'DataAnalyzer' in globals() else None
 
-    def process(self, input_data: str) -> AgentResponse:
+    def process(self, input_data: str, chat_history: Optional[List[Dict]] = None) -> AgentResponse: # ADDED chat_history
         """Process analysis requests."""
         start_time = time.time()
         
@@ -178,7 +199,7 @@ class AnalysisAgent(BaseAgent):
             IMPORTANT: Provide specific, actionable advice that can be implemented immediately.
             """
             
-            response_text = self._process_with_model(analysis_prompt)
+            response_text = self._process_with_model(analysis_prompt, chat_history) # PASSED chat_history
             
             return AgentResponse(
                 content=response_text,
@@ -205,9 +226,12 @@ class ChatAgent(BaseAgent):
     def __init__(self):
         """Initialize the customer service agent."""
         super().__init__(AgentType.CUSTOMER_SERVICE)
-        self.conversation_history = []
+        # We will use the chat_history passed from app.py directly instead of self.conversation_history
+        # This simplifies state management across app runs in Streamlit
+        # self.conversation_history = [] # REMOVED: Managed by app.py's session_state
 
-    def process(self, input_data: str) -> AgentResponse:
+    # MODIFIED: Removed internal conversation_history management as app.py already handles it and passes it
+    def process(self, input_data: str, chat_history: Optional[List[Dict]] = None) -> AgentResponse: # ADDED chat_history
         """Process customer service requests."""
         start_time = time.time()
         
@@ -244,20 +268,14 @@ class ChatAgent(BaseAgent):
                     execution_time=time.time() - start_time
                 )
             
-            self.conversation_history.append({"role": "user", "content": input_data})
-            
-            # Build context from recent conversation
-            context = ""
-            if len(self.conversation_history) > 1:
-                recent_history = self.conversation_history[-6:]  # Last 6 messages
-                context = "Previous conversation:\n"
-                for entry in recent_history[:-1]:  # Exclude the current message
-                    context += f"{entry['role']}: {entry['content']}\n"
-                context += "\n"
+            # Use the passed chat_history directly
+            # No need to append to self.conversation_history here
+
+            # The _process_with_model will now handle converting chat_history to model's format
             
             # Enhanced customer service prompt with specific scenarios
             customer_service_prompt = f"""
-            {context}You are an expert customer service representative with deep knowledge of:
+            You are an expert customer service representative with deep knowledge of:
             - Product support and troubleshooting
             - Billing and payment issues
             - Account management
@@ -286,14 +304,12 @@ class ChatAgent(BaseAgent):
             Always end with a clear next step or offer additional assistance.
             """
             
-            response_text = self._process_with_model(customer_service_prompt)
+            response_text = self._process_with_model(customer_service_prompt, chat_history) # PASSED chat_history
             
-            # Add response to conversation history
-            self.conversation_history.append({"role": "assistant", "content": response_text})
-            
-            # Keep conversation history manageable
-            if len(self.conversation_history) > 20:
-                self.conversation_history = self.conversation_history[-20:]
+            # No need to append response to self.conversation_history
+            # The chat_history in app.py's session_state already gets the response
+
+            # No need to keep conversation history manageable here, app.py manages it.
             
             return AgentResponse(
                 content=response_text,
@@ -321,7 +337,7 @@ class FileAgent(BaseAgent):
         """Initialize the automation agent."""
         super().__init__(AgentType.AUTOMATION)
 
-    def process(self, input_data: str) -> AgentResponse:
+    def process(self, input_data: str, chat_history: Optional[List[Dict]] = None) -> AgentResponse: # ADDED chat_history
         """Process automation requests."""
         start_time = time.time()
         
@@ -381,7 +397,7 @@ class FileAgent(BaseAgent):
             Format your response with clear sections, code blocks where appropriate, and specific actionable steps.
             """
             
-            response_text = self._process_with_model(automation_prompt)
+            response_text = self._process_with_model(automation_prompt, chat_history) # PASSED chat_history
 
             return AgentResponse(
                 content=response_text,
@@ -450,7 +466,7 @@ class ContentCreatorAgent(BaseAgent):
             }
         }
 
-    def process(self, input_data: str) -> AgentResponse:
+    def process(self, input_data: str, chat_history: Optional[List[Dict]] = None) -> AgentResponse: # ADDED chat_history
         """Process content creation requests."""
         start_time = time.time()
         
@@ -492,7 +508,7 @@ class ContentCreatorAgent(BaseAgent):
             if is_guidance_request:
                 logger.info(f"Detected guidance request: {input_data}")
                 # Pass the original input_data to guidance generator as it's the full context of the query
-                return self._generate_guidance_content(input_data, start_time)
+                return self._generate_guidance_content(input_data, start_time, chat_history) # PASSED chat_history
 
             # If it's not a guidance request, proceed to generate content
             # Analyze request to determine content type
@@ -504,19 +520,19 @@ class ContentCreatorAgent(BaseAgent):
 
             # Generate content based on type with enhanced prompts, using the extracted topic
             if content_type == "blog_post":
-                response_text = self._generate_blog_post(content_topic)
+                response_text = self._generate_blog_post(content_topic, chat_history) # PASSED chat_history
             elif content_type == "social_media":
-                response_text = self._generate_social_media_post(content_topic)
+                response_text = self._generate_social_media_post(content_topic, chat_history) # PASSED chat_history
             elif content_type == "article":
-                response_text = self._generate_article(content_topic)
+                response_text = self._generate_article(content_topic, chat_history) # PASSED chat_history
             elif content_type == "marketing_copy":
-                response_text = self._generate_marketing_copy(content_topic)
+                response_text = self._generate_marketing_copy(content_topic, chat_history) # PASSED chat_history
             elif content_type == "product_description":
-                response_text = self._generate_product_description(content_topic)
+                response_text = self._generate_product_description(content_topic, chat_history) # PASSED chat_history
             elif content_type == "email_content":
-                response_text = self._generate_email_content(content_topic)
+                response_text = self._generate_email_content(content_topic, chat_history) # PASSED chat_history
             else:
-                response_text = self._generate_general_content(content_topic)
+                response_text = self._generate_general_content(content_topic, chat_history) # PASSED chat_history
             
             # Add content type information to the response
             enhanced_response = f"""
@@ -565,7 +581,7 @@ class ContentCreatorAgent(BaseAgent):
         else:
             return "general"
 
-    def _generate_blog_post(self, prompt: str) -> str:
+    def _generate_blog_post(self, prompt: str, chat_history: Optional[List[Dict]] = None) -> str: # ADDED chat_history
         """Generate a blog post using Gemini API."""
         blog_prompt = f"""You are a professional content writer and SEO expert. Create a comprehensive, engaging blog post about: {prompt}
 
@@ -591,9 +607,9 @@ STRUCTURE:
 
 Format with proper markdown: # for H1, ## for H2, ### for H3, **bold** for emphasis, and bullet points where appropriate."""
 
-        return self._process_with_model(blog_prompt)
+        return self._process_with_model(blog_prompt, chat_history) # PASSED chat_history
 
-    def _generate_social_media_post(self, prompt: str) -> str:
+    def _generate_social_media_post(self, prompt: str, chat_history: Optional[List[Dict]] = None) -> str: # ADDED chat_history
         """Generate a social media post using Gemini API."""
         social_prompt = f"""Create an engaging social media post about: {prompt}
 
@@ -608,9 +624,9 @@ Follow these guidelines:
 
 Format the response with emojis and hashtags."""
 
-        return self._process_with_model(social_prompt)
+        return self._process_with_model(social_prompt, chat_history) # PASSED chat_history
 
-    def _generate_article(self, prompt: str) -> str:
+    def _generate_article(self, prompt: str, chat_history: Optional[List[Dict]] = None) -> str: # ADDED chat_history
         """Generate an article using Gemini API."""
         article_prompt = f"""Write a detailed article about: {prompt}
 
@@ -628,9 +644,9 @@ Follow these guidelines:
 
 Format the response with proper markdown structure."""
 
-        return self._process_with_model(article_prompt)
+        return self._process_with_model(article_prompt, chat_history) # PASSED chat_history
 
-    def _generate_marketing_copy(self, prompt: str) -> str:
+    def _generate_marketing_copy(self, prompt: str, chat_history: Optional[List[Dict]] = None) -> str: # ADDED chat_history
         """Generate marketing copy using Gemini API."""
         marketing_prompt = f"""Create compelling marketing copy about: {prompt}
 
@@ -646,9 +662,9 @@ Follow these guidelines:
 
 Format the response with clear sections and emphasis on key points."""
 
-        return self._process_with_model(marketing_prompt)
+        return self._process_with_model(marketing_prompt, chat_history) # PASSED chat_history
 
-    def _generate_product_description(self, prompt: str) -> str:
+    def _generate_product_description(self, prompt: str, chat_history: Optional[List[Dict]] = None) -> str: # ADDED chat_history
         """Generate product description using Gemini API."""
         product_prompt = f"""Write a detailed product description for: {prompt}
 
@@ -664,9 +680,9 @@ Follow these guidelines:
 
 Format the response with clear sections and bullet points."""
 
-        return self._process_with_model(product_prompt)
+        return self._process_with_model(product_prompt, chat_history) # PASSED chat_history
 
-    def _generate_email_content(self, prompt: str) -> str:
+    def _generate_email_content(self, prompt: str, chat_history: Optional[List[Dict]] = None) -> str: # ADDED chat_history
         """Generate email content using Gemini API."""
         email_prompt = f"""Create an effective email about: {prompt}
 
@@ -682,9 +698,9 @@ Follow these guidelines:
 
 Format the response with clear sections and proper email structure."""
 
-        return self._process_with_model(email_prompt)
+        return self._process_with_model(email_prompt, chat_history) # PASSED chat_history
 
-    def _generate_general_content(self, prompt: str) -> str:
+    def _generate_general_content(self, prompt: str, chat_history: Optional[List[Dict]] = None) -> str: # ADDED chat_history
         """Generate general content using Gemini API."""
         general_prompt = f"""Create engaging content about: {prompt}
 
@@ -700,7 +716,7 @@ Follow these guidelines:
 
 Format the response with proper structure and formatting."""
 
-        return self._process_with_model(general_prompt)
+        return self._process_with_model(general_prompt, chat_history) # PASSED chat_history
 
     def _extract_content_topic(self, request: str, content_type: str) -> str:
         """Extracts the core topic from a content creation request."""
@@ -732,7 +748,7 @@ Format the response with proper structure and formatting."""
             
         return topic
 
-    def _generate_guidance_content(self, prompt: str, start_time: float) -> AgentResponse:
+    def _generate_guidance_content(self, prompt: str, start_time: float, chat_history: Optional[List[Dict]] = None) -> AgentResponse: # ADDED chat_history
         """Generate guidance on how to create content."""
         guidance_prompt = f"""
         You are an expert content strategist and a helpful guide.
@@ -753,7 +769,7 @@ Format the response with proper structure and formatting."""
         
         Provide a detailed, clear, and actionable guide.
         """
-        response_text = self._process_with_model(guidance_prompt)
+        response_text = self._process_with_model(guidance_prompt, chat_history) # PASSED chat_history
         
         return AgentResponse(
             content=f"## 💡 Guidance on Content Creation\n\n{response_text}\n\n---\n*Guidance by MultiAgentAI21 Content Creation Agent*",
@@ -769,9 +785,13 @@ def create_agent(agent_type: AgentType) -> BaseAgent:
         if agent_type == AgentType.CONTENT_CREATION:
             # Try to use enhanced agent first, fall back to basic
             try:
-                return EnhancedContentCreatorAgent()
-            except (ImportError, NameError):
-                logger.warning("EnhancedContentCreatorAgent not available, using basic ContentCreatorAgent")
+                # Ensure EnhancedContentCreatorAgent is imported or defined
+                if 'EnhancedContentCreatorAgent' in globals():
+                    return EnhancedContentCreatorAgent()
+                else:
+                    raise ImportError("EnhancedContentCreatorAgent not found in globals.")
+            except (ImportError, NameError) as e:
+                logger.warning(f"EnhancedContentCreatorAgent not available: {e}, using basic ContentCreatorAgent")
                 return ContentCreatorAgent()
         elif agent_type == AgentType.DATA_ANALYSIS:
             return AnalysisAgent()
@@ -842,6 +862,9 @@ class MultiAgentCodingAI:
         start_time = time.time()
         session_id = session_id or str(uuid.uuid4())
         
+        # Extract chat_history from context
+        chat_history_from_context = context.get("chat_history", []) if context else []
+
         try:
             if not request or not request.strip():
                 return AgentResponse(
@@ -869,7 +892,8 @@ class MultiAgentCodingAI:
                 self._save_interaction(session_id, request, response, agent_type)
                 return response
 
-            response = self.agents[agent_type].process(request)
+            # Pass chat_history to the agent's process method
+            response = self.agents[agent_type].process(request, chat_history_from_context) 
             response.agent_type = agent_type.value
             response.execution_time = time.time() - start_time
 
