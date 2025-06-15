@@ -9,7 +9,8 @@ import plotly.express as px
 import plotly.graph_objects as go
 import json
 import tempfile
-import time # Import time for timestamping
+import time
+from datetime import datetime # Explicitly import datetime here for clarity and robustness
 
 
 # Configure logging
@@ -21,7 +22,7 @@ logger.info("Application starting...")
 # Add the project root to Python path
 project_root = Path(__file__).resolve().parent
 if str(project_root) not in sys.path:
-    sys.sys.path.insert(0, str(project_root))
+    sys.path.insert(0, str(project_root)) # Corrected typo: sys.path.insert
 
 logger.info(f"Project root (app.py detected as): {project_root}")
 logger.info(f"Python path (sys.path) before import: {sys.path}")
@@ -924,7 +925,12 @@ def show_agent_examples():
     st.info("💡 Try these examples:")
     for example in agent_examples:
         if st.button(f"▶️ {example}", key=f"example_{example}"):
-            process_user_request(example)
+            # You would call a function here to send the example to the agent
+            # For now, let's just add it to chat history for demonstration
+            # process_user_request(example)
+            st.session_state.chat_history.append({"role": "user", "content": example, "timestamp": datetime.now().isoformat()})
+            st.warning("Example functionality not fully implemented. Add your agent call here!")
+            st.rerun()
 
 
 def cleanup_analysis_files():
@@ -1128,4 +1134,3 @@ if __name__ == "__main__":
     except Exception as e:
         logger.critical(f"Critical error in main application execution: {e}", exc_info=True)
         st.error(f"A critical error prevented the application from running: {str(e)}")
-
