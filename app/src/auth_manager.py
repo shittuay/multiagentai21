@@ -94,8 +94,9 @@ def clear_user_session():
 
 def is_authenticated() -> bool:
     """Checks if a user is currently authenticated and re-verifies session periodically."""
-    if "user_info" not in st.session_state or not st.session_state.user_info.get("uid"):
-        logger.debug("No user info in session state.")
+    # Ensure st.session_state.user_info exists and is not None before accessing its keys/methods
+    if not st.session_state.get("user_info") or not st.session_state.user_info.get("uid"):
+        logger.debug("No user info or UID in session state.")
         return False
     
     user_uid = st.session_state.user_info["uid"]
