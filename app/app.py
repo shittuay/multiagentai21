@@ -12,6 +12,14 @@ import tempfile
 import time
 from datetime import datetime # Explicitly import datetime here for clarity and robustness
 
+# Firebase Imports for Firestore (Client SDK)
+from firebase_admin import credentials # For Firebase Admin SDK
+from firebase_admin import auth # For Firebase Admin SDK
+import firebase_admin # For Firebase Admin SDK
+from google.cloud import firestore # For Firestore client library
+import google.auth # For handling default credentials
+import google.oauth2.credentials # For handling token-based credentials
+
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -85,21 +93,79 @@ except Exception as e:
     st.stop()
 
 
-# Initialize Firebase (this call should be after imports and inside app.py)
+# Initialize Firebase Admin SDK first (from auth_manager)
 try:
     initialize_firebase()
-    logger.info("Firebase initialization completed successfully in app.py.")
+    logger.info("Firebase Admin SDK initialization completed successfully in app.py.")
 except Exception as e:
-    logger.critical(f"Failed to initialize Firebase in app.py: {e}", exc_info=True)
-    st.error(f"An error occurred during Firebase initialization: {str(e)}")
-    st.stop() # Stop the app if Firebase init fails
+    logger.critical(f"Failed to initialize Firebase Admin SDK in app.py: {e}", exc_info=True)
+    st.error(f"An error occurred during Firebase Admin SDK initialization: {str(e)}")
+    st.stop() # Stop the app if Firebase Admin SDK init fails
 
 # Call setup_google_application_credentials early to ensure GOOGLE_APPLICATION_CREDENTIALS is set
-# This is called *after* initialize_firebase in auth_manager.py is executed,
-# so the `os.getenv("GOOGLE_APPLICATION_CREDENTIALS")` check will pass.
 setup_google_application_credentials()
 
-# --- NEW: Environment check function to consolidate warnings ---
+# --- Firestore Initialization (Client-Side) ---
+# Global Firestore client instance
+db = None
+firebase_auth_client = None # Firebase Auth client from firebase_admin SDK
+
+# Use the global variables provided by the Canvas environment
+app_id = typeof(__app_id) !== 'undefined' ? __app_id : 'default-app-id'
+firebase_config_str = typeof(__firebase_config) !== 'undefined' ? __firebase_config : '{}'
+initial_auth_token = typeof(__initial_auth_token) !== 'undefined' ? __initial_auth_token : None
+
+def initialize_firestore():
+    global db, firebase_auth_client
+    if db:
+        logger.info("Firestore client already initialized.")
+        return db
+
+    try:
+        # Parse the firebase config provided by the Canvas environment
+        firebase_config = json.loads(firebase_config_str)
+
+        # Initialize Firebase Admin SDK if not already done (auth_manager does this)
+        # We need the Firebase Admin SDK to get the auth client
+        if not firebase_admin._apps:
+             initialize_firebase() # Ensure it's initialized
+
+        # Set up a global Firebase Admin Auth client for server-side operations
+        firebase_auth_client = auth.get_auth()
+        
+        # Authenticate using __initial_auth_token or anonymously
+        # This part requires interaction with the Firebase client SDK,
+        # but for Python backend, we rely on Google Cloud's default credentials
+        # or a service account for Firestore access.
+        # The __initial_auth_token is primarily for *client-side* JS SDKs or custom auth flows.
+        # For Python Google Cloud Firestore client, it often uses service account credentials.
+
+        # For `google-cloud-firestore`, it typically uses GOOGLE_APPLICATION_CREDENTIALS
+        # which should have been set up by `setup_google_application_credentials()`.
+        # No explicit `signInWithCustomToken` is needed here for the `google-cloud-firestore` client.
+
+        # Initialize Firestore client
+        db = firestore.Client(project=firebase_config.get("projectId"))
+        logger.info("Firestore client initialized successfully.")
+        return db
+    except google.auth.exceptions.DefaultCredentialsError as e:
+        logger.critical(f"Google Cloud Default Credentials Error for Firestore: {e}. Please ensure GOOGLE_APPLICATION_CREDENTIALS is correctly set up.", exc_info=True)
+        st.error(f"❌ Firestore initialization failed: Google Cloud credentials not found. Error: {e}")
+        st.stop()
+    except json.JSONDecodeError as e:
+        logger.critical(f"JSON Decoding Error for __firebase_config: {e}", exc_info=True)
+        st.error(f"❌ Firestore initialization failed: Invalid Firebase configuration provided. Error: {e}")
+        st.stop()
+    except Exception as e:
+        logger.critical(f"Error initializing Firestore: {e}", exc_info=True)
+        st.error(f"❌ An unexpected error occurred during Firestore initialization: {e}")
+        st.stop()
+
+# Initialize Firestore
+initialize_firestore()
+
+
+# --- Environment check function to consolidate warnings ---
 def check_environment():
     issues = []
     
@@ -141,17 +207,12 @@ if environment_issues:
     logger.error(f"Environment issues found: {environment_issues}")
 else:
     logger.info("All essential environment variables appear to be set.")
-# --- END NEW ENVIRONMENT CHECK ---
 
-
-# Load environment variables (removed _setup_gcloud_credentials_from_json() and _cleanup_temp_key_file() as auth_manager.py now handles this)
-logger.info("Environment variables should be set by deployment environment or handled by auth_manager.")
 
 try:
     logger.info("Attempting to import modules...")
     from src.agent_core import AgentType, MultiAgentCodingAI
-    from src.data_analysis import DataAnalyzer
-
+    from src.data_analysis import DataAnalyzer # Ensure DataAnalyzer is imported
     logger.info("Successfully imported modules")
 except ImportError as e:
     logger.error(f"Import error: {e}", exc_info=True)
@@ -505,113 +566,121 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# Define chat history storage
-CHAT_HISTORY_DIR = os.path.join(project_root, "chat_history")
-os.makedirs(CHAT_HISTORY_DIR, exist_ok=True)
+# Define chat history storage (now uses Firestore)
+CHAT_HISTORY_COLLECTION_NAME = "chat_histories"
+
+def get_firestore_chat_collection():
+    """Returns the Firestore collection reference for chat histories."""
+    # Ensure Firestore is initialized
+    if db is None:
+        initialize_firestore()
+    
+    # Get the current user's UID. If not authenticated, use a generic/anonymous ID.
+    # IMPORTANT: The auth.currentUser.uid is from firebase_admin.auth.
+    # For a purely client-side setup using __initial_auth_token, you'd need a client auth object.
+    # For now, we assume get_current_user() provides UID from the auth_manager.
+    user_info = get_current_user()
+    user_uid = user_info.get("uid")
+
+    if not user_uid:
+        # Fallback for unauthenticated users or during initialization
+        logger.warning("No authenticated user UID found. Using an anonymous ID for chat history.")
+        # Generate a stable anonymous ID or use a session ID
+        if "anonymous_user_id" not in st.session_state:
+            st.session_state.anonymous_user_id = "anon_" + os.urandom(16).hex()
+        user_uid = st.session_state.anonymous_user_id
+    
+    # Firestore structure: /artifacts/{appId}/users/{userId}/chat_histories
+    return db.collection("artifacts").document(app_id).collection("users").document(user_uid).collection(CHAT_HISTORY_COLLECTION_NAME)
 
 
 def save_chat_history(chat_id: str, messages: list):
-    """Save chat history to a JSON file."""
+    """Save chat history to Firestore."""
     try:
-        # Ensure chat_history directory exists
-        CHAT_HISTORY_DIR = os.path.join(project_root, "chat_history")
-        os.makedirs(CHAT_HISTORY_DIR, exist_ok=True)
+        chat_ref = get_firestore_chat_collection().document(chat_id)
         
-        chat_file = os.path.join(CHAT_HISTORY_DIR, f"{chat_id}.json")
-        
-        # Prepare chat data with metadata
         chat_data = {
             "chat_id": chat_id,
-            "created_at": datetime.now().isoformat(),
-            "last_updated": datetime.now().isoformat(),
+            "created_at": firestore.SERVER_TIMESTAMP, # Use server timestamp for creation
+            "last_updated": firestore.SERVER_TIMESTAMP, # Use server timestamp for updates
             "message_count": len(messages),
-            "messages": messages
+            "messages": messages # Store messages as an array
         }
         
-        # Save to file
-        with open(chat_file, 'w', encoding='utf-8') as f:
-            json.dump(chat_data, f, indent=2, ensure_ascii=False)
-        
-        logger.info(f"Chat history saved: {chat_file} ({len(messages)} messages)")
+        chat_ref.set(chat_data, merge=True) # Use set with merge=True to update or create
+        logger.info(f"Chat history saved to Firestore: {chat_id} ({len(messages)} messages)")
         
     except Exception as e:
-        logger.error(f"Error saving chat history: {e}", exc_info=True)
-        st.error(f"Failed to save chat history: {str(e)}")
+        logger.error(f"Error saving chat history to Firestore: {e}", exc_info=True)
+        st.error(f"Failed to save chat history to database: {str(e)}")
 
 
 def load_chat_history(chat_id: str) -> list:
-    """Load chat history from a JSON file."""
+    """Load chat history from Firestore."""
     try:
-        CHAT_HISTORY_DIR = os.path.join(project_root, "chat_history")
-        chat_file = os.path.join(CHAT_HISTORY_DIR, f"{chat_id}.json")
+        chat_ref = get_firestore_chat_collection().document(chat_id)
+        doc = chat_ref.get()
         
-        if not os.path.exists(chat_file):
-            logger.warning(f"Chat history file not found: {chat_file}")
+        if doc.exists:
+            chat_data = doc.to_dict()
+            messages = chat_data.get("messages", [])
+            logger.info(f"Chat history loaded from Firestore: {chat_id} ({len(messages)} messages)")
+            return messages
+        else:
+            logger.warning(f"Chat history document not found in Firestore: {chat_id}")
             return []
         
-        with open(chat_file, 'r', encoding='utf-8') as f:
-            chat_data = json.load(f)
-        
-        # Extract messages from the chat data
-        messages = chat_data.get("messages", [])
-        logger.info(f"Chat history loaded: {chat_file} ({len(messages)} messages)")
-        
-        return messages
-        
     except Exception as e:
-        logger.error(f"Error loading chat history: {e}", exc_info=True)
-        st.error(f"Failed to load chat history: {str(e)}")
+        logger.error(f"Error loading chat history from Firestore: {e}", exc_info=True)
+        st.error(f"Failed to load chat history from database: {str(e)}")
         return []
 
 
 def get_available_chats() -> list:
-    """Get list of available chat sessions."""
+    """Get list of available chat sessions from Firestore."""
     try:
-        CHAT_HISTORY_DIR = os.path.join(project_root, "chat_history")
-        
-        if not os.path.exists(CHAT_HISTORY_DIR):
-            return []
-        
         chats = []
-        for file in os.listdir(CHAT_HISTORY_DIR):
-            if file.endswith('.json'):
-                chat_file = os.path.join(CHAT_HISTORY_DIR, file)
-                try:
-                    with open(chat_file, 'r', encoding='utf-8') as f:
-                        chat_data = json.load(f)
-                    
-                    chat_id = chat_data.get("chat_id", file.replace('.json', ''))
-                    created_at = chat_data.get("created_at", datetime.now().isoformat())
-                    last_updated = chat_data.get("last_updated", created_at)
-                    messages = chat_data.get("messages", [])
-                    
-                    # Get preview from first user message
-                    preview = "New Chat"
-                    for message in messages:
-                        if message.get("role") == "user":
-                            preview = message.get("content", "New Chat")[:50]
-                            break
-                    
-                    chats.append({
-                        "id": chat_id,
-                        "preview": preview,
-                        "created_at": created_at,
-                        "last_updated": last_updated,
-                        "message_count": len(messages)
-                    })
-                    
-                except Exception as e:
-                    logger.error(f"Error reading chat file {file}: {e}")
-                    st.sidebar.error(f"Error loading chat: {file} - {str(e)}")
-                    continue
+        # Order by 'last_updated' in descending order
+        chat_docs = get_firestore_chat_collection().order_by("last_updated", direction=firestore.Query.DESCENDING).stream()
         
-        # Sort by last updated (most recent first)
-        chats.sort(key=lambda x: x["last_updated"], reverse=True)
+        for doc in chat_docs:
+            chat_data = doc.to_dict()
+            chat_id = doc.id
+            messages = chat_data.get("messages", [])
+            
+            preview = "New Chat"
+            for message in messages:
+                if message.get("role") == "user":
+                    preview = message.get("content", "New Chat")[:50]
+                    break
+            
+            # Convert Firestore Timestamp objects to string for consistent handling
+            created_at = chat_data.get("created_at")
+            if created_at and hasattr(created_at, 'isoformat'):
+                created_at = created_at.isoformat()
+            else:
+                created_at = datetime.now().isoformat() # Fallback if not Timestamp
+
+            last_updated = chat_data.get("last_updated")
+            if last_updated and hasattr(last_updated, 'isoformat'):
+                last_updated = last_updated.isoformat()
+            else:
+                last_updated = datetime.now().isoformat() # Fallback
+
+            chats.append({
+                "id": chat_id,
+                "preview": preview,
+                "created_at": created_at,
+                "last_updated": last_updated,
+                "message_count": len(messages)
+            })
         
+        logger.info(f"Found {len(chats)} available chat histories in Firestore.")
         return chats
         
     except Exception as e:
-        logger.error(f"Error getting available chats: {e}", exc_info=True)
+        logger.error(f"Error getting available chats from Firestore: {e}", exc_info=True)
+        st.error(f"Failed to retrieve available chats from database: {str(e)}")
         return []
 
 
@@ -627,7 +696,7 @@ if "agent_locked" not in st.session_state:
 if "current_chat_id" not in st.session_state:
     st.session_state.current_chat_id = datetime.now().strftime("%Y%m%d_%H%M%S")
 if "available_chats" not in st.session_state:
-    st.session_state.available_chats = get_available_chats()
+    st.session_state.available_chats = get_available_chats() # Load from Firestore on startup
 if "last_analysis_results" not in st.session_state:
     st.session_state.last_analysis_results = None
 if "analysis_temp_files" not in st.session_state:
@@ -705,7 +774,10 @@ def display_chat_history_sidebar():
         st.rerun()
 
     # Display available chats
-    available_chats = get_available_chats()
+    # Re-fetch available chats to reflect latest from Firestore
+    st.session_state.available_chats = get_available_chats() 
+    available_chats = st.session_state.available_chats
+
     if not available_chats:
         st.sidebar.info("📝 No previous chats available.")
         return
@@ -721,7 +793,7 @@ def display_chat_history_sidebar():
         col1, col2 = st.sidebar.columns([3, 1])
         with col1:
             if st.button(f"📄 {preview[:30]}...", key=f"chat_{chat_id}"):
-                # Load the chat history
+                # Load the chat history from Firestore
                 loaded_history = load_chat_history(chat_id)
                 if loaded_history:
                     st.session_state.chat_history = loaded_history
@@ -839,7 +911,7 @@ def process_and_display_user_message(user_input):
             }
             st.session_state.chat_history.append(assistant_message)
             
-            # Save chat history to file
+            # Save chat history to Firestore
             save_chat_history(st.session_state.current_chat_id, st.session_state.chat_history)
             
             st.success(f"✅ Response from {agent_type.value.replace('_', ' ').title()} Agent")
@@ -862,8 +934,8 @@ def process_and_display_user_message(user_input):
         st.session_state.chat_history.append(error_message)
         st.error(f"❌ Error: {str(e)}")
 
-    # Save updated chat history
-    save_chat_history(st.session_state.current_chat_id, st.session_state.chat_history)
+    # Save updated chat history (redundant but safe after adding to history)
+    # save_chat_history(st.session_state.current_chat_id, st.session_state.chat_history)
     st.rerun()
 
 
@@ -986,27 +1058,33 @@ def display_data_analysis_section():
             temp_dir = os.path.join(project_root, "temp_uploads")
             os.makedirs(temp_dir, exist_ok=True)
             temp_file_path = os.path.join(temp_dir, uploaded_file.name)
-            with open(temp_file_path, "wb") as f:
-                f.write(uploaded_file.getbuffer())
-            st.session_state.analysis_temp_files.append(temp_file_path) # Track for cleanup
+            
+            # Write uploaded file to a temporary location using BytesIO
+            # Streamlit's file_uploader gives a BytesIO object directly.
+            # We need to pass this BytesIO object to the DataAnalyzer.
+            # No need to write to disk if DataAnalyzer can accept BytesIO.
+            
+            # Create a BytesIO object from the uploaded file buffer
+            uploaded_file_buffer = io.BytesIO(uploaded_file.getvalue())
 
             st.success(f"File '{uploaded_file.name}' uploaded successfully!")
-            logger.info(f"Uploaded file saved to: {temp_file_path}")
+            logger.info(f"Uploaded file name: {uploaded_file.name}")
 
             # Instantiate DataAnalyzer
             data_analyzer = DataAnalyzer()
 
             # Perform analysis
             with st.spinner("Analyzing data... This may take a moment."):
-                results = data_analyzer.analyze_data(temp_file_path, selected_analysis_types)
+                # Pass the BytesIO object directly to the analyzer
+                results = data_analyzer.analyze_data(uploaded_file_buffer, selected_analysis_types)
                 st.session_state.last_analysis_results = results # Store results for display
 
             if st.session_state.last_analysis_results:
                 st.subheader("Analysis Results:")
                 for analysis_type, content in st.session_state.last_analysis_results.items():
                     if content:
-                        st.markdown(f"**{analysis_type.replace('_', ' ').title()}**")
                         if analysis_type == "visualizations" and isinstance(content, dict):
+                            st.markdown(f"**{analysis_type.replace('_', ' ').title()}**")
                             # Handle plotly figures from data_analysis.py
                             for plot_name, fig_json in content.items():
                                 try:
@@ -1016,7 +1094,25 @@ def display_data_analysis_section():
                                     st.warning(f"Could not load plot '{plot_name}'. Invalid JSON.")
                                     st.json(fig_json) # Show raw JSON for debugging
                         else:
-                            st.write(content)
+                            # Check if the content contains our special Plotly JSON tag
+                            if isinstance(content, str) and "{PLOT_JSON::" in content:
+                                parts = content.split("{PLOT_JSON::")
+                                st.markdown(parts[0], unsafe_allow_html=True) # Display text before plot
+                                for part in parts[1:]:
+                                    if "}" in part:
+                                        plot_json_str = part.split("}")[0]
+                                        try:
+                                            fig = go.Figure(json.loads(plot_json_str))
+                                            st.plotly_chart(fig, use_container_width=True)
+                                        except json.JSONDecodeError:
+                                            st.warning(f"Could not load embedded plot. Invalid JSON.")
+                                            st.text(plot_json_str) # Show raw JSON
+                                        st.markdown(part.split("}", 1)[1], unsafe_allow_html=True) # Display text after plot
+                                    else:
+                                        st.markdown(part, unsafe_allow_html=True) # In case of malformed tag
+                            else:
+                                st.markdown(f"**{analysis_type.replace('_', ' ').title()}**")
+                                st.write(content)
                     else:
                         st.info(f"No {analysis_type.replace('_', ' ')} results to display.")
             else:
@@ -1059,7 +1155,7 @@ def display_analytics_dashboard():
 def display_footer():
     """Display the global footer."""
     st.markdown("---")
-    st.markdown("<p style='text-align: center; font-size: small;'>Powered by MultiAgentAI21</p>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align: center; font-size: small;'>Powered by Gemini | MultiAgentAI21 can make mistakes. Always verify important information.</p>", unsafe_allow_html=True)
 
 
 def user_profile_sidebar():
@@ -1140,6 +1236,9 @@ def main_app():
 if __name__ == "__main__":
     try:
         logger.info("Entering main execution block.")
+        # Ensure authentication state is checked, and Firestore client is ready before main_app
+        # This is particularly important for get_firestore_chat_collection() to work properly
+        # The initialize_firestore() call is outside this if/else, so it's always run.
         if not is_authenticated():
             login_page()
         else:
