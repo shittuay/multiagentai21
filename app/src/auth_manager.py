@@ -2,7 +2,6 @@ import streamlit as st
 import os
 import firebase_admin
 from firebase_admin import credentials, auth
-from firebase_admin import exceptions # Import exceptions module to access AuthError
 import logging
 import time # For generating timestamps for session IDs
 from datetime import datetime
@@ -113,7 +112,7 @@ def is_authenticated() -> bool:
             st.session_state.last_auth_check = time.time()
             logger.debug(f"User {user_uid} still active.")
             return True
-        except exceptions.AuthError as e: # Corrected: Use exceptions.AuthError
+        except auth.AuthError as e: # CORRECTED: Use auth.AuthError
             logger.warning(f"Firebase Auth Error during periodic check for {user_uid}: {e}. Clearing session.", exc_info=True)
             clear_user_session()
             st.error("Your session has expired or is invalid. Please log in again.")
@@ -139,14 +138,18 @@ def login_page():
     # Only set page config if not already set by main app
     # This flag prevents Streamlit from complaining about multiple st.set_page_config calls.
     # It assumes the main app.py will call it first.
-    if not hasattr(st, '_page_config_set') or not st.session_state.get('page_config_set', False):
+    # Using st.session_state.get('page_config_set', False) which is set in app.py
+    if not st.session_state.get('page_config_set', False):
         st.set_page_config(
             page_title="MultiAgentAI21 - Login",
             page_icon="🔒",
             layout="centered",
             initial_sidebar_state="collapsed",
         )
-        st.session_state._page_config_set = True # Set a flag to indicate it's been called
+        # Note: app.py should be responsible for setting this flag to True
+        # in its global st.set_page_config block to avoid conflicts.
+        # This is a fallback if app.py somehow doesn't set it first.
+        st.session_state.page_config_set = True
 
     st.title("🔒 Login or Sign Up")
 
@@ -182,7 +185,7 @@ def login_page():
                 st.success(f"Logged in as {user_record.email}!")
                 set_user_session(user_record) # Set session after "login"
                 st.rerun()
-            except exceptions.AuthError as e: # Corrected: Use exceptions.AuthError
+            except auth.AuthError as e: # CORRECTED: Use auth.AuthError
                 error_message = e.code.replace('_', ' ', 1).title() if e.code else "Unknown Error"
                 st.error(f"Login failed: {error_message}. Check your email and password.")
                 logger.error(f"Firebase Auth Error during login: {e}", exc_info=True)
@@ -218,7 +221,7 @@ def login_page():
                 )
                 st.success(f"Account created successfully for {user.email}! Please login.")
                 logger.info(f"New user created: {user.uid} with email {user.email} and display name {user.display_name}")
-            except exceptions.AuthError as e: # Corrected: Use exceptions.AuthError
+            except auth.AuthError as e: # CORRECTED: Use auth.AuthError
                 error_message = e.code.replace('_', ' ', 1).title() if e.code else "Unknown Error"
                 st.error(f"Sign up failed: {error_message}. User might already exist.")
                 logger.error(f"Firebase Auth Error during signup: {e}", exc_info=True)
