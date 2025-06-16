@@ -18,19 +18,24 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # --- Streamlit Page Configuration (MUST BE FIRST) ---
-# This ensures set_page_config is called only once and at the very beginning.
+# This ensures set_page_config is called only once and at the very beginning of script execution.
 try:
     logger.info("Setting up page configuration...")
     st.set_page_config(
         page_title="MultiAgentAI21 - Advanced AI Assistant",
-        page_icon="�",
+        page_icon="🚀",
         layout="wide",
         initial_sidebar_state="expanded",
     )
     logger.info("Page configuration set successfully")
+    # Set a flag to indicate that set_page_config has been called.
+    # This helps prevent the error if parts of the script are re-executed.
+    # This flag is primarily for the login_page in auth_manager.py.
+    st.session_state._page_config_set = True
 except Exception as e:
-    logger.error(f"Error in page configuration: {e}", exc_info=True)
-    st.error(f"Error setting up page: {e}. set_page_config() must be the first Streamlit command.")
+    logger.critical(f"Critical error in page configuration: {e}", exc_info=True)
+    st.error(f"A critical error occurred at startup (set_page_config): {e}. "
+             "This usually means it's not the very first Streamlit command.")
     st.stop()
 
 
@@ -710,8 +715,8 @@ if "user_info" not in st.session_state: # To store user info persistently
     st.session_state.user_info = None
 
 # Load available chats only AFTER Firestore client is confirmed to be initialized
-if db is not None:
-    st.session_state.available_chats = get_available_chats()
+# Moved this below the main_app call logic to avoid premature loading if auth fails.
+# It will be called inside main_app or relevant functions.
 
 
 # Use st.cache_resource to create and cache the MultiAgentAI21 instance
@@ -789,7 +794,13 @@ def display_chat_history_sidebar():
 
     # Display available chats
     # Re-fetch available chats to reflect latest from Firestore
-    st.session_state.available_chats = get_available_chats() 
+    # Only try to get available chats if db is successfully initialized
+    if db is not None:
+        st.session_state.available_chats = get_available_chats() 
+    else:
+        st.session_state.available_chats = [] # Ensure it's always a list
+        st.sidebar.warning("Firestore client not available. Cannot load chat history.")
+
     available_chats = st.session_state.available_chats
 
     if not available_chats:
@@ -885,7 +896,7 @@ def display_chat_messages():
                     metadata.append(f"🕐 {timestamp}")
                 
                 if metadata:
-                    st.caption(" | ".join(metadata)) # Corrected .bergabung to .join
+                    st.caption(" | ".join(metadata))
 
 
 def process_and_display_user_message(user_input):
@@ -1164,6 +1175,7 @@ def display_footer():
 
 def user_profile_sidebar():
     """Display user profile in sidebar"""
+    # Ensure is_authenticated is checked before trying to get user data
     if is_authenticated():
         user = get_current_user()
         with st.sidebar:
@@ -1240,8 +1252,8 @@ def main_app():
 if __name__ == "__main__":
     try:
         logger.info("Entering main execution block.")
-        # Ensure authentication state is checked, and Firestore client is ready before main_app
-        # This is particularly important for get_firestore_chat_collection() to work properly
+        # The st.set_page_config is now at the very top of the script.
+        # Check authentication state and run main app or login page.
         if not is_authenticated():
             login_page()
         else:
