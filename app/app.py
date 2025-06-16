@@ -108,7 +108,7 @@ setup_google_application_credentials()
 # --- Firestore Initialization (Client-Side) ---
 # Global Firestore client instance
 db = None
-firebase_auth_client = None # Firebase Auth client from firebase_admin SDK
+# firebase_auth_client = None # Removed as it's not used directly for Firestore client init and was causing the AttributeError
 
 # Use the global variables provided by the Canvas environment, with a fallback for local execution
 app_id = globals().get('__app_id', 'default-app-id')
@@ -117,7 +117,7 @@ initial_auth_token = globals().get('__initial_auth_token', None)
 
 
 def initialize_firestore():
-    global db, firebase_auth_client
+    global db # Removed firebase_auth_client from global
     if db:
         logger.info("Firestore client already initialized.")
         return db
@@ -127,25 +127,10 @@ def initialize_firestore():
         firebase_config = json.loads(firebase_config_str)
 
         # Initialize Firebase Admin SDK if not already done (auth_manager does this)
-        # We need the Firebase Admin SDK to get the auth client
         if not firebase_admin._apps:
              initialize_firebase() # Ensure it's initialized
 
-        # Set up a global Firebase Admin Auth client for server-side operations
-        firebase_auth_client = auth.get_auth()
-        
-        # Authenticate using __initial_auth_token or anonymously
-        # This part requires interaction with the Firebase client SDK,
-        # but for Python backend, we rely on Google Cloud's default credentials
-        # or a service account for Firestore access.
-        # The __initial_auth_token is primarily for *client-side* JS SDKs or custom auth flows.
-        # For Python Google Cloud Firestore client, it often uses service account credentials.
-
-        # For `google-cloud-firestore`, it typically uses GOOGLE_APPLICATION_CREDENTIALS
-        # which should have been set up by `setup_google_application_credentials()`.
-        # No explicit `signInWithCustomToken` is needed here for the `google-cloud-firestore` client.
-
-        # Initialize Firestore client
+        # Initialize Firestore client using the project ID from the config
         db = firestore.Client(project=firebase_config.get("projectId"))
         logger.info("Firestore client initialized successfully.")
         return db
@@ -455,14 +440,14 @@ st.markdown(
 
     .stButton > button:hover {
         transform: translateY(-2px);
-        box-shadow: 0 8px 25px rgba(59, 130, 246, 0.4);
+        box_shadow: 0 8px 25px rgba(59, 130, 246, 0.4);
         background: linear-gradient(135deg, #2563eb, #1e40af);
     }
 
     /* Primary button variant */
     .stButton[data-baseweb="button"][kind="primary"] > button {
         background: linear-gradient(135deg, #22c55e, #16a34a);
-        box-shadow: 0 4px 15px rgba(34, 197, 94, 0.3);
+        box_shadow: 0 8px 25px rgba(34, 197, 94, 0.3);
     }
 
     .stButton[data-baseweb="button"][kind="primary"] > button:hover {
@@ -559,7 +544,7 @@ st.markdown(
         padding: 2.5rem;
         margin-bottom: 2rem;
         border: 1px solid rgba(0, 0, 0, 0.1);
-        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+        box_shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
     }
 </style>
 """,
@@ -703,12 +688,12 @@ if "analysis_temp_files" not in st.session_state:
     st.session_state.analysis_temp_files = []
 
 
-# Use st.cache_resource to create and cache the MultiAgentCodingAI instance
+# Use st.cache_resource to create and cache the MultiAgentAI21 instance
 # @st.cache_resource(ttl=3600, max_entries=1)   # Temporarily disabled for testing
 def get_agent_system():
-    """Create and return the MultiAgentCodingAI instance (cached resource)"""
+    """Create and return the MultiAgentAI21 instance (cached resource)"""
     try:
-        logger.info("Starting MultiAgentCodingAI initialization...")
+        logger.info("Starting MultiAgentAI21 initialization...")
         
         # Check environment variables
         logger.info("Checking environment variables...")
@@ -720,13 +705,13 @@ def get_agent_system():
         logger.info("GOOGLE_API_KEY found")
         
         # Create the agent instance
-        logger.info("Creating MultiAgentCodingAI instance...")
+        logger.info("Creating MultiAgentAI21 instance...")
         try:
             agent_instance = MultiAgentCodingAI()
-            logger.info("MultiAgentCodingAI instance created successfully")
+            logger.info("MultiAgentAI21 instance created successfully")
             return agent_instance
         except Exception as e:
-            error_msg = f"Error creating MultiAgentCodingAI instance: {str(e)}"
+            error_msg = f"Error creating MultiAgentAI21 instance: {str(e)}"
             logger.error(error_msg, exc_info=True)
             raise RuntimeError(error_msg)
             
@@ -868,7 +853,7 @@ def display_chat_messages():
                     metadata.append(f"🤖 {message['agent_type'].replace('_', ' ').title()}")
                 if "timestamp" in message:
                     timestamp = datetime.fromisoformat(message["timestamp"]).strftime("%H:%M:%S")
-                    metadata.append(f"� {timestamp}")
+                    metadata.append(f"🕐 {timestamp}")
                 
                 if metadata:
                     st.caption(" | ".join(metadata))
