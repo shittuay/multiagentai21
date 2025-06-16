@@ -13,30 +13,31 @@ import time
 from datetime import datetime # Explicitly import datetime here for clarity and robustness
 import io # Added this import statement for BytesIO usage
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
 
 # --- Streamlit Page Configuration (MUST BE FIRST) ---
 # This ensures set_page_config is called only once and at the very beginning of script execution.
 try:
-    logger.info("Setting up page configuration...")
     st.set_page_config(
         page_title="MultiAgentAI21 - Advanced AI Assistant",
         page_icon="🚀",
         layout="wide",
         initial_sidebar_state="expanded",
     )
-    logger.info("Page configuration set successfully")
     # Set a flag to indicate that set_page_config has been called.
     # This helps prevent the error if parts of the script are re-executed.
     # This flag is primarily for the login_page in auth_manager.py.
     st.session_state._page_config_set = True
 except Exception as e:
-    logger.critical(f"Critical error in page configuration: {e}", exc_info=True)
+    # Critical error at startup should stop the app from running further
     st.error(f"A critical error occurred at startup (set_page_config): {e}. "
              "This usually means it's not the very first Streamlit command.")
     st.stop()
+
+# Configure logging (moved after st.set_page_config)
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+logger.info("Setting up page configuration and logging...") # Log after configuration is set
+logger.info("Page configuration set successfully") # Moved this log here too
 
 
 logger.info("Application starting...")
