@@ -110,10 +110,11 @@ setup_google_application_credentials()
 db = None
 firebase_auth_client = None # Firebase Auth client from firebase_admin SDK
 
-# Use the global variables provided by the Canvas environment
-app_id = typeof(__app_id) !== 'undefined' ? __app_id : 'default-app-id'
-firebase_config_str = typeof(__firebase_config) !== 'undefined' ? __firebase_config : '{}'
-initial_auth_token = typeof(__initial_auth_token) !== 'undefined' ? __initial_auth_token : None
+# Use the global variables provided by the Canvas environment, with a fallback for local execution
+app_id = globals().get('__app_id', 'default-app-id')
+firebase_config_str = globals().get('__firebase_config', '{}')
+initial_auth_token = globals().get('__initial_auth_token', None)
+
 
 def initialize_firestore():
     global db, firebase_auth_client
@@ -217,7 +218,6 @@ try:
 except ImportError as e:
     logger.error(f"Import error: {e}", exc_info=True)
     st.error(f"❌ Failed to import required modules: {e}")
-    st.error("Make sure all dependencies are installed")
     st.stop()
 
 # Page configuration
@@ -467,7 +467,7 @@ st.markdown(
 
     .stButton[data-baseweb="button"][kind="primary"] > button:hover {
         background: linear-gradient(135deg, #16a34a, #15803d);
-        box-shadow: 0 8px 25px rgba(34, 197, 94, 0.4);
+        box_shadow: 0 8px 25px rgba(34, 197, 94, 0.4);
     }
 
     .stSelectbox > div > div {
@@ -868,7 +868,7 @@ def display_chat_messages():
                     metadata.append(f"🤖 {message['agent_type'].replace('_', ' ').title()}")
                 if "timestamp" in message:
                     timestamp = datetime.fromisoformat(message["timestamp"]).strftime("%H:%M:%S")
-                    metadata.append(f"🕐 {timestamp}")
+                    metadata.append(f"� {timestamp}")
                 
                 if metadata:
                     st.caption(" | ".join(metadata))
