@@ -5,6 +5,7 @@ import json
 import logging
 import os
 import io
+from typing import Dict, List, Optional # Added this import
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -285,4 +286,3 @@ class DataAnalyzer:
             logger.info(f"Finished generating content for {analysis_type}.")
 
         return results
-
