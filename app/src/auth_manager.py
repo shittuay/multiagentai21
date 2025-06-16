@@ -2,6 +2,7 @@ import streamlit as st
 import os
 import firebase_admin
 from firebase_admin import credentials, auth
+from firebase_admin import exceptions # Import exceptions module to access AuthError
 import logging
 import time # For generating timestamps for session IDs
 from datetime import datetime
@@ -112,7 +113,7 @@ def is_authenticated() -> bool:
             st.session_state.last_auth_check = time.time()
             logger.debug(f"User {user_uid} still active.")
             return True
-        except firebase_admin.auth.AuthError as e:
+        except exceptions.AuthError as e: # Corrected: Use exceptions.AuthError
             logger.warning(f"Firebase Auth Error during periodic check for {user_uid}: {e}. Clearing session.", exc_info=True)
             clear_user_session()
             st.error("Your session has expired or is invalid. Please log in again.")
@@ -181,7 +182,7 @@ def login_page():
                 st.success(f"Logged in as {user_record.email}!")
                 set_user_session(user_record) # Set session after "login"
                 st.rerun()
-            except firebase_admin.auth.AuthError as e:
+            except exceptions.AuthError as e: # Corrected: Use exceptions.AuthError
                 error_message = e.code.replace('_', ' ', 1).title() if e.code else "Unknown Error"
                 st.error(f"Login failed: {error_message}. Check your email and password.")
                 logger.error(f"Firebase Auth Error during login: {e}", exc_info=True)
@@ -217,7 +218,7 @@ def login_page():
                 )
                 st.success(f"Account created successfully for {user.email}! Please login.")
                 logger.info(f"New user created: {user.uid} with email {user.email} and display name {user.display_name}")
-            except firebase_admin.auth.AuthError as e:
+            except exceptions.AuthError as e: # Corrected: Use exceptions.AuthError
                 error_message = e.code.replace('_', ' ', 1).title() if e.code else "Unknown Error"
                 st.error(f"Sign up failed: {error_message}. User might already exist.")
                 logger.error(f"Firebase Auth Error during signup: {e}", exc_info=True)
