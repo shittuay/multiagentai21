@@ -11,6 +11,7 @@ import json
 import tempfile
 import time
 from datetime import datetime # Explicitly import datetime here for clarity and robustness
+import io # Added this import statement
 
 # Firebase Imports for Firestore (Client SDK)
 from firebase_admin import credentials # For Firebase Admin SDK
@@ -451,7 +452,7 @@ st.markdown(
     }
 
     .stButton[data-baseweb="button"][kind="primary"] > button:hover {
-        background: linear-gradient(135deg, #16a34a, #15803d);
+        background: linear_gradient(135deg, #16a34a, #15803d);
         box_shadow: 0 8px 25px rgba(34, 197, 94, 0.4);
     }
 
@@ -853,10 +854,10 @@ def display_chat_messages():
                     metadata.append(f"🤖 {message['agent_type'].replace('_', ' ').title()}")
                 if "timestamp" in message:
                     timestamp = datetime.fromisoformat(message["timestamp"]).strftime("%H:%M:%S")
-                    metadata.append(f"🕐 {timestamp}")
+                    metadata.append(f"� {timestamp}")
                 
                 if metadata:
-                    st.caption(" | ".join(metadata))
+                    st.caption(" | ". bergabung(metadata))
 
 
 def process_and_display_user_message(user_input):
@@ -1047,7 +1048,6 @@ def display_data_analysis_section():
             # Write uploaded file to a temporary location using BytesIO
             # Streamlit's file_uploader gives a BytesIO object directly.
             # We need to pass this BytesIO object to the DataAnalyzer.
-            # No need to write to disk if DataAnalyzer can accept BytesIO.
             
             # Create a BytesIO object from the uploaded file buffer
             uploaded_file_buffer = io.BytesIO(uploaded_file.getvalue())
