@@ -135,14 +135,16 @@ def get_current_user() -> dict:
 # --- Authentication Pages ---
 def login_page():
     # Only set page config if not already set by main app
-    if not hasattr(st, 'page_config_set'): # Check if it's already been called by the main app
+    # This flag prevents Streamlit from complaining about multiple st.set_page_config calls.
+    # It assumes the main app.py will call it first.
+    if not hasattr(st, 'page_config_set'):
         st.set_page_config(
             page_title="MultiAgentAI21 - Login",
             page_icon="🔒",
             layout="centered",
             initial_sidebar_state="collapsed",
         )
-        st.page_config_set = True # Set a flag
+        st.page_config_set = True # Set a flag to indicate it's been called
 
     st.title("🔒 Login or Sign Up")
 

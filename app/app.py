@@ -11,18 +11,19 @@ import json
 import tempfile
 import time
 from datetime import datetime # Explicitly import datetime here for clarity and robustness
-import io # Added this import statement
+import io # Added this import statement for BytesIO usage
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # --- Streamlit Page Configuration (MUST BE FIRST) ---
+# This ensures set_page_config is called only once and at the very beginning.
 try:
     logger.info("Setting up page configuration...")
     st.set_page_config(
         page_title="MultiAgentAI21 - Advanced AI Assistant",
-        page_icon="🚀",
+        page_icon="�",
         layout="wide",
         initial_sidebar_state="expanded",
     )
@@ -172,18 +173,20 @@ def check_environment():
     issues = []
     
     # Check for Firebase API Key (client-side config)
+    # These are typically not needed on the Python backend unless directly interacting with client-side APIs
+    # Keeping them for completeness but note they are often for JS client SDK.
     if not os.getenv("FIREBASE_API_KEY"):
-        issues.append("FIREBASE_API_KEY is not set")
+        issues.append("FIREBASE_API_KEY is not set (may be needed for client-side functionality)")
     if not os.getenv("FIREBASE_AUTH_DOMAIN"):
-        issues.append("FIREBASE_AUTH_DOMAIN is not set")
+        issues.append("FIREBASE_AUTH_DOMAIN is not set (may be needed for client-side functionality)")
     if not os.getenv("FIREBASE_PROJECT_ID"):
-        issues.append("FIREBASE_PROJECT_ID is not set")
+        issues.append("FIREBASE_PROJECT_ID is not set (may be needed for client-side functionality)")
     if not os.getenv("FIREBASE_STORAGE_BUCKET"):
-        issues.append("FIREBASE_STORAGE_BUCKET is not set")
+        issues.append("FIREBASE_STORAGE_BUCKET is not set (may be needed for client-side functionality)")
     if not os.getenv("FIREBASE_MESSAGING_SENDER_ID"):
-        issues.append("FIREBASE_MESSAGING_SENDER_ID is not set")
+        issues.append("FIREBASE_MESSAGING_SENDER_ID is not set (may be needed for client-side functionality)")
     if not os.getenv("FIREBASE_APP_ID"):
-        issues.append("FIREBASE_APP_ID is not set")
+        issues.append("FIREBASE_APP_ID is not set (may be needed for client-side functionality)")
 
     # Check for Google API Key (for Gemini etc.)
     if not os.getenv("GOOGLE_API_KEY"):
@@ -196,7 +199,7 @@ def check_environment():
     # IMPORTANT: Check GOOGLE_APPLICATION_CREDENTIALS, which is set by auth_manager.py
     # This is the path to the service account key file.
     if not os.getenv("GOOGLE_APPLICATION_CREDENTIALS"):
-        issues.append("GOOGLE_APPLICATION_CREDENTIALS is not set (expected a file path to service account key)")
+        issues.append("GOOGLE_APPLICATION_CREDENTIALS is not set (expected a file path to service account key for Firebase Admin SDK and Firestore)")
     
     return issues
 
@@ -560,12 +563,12 @@ def get_firestore_chat_collection():
     """Returns the Firestore collection reference for chat histories."""
     # Ensure Firestore is initialized
     if db is None:
-        initialize_firestore()
+        # If db is None at this point, it means get_firestore_client() failed.
+        # This shouldn't happen if get_firestore_client() has st.stop() after error.
+        st.error("Firestore client is not initialized. Cannot access chat history.")
+        return None # Return None to prevent further errors
     
     # Get the current user's UID. If not authenticated, use a generic/anonymous ID.
-    # IMPORTANT: The auth.currentUser.uid is from firebase_admin.auth.
-    # For a purely client-side setup using __initial_auth_token, you'd need a client auth object.
-    # For now, we assume get_current_user() provides UID from the auth_manager.
     user_info = get_current_user()
     user_uid = user_info.get("uid")
 
@@ -583,8 +586,13 @@ def get_firestore_chat_collection():
 
 def save_chat_history(chat_id: str, messages: list):
     """Save chat history to Firestore."""
+    chat_collection = get_firestore_chat_collection()
+    if chat_collection is None: # Handle case where Firestore client isn't ready
+        logger.error("Attempted to save chat history but Firestore collection is None.")
+        return
+
     try:
-        chat_ref = get_firestore_chat_collection().document(chat_id)
+        chat_ref = chat_collection.document(chat_id)
         
         chat_data = {
             "chat_id": chat_id,
@@ -604,8 +612,13 @@ def save_chat_history(chat_id: str, messages: list):
 
 def load_chat_history(chat_id: str) -> list:
     """Load chat history from Firestore."""
+    chat_collection = get_firestore_chat_collection()
+    if chat_collection is None: # Handle case where Firestore client isn't ready
+        logger.error("Attempted to load chat history but Firestore collection is None.")
+        return []
+
     try:
-        chat_ref = get_firestore_chat_collection().document(chat_id)
+        chat_ref = chat_collection.document(chat_id)
         doc = chat_ref.get()
         
         if doc.exists:
@@ -625,10 +638,15 @@ def load_chat_history(chat_id: str) -> list:
 
 def get_available_chats() -> list:
     """Get list of available chat sessions from Firestore."""
+    chat_collection = get_firestore_chat_collection()
+    if chat_collection is None: # Handle case where Firestore client isn't ready
+        logger.error("Attempted to get available chats but Firestore collection is None.")
+        return []
+
     try:
         chats = []
         # Order by 'last_updated' in descending order
-        chat_docs = get_firestore_chat_collection().order_by("last_updated", direction=firestore.Query.DESCENDING).stream()
+        chat_docs = chat_collection.order_by("last_updated", direction=firestore.Query.DESCENDING).stream()
         
         for doc in chat_docs:
             chat_data = doc.to_dict()
@@ -683,13 +701,17 @@ if "agent_locked" not in st.session_state:
 if "current_chat_id" not in st.session_state:
     st.session_state.current_chat_id = datetime.now().strftime("%Y%m%d_%H%M%S")
 if "available_chats" not in st.session_state:
-    st.session_state.available_chats = get_available_chats() # Load from Firestore on startup
+    st.session_state.available_chats = [] # Initialize empty, load after auth
 if "last_analysis_results" not in st.session_state:
     st.session_state.last_analysis_results = None
 if "analysis_temp_files" not in st.session_state:
     st.session_state.analysis_temp_files = []
 if "user_info" not in st.session_state: # To store user info persistently
     st.session_state.user_info = None
+
+# Load available chats only AFTER Firestore client is confirmed to be initialized
+if db is not None:
+    st.session_state.available_chats = get_available_chats()
 
 
 # Use st.cache_resource to create and cache the MultiAgentAI21 instance
@@ -974,7 +996,7 @@ def show_agent_examples():
             "Generate insights from marketing data",
         ],
         AgentType.CUSTOMER_SERVICE: [
-            "Help with billing questions",
+            "Handle an angry customer complaint about a defective product",
             "Resolve a technical support issue",
             "Explain our return policy",
         ],
@@ -1045,16 +1067,6 @@ def display_data_analysis_section():
         try:
             # Clean up any existing temporary files
             cleanup_analysis_files()
-            
-            # Save the uploaded file temporarily
-            temp_dir = os.path.join(project_root, "temp_uploads")
-            os.makedirs(temp_dir, exist_ok=True)
-            temp_file_path = os.path.join(temp_dir, uploaded_file.name)
-            
-            # Write uploaded file to a temporary location using BytesIO
-            # Streamlit's file_uploader gives a BytesIO object directly.
-            # We need to pass this BytesIO object to the DataAnalyzer.
-            # No need to write to disk if DataAnalyzer can accept BytesIO.
             
             # Create a BytesIO object from the uploaded file buffer
             uploaded_file_buffer = io.BytesIO(uploaded_file.getvalue())
@@ -1230,7 +1242,6 @@ if __name__ == "__main__":
         logger.info("Entering main execution block.")
         # Ensure authentication state is checked, and Firestore client is ready before main_app
         # This is particularly important for get_firestore_chat_collection() to work properly
-        # The initialize_firestore() call is outside this if/else, so it's always run.
         if not is_authenticated():
             login_page()
         else:
