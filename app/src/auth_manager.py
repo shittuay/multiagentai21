@@ -1,209 +1,205 @@
-import os
-import json
-import logging
 import streamlit as st
+import os
 import firebase_admin
 from firebase_admin import credentials, auth
-from google.oauth2 import service_account
+import logging
+import time # For generating timestamps for session IDs
+from datetime import datetime
 
-# Configure logging
-logging.basicConfig(level=logging.INFO, format='%(levelname)s:%(name)s:%(message)s')
 logger = logging.getLogger(__name__)
 
-# Global variable to store the Firebase app instance
-firebase_app = None
+# --- Firebase Admin SDK Initialization ---
+# This part runs once when the module is imported.
+# It uses the service account key which should be mounted into the Docker container.
+_firebase_app = None
 
 def initialize_firebase():
-    global firebase_app
-    if firebase_app:
-        logger.info("Firebase app already initialized.")
+    global _firebase_app
+    if _firebase_app:
+        logger.info("Firebase Admin SDK already initialized.")
+        return _firebase_app
+
+    # Ensure GOOGLE_APPLICATION_CREDENTIALS is set for the Firebase Admin SDK
+    service_account_key_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
+    if not service_account_key_path or not os.path.exists(service_account_key_path):
+        error_msg = f"GOOGLE_APPLICATION_CREDENTIALS environment variable not set or file not found at {service_account_key_path}. This is required for Firebase Admin SDK."
+        logger.critical(error_msg)
+        st.error(f"❌ Authentication setup failed: {error_msg}")
+        # In a real app, you might want to stop here or redirect to an error page.
+        # For now, we'll let it proceed, but auth functions will likely fail.
+        return None
+    
+    try:
+        cred = credentials.Certificate(service_account_key_path)
+        _firebase_app = firebase_admin.initialize_app(cred)
+        logger.info("Firebase Admin SDK initialized successfully.")
+        return _firebase_app
+    except Exception as e:
+        logger.critical(f"Failed to initialize Firebase Admin SDK: {e}", exc_info=True)
+        st.error(f"❌ Failed to initialize Firebase Admin SDK: {e}")
+        return None
+
+# Function to set GOOGLE_APPLICATION_CREDENTIALS for local development
+# This will be called by app.py on startup.
+def setup_google_application_credentials():
+    # Only set if running locally and the env var is not already set
+    if "GOOGLE_APPLICATION_CREDENTIALS" not in os.environ and os.path.exists("firebase_admin_sdk_key.json"):
+        os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "firebase_admin_sdk_key.json"
+        logger.info("GOOGLE_APPLICATION_CREDENTIALS set for local development.")
+    elif "GOOGLE_APPLICATION_CREDENTIALS" in os.environ:
+        logger.info(f"GOOGLE_APPLICATION_CREDENTIALS already set: {os.environ['GOOGLE_APPLICATION_CREDENTIALS']}")
+    else:
+        logger.warning("GOOGLE_APPLICATION_CREDENTIALS not found and firebase_admin_sdk_key.json not in root. Firebase Admin SDK might fail.")
+
+
+# --- Session Management Functions ---
+def set_user_session(user_record):
+    """Sets user information in session state and creates a session ID."""
+    user_info = {
+        "uid": user_record.uid,
+        "email": user_record.email,
+        "display_name": user_record.display_name if user_record.display_name else user_record.email,
+        "photo_url": user_record.photo_url,
+        "provider": user_record.provider_id,
+        "last_login_at": datetime.now().isoformat(),
+        # Store a simple session identifier
+        "session_id": f"{user_record.uid}-{int(time.time())}" 
+    }
+    st.session_state.user_info = user_info
+    logger.info(f"User session set for UID: {user_record.uid}")
+
+def clear_user_session():
+    """Clears user information from session state."""
+    if "user_info" in st.session_state:
+        del st.session_state.user_info
+    logger.info("User session cleared.")
+
+def is_authenticated() -> bool:
+    """Checks if a user is currently authenticated."""
+    # Check for user_info in session state
+    if st.session_state.get("user_info") and st.session_state.user_info.get("uid"):
+        logger.debug(f"User already authenticated from session state: {st.session_state.user_info.get('uid')}")
+        return True
+    return False
+
+def get_current_user() -> dict:
+    """Returns the current authenticated user's information from session state."""
+    if is_authenticated():
+        logger.debug(f"Returning current user from session state: {st.session_state.user_info.get('email')}")
+        return st.session_state.user_info
+    logger.debug("No current user found in session state.")
+    return {}
+
+# --- Authentication Pages ---
+def login_page():
+    st.set_page_config(
+        page_title="MultiAgentAI21 - Login",
+        page_icon="🔒",
+        layout="centered",
+        initial_sidebar_state="collapsed",
+    )
+    st.title("🔒 Login or Sign Up")
+
+    # Ensure Firebase Admin SDK is initialized
+    if not _firebase_app:
+        st.error("Firebase Admin SDK is not initialized. Cannot proceed with authentication.")
         return
 
-    try:
-        # --- NEW: Attempt to load Firebase Admin SDK credentials from a mounted file ---
-        firebase_admin_key_path = "/app/firebase_admin_sdk_key.json"
-        if os.path.exists(firebase_admin_key_path):
-            logger.info(f"Attempting to initialize Firebase Admin SDK from file: {firebase_admin_key_path}")
-            # Load the JSON content from the file
-            with open(firebase_admin_key_path, 'r') as f:
-                credentials_info = json.load(f)
-            cred = credentials.Certificate(credentials_info)
-            firebase_app = firebase_admin.initialize_app(cred)
-            logger.info(f"Firebase Admin SDK initialized successfully from file: {firebase_admin_key_path}")
-            return
+    tab = st.tabs(["Login", "Sign Up"])
 
-        # --- OLD (Fallback): Attempt to load from FIREBASE_ADMIN_SDK_JSON environment variable (kept as fallback) ---
-        credentials_json_str = os.getenv('FIREBASE_ADMIN_SDK_JSON')
-        if credentials_json_str:
-            logger.info("Found FIREBASE_ADMIN_SDK_JSON environment variable. Attempting to initialize from string.")
-            credentials_info = json.loads(credentials_json_str)
-            cred = credentials.Certificate(credentials_info)
-            firebase_app = firebase_admin.initialize_app(cred)
-            logger.info("Firebase Admin SDK initialized successfully from environment variable.")
-            return
-
-        logger.warning("No Firebase Admin SDK credentials found (neither file nor environment variable). Firebase Admin SDK will not be initialized.")
-        # If no credentials are found by this point, raise an error to stop app startup as it's critical
-        raise ValueError("Firebase credentials not found via environment variable or any local/mounted file path. Please ensure 'firebase_admin_sdk_key.json' is present in the /app directory (via Docker volume mount) or FIREBASE_ADMIN_SDK_JSON environment variable is set.")
-
-    except json.JSONDecodeError as e:
-        logger.error(f"JSON decoding error for Firebase Admin SDK credentials: {e}")
-        raise ValueError(f"Invalid JSON for Firebase Admin SDK credentials: {e}")
-    except Exception as e:
-        logger.error(f"Error initializing Firebase Admin SDK: {e}", exc_info=True)
-        raise ValueError(f"Failed to initialize Firebase Admin SDK: {e}")
-
-def authenticate_user(email, password):
-    global firebase_app
-    if not firebase_app:
-        logger.error("Authentication error: The default Firebase app does not exist. Make sure to initialize the SDK by calling initialize_app().")
-        return None, "Authentication failed. Firebase SDK not initialized."
-    try:
-        user = auth.get_user_by_email(email)
-        logger.info(f"User {email} found with UID: {user.uid}")
-        # Note: Firebase Admin SDK does not authenticate users directly with email/password.
-        # This function would typically be used for server-side user management or token verification.
-        # For a Streamlit app with client-side login, you'd usually verify a token or mock user data here.
-        # For now, finding the user is considered 'successful' for the purpose of the login flow.
-        return user, "Authentication successful."
-
-    except firebase_admin.auth.UserNotFoundError:
-        logger.warning(f"Authentication failed: User with email {email} not found.")
-        return None, "Authentication failed. User not found."
-    except firebase_admin.auth.AuthError as e:
-        logger.error(f"Firebase Authentication error: {e}")
-        return None, f"Authentication failed: {e.code}"
-    except Exception as e:
-        logger.error(f"Authentication error: An unexpected error occurred: {e}")
-        return None, f"Authentication failed. An unexpected error occurred: {e}"
-
-def create_user(email, password):
-    global firebase_app
-    if not firebase_app:
-        logger.error("User creation error: Firebase app not initialized.")
-        return None, "User creation failed. Firebase SDK not initialized."
-    try:
-        user = auth.create_user(email=email, password=password)
-        logger.info(f"Successfully created new user: {user.uid}")
-        return user, "User created successfully. You can now sign in."
-    except firebase_admin.auth.AuthError as e:
-        logger.error(f"Firebase Auth error during user creation: {e}")
-        return None, f"User creation failed: {e.code}"
-    except Exception as e:
-        logger.error(f"Unexpected error during user creation: {e}")
-        return None, f"User creation failed. An unexpected error occurred: {e}"
-
-# Streamlit-specific functions for UI
-def login_page():
-    st.image("https://placehold.co/150x150/lightblue/white?text=Logo", width=150) # Example placeholder
-    st.title("MultiAgentAI21")
-    st.subheader("Login Mode")
-
-    login_tab, signup_tab = st.tabs(["Login", "Sign Up"])
-
-    with login_tab:
-        st.subheader("Welcome Back")
-        email = st.text_input("Email Address", key="login_email")
+    with tab[0]:
+        st.subheader("Login to your account")
+        email = st.text_input("Email", key="login_email")
         password = st.text_input("Password", type="password", key="login_password")
 
-        if st.button("Sign In", key="signin_button"):
-            if email and password:
-                user, message = authenticate_user(email, password)
-                if user:
-                    st.session_state["authenticated"] = True
-                    st.session_state["user_email"] = email
-                    st.session_state["user_uid"] = user.uid
-                    st.session_state["auth_message"] = "Login successful!"
-                    st.rerun()
-                else:
-                    st.error(message)
-            else:
-                st.error("Please enter both email and password.")
+        if st.button("Login", key="login_button"):
+            if not email or not password:
+                st.error("Email and password are required.")
+                return
 
-    with signup_tab:
-        st.subheader("Create a New Account")
-        new_email = st.text_input("Email Address", key="signup_email")
+            try:
+                # Sign in user with email and password
+                user_record = auth.get_user_by_email(email)
+                # For direct password verification, Firebase Admin SDK doesn't expose `signInWithEmailAndPassword`.
+                # It primarily works with ID tokens or custom token generation.
+                # Since Streamlit is a server-side app, we can't directly use client-side Firebase Auth JS SDK.
+                # A common pattern is to have a separate backend endpoint for password-based login
+                # that then issues a custom token, or use something like `requests` to call a Firebase Auth REST API endpoint.
+                
+                # For simplicity here, we'll assume successful email match is enough for "login" if user exists.
+                # In a production app, you'd integrate with actual client-side Firebase Auth or a secure backend.
+                
+                # Verify password is not directly done here for security reasons with Firebase Admin SDK.
+                # If you need this, you'd typically verify the ID Token sent from a client-side app
+                # or use a callable function that uses client-side auth.
+                # For this Streamlit context, we will simply check if the user exists.
+                # THIS IS NOT A SECURE PASSWORD VERIFICATION. For real apps, use client-side Firebase Auth.
+                
+                # Placeholder for secure password verification:
+                # If you were receiving an ID token from a client:
+                # decoded_token = auth.verify_id_token(id_token_from_client)
+                # user_record = auth.get_user(decoded_token['uid'])
+
+                st.success(f"Logged in as {user_record.email}!")
+                set_user_session(user_record) # Set session after "login"
+                st.rerun()
+            except firebase_admin.auth.AuthError as e:
+                error_message = e.code.replace('_', ' ').title()
+                st.error(f"Login failed: {error_message}. Check your email and password.")
+                logger.error(f"Firebase Auth Error during login: {e}", exc_info=True)
+            except Exception as e:
+                st.error(f"An unexpected error occurred during login: {e}")
+                logger.error(f"Unexpected error during login: {e}", exc_info=True)
+
+    with tab[1]:
+        st.subheader("Create a new account")
+        new_name = st.text_input("Your Name", key="signup_name") # New field for name
+        new_email = st.text_input("Email", key="signup_email")
         new_password = st.text_input("Password", type="password", key="signup_password")
         confirm_password = st.text_input("Confirm Password", type="password", key="confirm_password")
 
         if st.button("Sign Up", key="signup_button"):
-            if new_email and new_password and confirm_password:
-                if new_password == confirm_password:
-                    user, message = create_user(new_email, new_password)
-                    if user:
-                        st.success(message)
-                        # Optionally auto-login after signup
-                        st.session_state["authenticated"] = True
-                        st.session_state["user_email"] = new_email
-                        st.session_state["user_uid"] = user.uid
-                        st.session_state["auth_message"] = "Account created and logged in!"
-                        st.rerun()
-                    else:
-                        st.error(message)
-                else:
-                    st.error("Passwords do not match.")
-            else:
-                st.error("Please fill in all fields.")
+            if not new_email or not new_password or not new_name:
+                st.error("Name, Email, and Password are required.")
+                return
+            if new_password != confirm_password:
+                st.error("Passwords do not match.")
+                return
+            if len(new_password) < 6:
+                st.error("Password must be at least 6 characters long.")
+                return
+
+            try:
+                user = auth.create_user(
+                    email=new_email,
+                    password=new_password,
+                    display_name=new_name, # Set display name during creation
+                    email_verified=False,
+                    disabled=False
+                )
+                st.success(f"Account created successfully for {user.email}! Please login.")
+                logger.info(f"New user created: {user.uid} with email {user.email} and display name {user.display_name}")
+            except firebase_admin.auth.AuthError as e:
+                error_message = e.code.replace('_', ' ').title()
+                st.error(f"Sign up failed: {error_message}. User might already exist.")
+                logger.error(f"Firebase Auth Error during signup: {e}", exc_info=True)
+            except Exception as e:
+                st.error(f"An unexpected error occurred during sign up: {e}")
+                logger.error(f"Unexpected error during signup: {e}", exc_info=True)
 
 def logout():
-    st.session_state["authenticated"] = False
-    st.session_state["user_email"] = None
-    st.session_state["user_uid"] = None
-    st.session_state["auth_message"] = "Logged out successfully."
+    """Logs out the current user by clearing session state."""
+    clear_user_session()
+    logger.info("User logged out.")
+    st.success("You have been logged out.")
     st.rerun()
 
-def is_authenticated():
-    return st.session_state.get("authenticated", False)
-
 def login_required(func):
+    """Decorator to ensure a user is logged in before accessing a page."""
     def wrapper(*args, **kwargs):
         if not is_authenticated():
             login_page()
-            return None # Important: Stop further execution of the decorated function
+            return None # Stop execution of the decorated function
         return func(*args, **kwargs)
     return wrapper
 
-def get_current_user():
-    return {
-        "email": st.session_state.get("user_email"),
-        "uid": st.session_state.get("user_uid"),
-        # Add other user details if available from Firebase (e.g., display_name, photo_url)
-        # For simplicity, we'll just return email and uid for now
-    }
-
-
-# --- Handle Google Application Credentials for other Google Cloud services ---
-# This function aims to set GOOGLE_APPLICATION_CREDENTIALS to a temporary file
-# if GOOGLE_APPLICATION_CREDENTIALS_JSON environment variable is provided,
-# or to look for a mounted file.
-def setup_google_application_credentials():
-    # --- NEW: Prefer loading from a mounted file for GOOGLE_APPLICATION_CREDENTIALS ---
-    google_creds_file_path = "/app/google_application_credentials_key.json"
-    if os.path.exists(google_creds_file_path):
-        logger.info(f"Found Google Application Credentials file at: {google_creds_file_path}. Setting GOOGLE_APPLICATION_CREDENTIALS.")
-        os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = google_creds_file_path
-        return
-
-    # --- OLD (Fallback): Attempt to use GOOGLE_APPLICATION_CREDENTIALS_JSON env var and write to temp file ---
-    google_creds_json_str = os.getenv('GOOGLE_APPLICATION_CREDENTIALS_JSON')
-    if google_creds_json_str:
-        logger.info("Found GOOGLE_APPLICATION_CREDENTIALS_JSON environment variable. Attempting to write to temporary file.")
-        try:
-            import tempfile
-            # Ensure the temp file content is the JSON string itself, not a string representation of the JSON object
-            with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.json') as temp_file:
-                temp_file.write(google_creds_json_str)
-                temp_file_path = temp_file.name
-            os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = temp_file_path
-            logger.info(f"GOOGLE_APPLICATION_CREDENTIALS set to temporary file: {temp_file_path}")
-        except Exception as e:
-            logger.error(f"Error setting GOOGLE_APPLICATION_CREDENTIALS from JSON string: {e}")
-            # Do not re-raise, allow app to continue with other credential methods if available
-    elif not os.getenv('GOOGLE_APPLICATION_CREDENTIALS'):
-        logger.warning("GOOGLE_APPLICATION_CREDENTIALS_JSON and GOOGLE_APPLICATION_CREDENTIALS are not set. Some Google Cloud services might not authenticate.")
-
-# Initialize Firebase Admin SDK first
-initialize_firebase()
-
-# Set up Google Application Credentials (for other Google Cloud APIs)
-setup_google_application_credentials()

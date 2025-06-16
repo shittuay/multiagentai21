@@ -109,7 +109,6 @@ setup_google_application_credentials()
 # --- Firestore Initialization (Client-Side) ---
 # Global Firestore client instance
 db = None
-# firebase_auth_client = None # Removed as it's not used directly for Firestore client init and was causing the AttributeError
 
 # Use the global variables provided by the Canvas environment, with a fallback for local execution
 app_id = globals().get('__app_id', 'default-app-id')
@@ -118,7 +117,7 @@ initial_auth_token = globals().get('__initial_auth_token', None)
 
 
 def initialize_firestore():
-    global db # Removed firebase_auth_client from global
+    global db
     if db:
         logger.info("Firestore client already initialized.")
         return db
@@ -441,18 +440,18 @@ st.markdown(
 
     .stButton > button:hover {
         transform: translateY(-2px);
-        box_shadow: 0 8px 25px rgba(59, 130, 246, 0.4);
+        box-shadow: 0 8px 25px rgba(59, 130, 246, 0.4);
         background: linear-gradient(135deg, #2563eb, #1e40af);
     }
 
     /* Primary button variant */
     .stButton[data-baseweb="button"][kind="primary"] > button {
         background: linear-gradient(135deg, #22c55e, #16a34a);
-        box_shadow: 0 8px 25px rgba(34, 197, 94, 0.3);
+        box-shadow: 0 8px 25px rgba(34, 197, 94, 0.3);
     }
 
     .stButton[data-baseweb="button"][kind="primary"] > button:hover {
-        background: linear_gradient(135deg, #16a34a, #15803d);
+        background: linear-gradient(135deg, #16a34a, #15803d);
         box_shadow: 0 8px 25px rgba(34, 197, 94, 0.4);
     }
 
@@ -545,7 +544,7 @@ st.markdown(
         padding: 2.5rem;
         margin-bottom: 2rem;
         border: 1px solid rgba(0, 0, 0, 0.1);
-        box_shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
     }
 </style>
 """,
@@ -687,6 +686,8 @@ if "last_analysis_results" not in st.session_state:
     st.session_state.last_analysis_results = None
 if "analysis_temp_files" not in st.session_state:
     st.session_state.analysis_temp_files = []
+if "user_info" not in st.session_state: # To store user info persistently
+    st.session_state.user_info = None
 
 
 # Use st.cache_resource to create and cache the MultiAgentAI21 instance
@@ -747,6 +748,9 @@ def display_chat_history_sidebar():
     if st.sidebar.button("🔄 Clear Cache & Reload", key="clear_cache_btn"):
         st.cache_resource.clear()
         st.session_state.agent = None
+        # Clear session state related to user info and auth
+        if "user_info" in st.session_state:
+            del st.session_state.user_info
         st.success("Cache cleared! Please refresh the page.")
         st.rerun()
 
@@ -854,10 +858,10 @@ def display_chat_messages():
                     metadata.append(f"🤖 {message['agent_type'].replace('_', ' ').title()}")
                 if "timestamp" in message:
                     timestamp = datetime.fromisoformat(message["timestamp"]).strftime("%H:%M:%S")
-                    metadata.append(f"� {timestamp}")
+                    metadata.append(f"🕐 {timestamp}")
                 
                 if metadata:
-                    st.caption(" | ". bergabung(metadata))
+                    st.caption(" | ".join(metadata)) # Corrected .bergabung to .join
 
 
 def process_and_display_user_message(user_input):
@@ -1150,7 +1154,7 @@ def user_profile_sidebar():
         with st.sidebar:
             st.markdown("---")
             st.markdown("### User Profile")
-            st.write(f"**Name:** {user.get('display_name', 'N/A')}")
+            st.write(f"**Name:** {user.get('display_name', 'N/A')}") # Changed to get display_name
             st.write(f"**Email:** {user.get('email', 'N/A')}")
             
             if user.get('provider'):
