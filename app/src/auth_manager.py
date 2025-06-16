@@ -21,14 +21,18 @@ def initialize_firebase():
 
     # Ensure GOOGLE_APPLICATION_CREDENTIALS is set for the Firebase Admin SDK
     service_account_key_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
-    if not service_account_key_path or not os.path.exists(service_account_key_path):
-        error_msg = f"GOOGLE_APPLICATION_CREDENTIALS environment variable not set or file not found at {service_account_key_path}. This is required for Firebase Admin SDK."
+    if not service_account_key_path:
+        error_msg = "GOOGLE_APPLICATION_CREDENTIALS environment variable is not set."
         logger.critical(error_msg)
-        st.error(f"❌ Authentication setup failed: {error_msg}")
-        # In a real app, you might want to stop here or redirect to an error page.
-        # For now, we'll let it proceed, but auth functions will likely fail.
+        # We allow the app to run without this, but auth functions will fail gracefully.
         return None
     
+    if not os.path.exists(service_account_key_path):
+        error_msg = f"Firebase Admin SDK service account key file not found at {service_account_key_path}. This is required for Firebase Admin SDK."
+        logger.critical(error_msg)
+        # We allow the app to run without this, but auth functions will fail gracefully.
+        return None
+
     try:
         cred = credentials.Certificate(service_account_key_path)
         _firebase_app = firebase_admin.initialize_app(cred)
@@ -43,30 +47,44 @@ def initialize_firebase():
 # This will be called by app.py on startup.
 def setup_google_application_credentials():
     # Only set if running locally and the env var is not already set
-    if "GOOGLE_APPLICATION_CREDENTIALS" not in os.environ and os.path.exists("firebase_admin_sdk_key.json"):
-        os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "firebase_admin_sdk_key.json"
-        logger.info("GOOGLE_APPLICATION_CREDENTIALS set for local development.")
-    elif "GOOGLE_APPLICATION_CREDENTIALS" in os.environ:
+    if "GOOGLE_APPLICATION_CREDENTIALS" not in os.environ:
+        local_key_path = "firebase_admin_sdk_key.json"
+        if os.path.exists(local_key_path):
+            os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = local_key_path
+            logger.info("GOOGLE_APPLICATION_CREDENTIALS set for local development from firebase_admin_sdk_key.json.")
+        else:
+            logger.warning("GOOGLE_APPLICATION_CREDENTIALS not set and firebase_admin_sdk_key.json not found in root. Firebase Admin SDK might fail.")
+    elif os.environ.get("GOOGLE_APPLICATION_CREDENTIALS"):
         logger.info(f"GOOGLE_APPLICATION_CREDENTIALS already set: {os.environ['GOOGLE_APPLICATION_CREDENTIALS']}")
     else:
-        logger.warning("GOOGLE_APPLICATION_CREDENTIALS not found and firebase_admin_sdk_key.json not in root. Firebase Admin SDK might fail.")
+        logger.warning("GOOGLE_APPLICATION_CREDENTIALS environment variable is set but empty or points to a non-existent file.")
 
 
 # --- Session Management Functions ---
 def set_user_session(user_record):
-    """Sets user information in session state and creates a session ID."""
-    user_info = {
-        "uid": user_record.uid,
-        "email": user_record.email,
-        "display_name": user_record.display_name if user_record.display_name else user_record.email,
-        "photo_url": user_record.photo_url,
-        "provider": user_record.provider_id,
-        "last_login_at": datetime.now().isoformat(),
-        # Store a simple session identifier
-        "session_id": f"{user_record.uid}-{int(time.time())}" 
-    }
-    st.session_state.user_info = user_info
-    logger.info(f"User session set for UID: {user_record.uid}")
+    """Sets user information in session state, including ID token, and creates a session ID."""
+    try:
+        # Generate custom token for the user, then get ID token from it
+        # This is a common pattern for server-side auth to client-side auth continuity
+        # However, for Streamlit, we just need to verify the user state.
+        # Firebase Admin SDK's `AuthError` handling is key for session validity.
+        
+        # A lightweight "session" token for Streamlit's state
+        st.session_state.user_info = {
+            "uid": user_record.uid,
+            "email": user_record.email,
+            "display_name": user_record.display_name if user_record.display_name else user_record.email,
+            "photo_url": user_record.photo_url,
+            "provider": user_record.provider_id,
+            "last_login_at": datetime.now().isoformat(),
+            # A simple session identifier to help detect changes or expiration (not a security token)
+            "session_id": f"{user_record.uid}-{int(time.time())}" 
+        }
+        logger.info(f"User session set for UID: {user_record.uid}")
+    except Exception as e:
+        logger.error(f"Error setting user session: {e}", exc_info=True)
+        clear_user_session() # Clear session if there's an error setting it
+
 
 def clear_user_session():
     """Clears user information from session state."""
@@ -75,16 +93,40 @@ def clear_user_session():
     logger.info("User session cleared.")
 
 def is_authenticated() -> bool:
-    """Checks if a user is currently authenticated."""
-    # Check for user_info in session state
-    if st.session_state.get("user_info") and st.session_state.user_info.get("uid"):
-        logger.debug(f"User already authenticated from session state: {st.session_state.user_info.get('uid')}")
-        return True
-    return False
+    """Checks if a user is currently authenticated and re-verifies session periodically."""
+    if "user_info" not in st.session_state or not st.session_state.user_info.get("uid"):
+        logger.debug("No user info in session state.")
+        return False
+    
+    user_uid = st.session_state.user_info["uid"]
+    
+    # Re-verify user presence in Firebase periodically to ensure session is still valid
+    # This acts as a lightweight session management
+    if "last_auth_check" not in st.session_state or \
+       (time.time() - st.session_state.last_auth_check) > 300: # Check every 5 minutes
+        logger.info(f"Performing periodic authentication check for user: {user_uid}")
+        try:
+            # Attempt to get the user record from Firebase Auth Admin SDK
+            auth.get_user(user_uid)
+            st.session_state.last_auth_check = time.time()
+            logger.debug(f"User {user_uid} still active.")
+            return True
+        except firebase_admin.auth.AuthError as e:
+            logger.warning(f"Firebase Auth Error during periodic check for {user_uid}: {e}. Clearing session.", exc_info=True)
+            clear_user_session()
+            st.error("Your session has expired or is invalid. Please log in again.")
+            return False
+        except Exception as e:
+            logger.error(f"Unexpected error during periodic auth check for {user_uid}: {e}", exc_info=True)
+            # Don't clear session for unexpected errors, might be a temporary network issue.
+            return True # Assume authenticated for now to avoid constant logout
+    
+    logger.debug(f"User {user_uid} authenticated from session state (recent check).")
+    return True
 
 def get_current_user() -> dict:
     """Returns the current authenticated user's information from session state."""
-    if is_authenticated():
+    if is_authenticated(): # Call is_authenticated to ensure check and potentially refresh
         logger.debug(f"Returning current user from session state: {st.session_state.user_info.get('email')}")
         return st.session_state.user_info
     logger.debug("No current user found in session state.")
@@ -92,12 +134,16 @@ def get_current_user() -> dict:
 
 # --- Authentication Pages ---
 def login_page():
-    st.set_page_config(
-        page_title="MultiAgentAI21 - Login",
-        page_icon="🔒",
-        layout="centered",
-        initial_sidebar_state="collapsed",
-    )
+    # Only set page config if not already set by main app
+    if not hasattr(st, 'page_config_set'): # Check if it's already been called by the main app
+        st.set_page_config(
+            page_title="MultiAgentAI21 - Login",
+            page_icon="🔒",
+            layout="centered",
+            initial_sidebar_state="collapsed",
+        )
+        st.page_config_set = True # Set a flag
+
     st.title("🔒 Login or Sign Up")
 
     # Ensure Firebase Admin SDK is initialized
@@ -118,33 +164,22 @@ def login_page():
                 return
 
             try:
-                # Sign in user with email and password
-                user_record = auth.get_user_by_email(email)
-                # For direct password verification, Firebase Admin SDK doesn't expose `signInWithEmailAndPassword`.
-                # It primarily works with ID tokens or custom token generation.
-                # Since Streamlit is a server-side app, we can't directly use client-side Firebase Auth JS SDK.
-                # A common pattern is to have a separate backend endpoint for password-based login
-                # that then issues a custom token, or use something like `requests` to call a Firebase Auth REST API endpoint.
-                
-                # For simplicity here, we'll assume successful email match is enough for "login" if user exists.
-                # In a production app, you'd integrate with actual client-side Firebase Auth or a secure backend.
-                
-                # Verify password is not directly done here for security reasons with Firebase Admin SDK.
-                # If you need this, you'd typically verify the ID Token sent from a client-side app
-                # or use a callable function that uses client-side auth.
-                # For this Streamlit context, we will simply check if the user exists.
-                # THIS IS NOT A SECURE PASSWORD VERIFICATION. For real apps, use client-side Firebase Auth.
-                
-                # Placeholder for secure password verification:
-                # If you were receiving an ID token from a client:
-                # decoded_token = auth.verify_id_token(id_token_from_client)
-                # user_record = auth.get_user(decoded_token['uid'])
+                # In a real app with Streamlit backend + Firebase Auth, you would typically:
+                # 1. Use a client-side (e.g., JavaScript) Firebase SDK to sign in the user.
+                # 2. Get the ID token from the client-side authentication.
+                # 3. Send this ID token to your Streamlit backend.
+                # 4. Verify the ID token using `auth.verify_id_token(id_token)` with Firebase Admin SDK.
+                # This ensures secure password handling and session management.
 
+                # For this demonstration, as a simplified example (NOT PRODUCTION-READY for password auth):
+                # We assume a successful email match means a "login". This bypasses password verification on the backend.
+                # This is OK for testing but highly INSECURE for production without a proper client-side auth flow.
+                user_record = auth.get_user_by_email(email)
                 st.success(f"Logged in as {user_record.email}!")
                 set_user_session(user_record) # Set session after "login"
                 st.rerun()
             except firebase_admin.auth.AuthError as e:
-                error_message = e.code.replace('_', ' ').title()
+                error_message = e.code.replace('_', ' ', 1).title() if e.code else "Unknown Error"
                 st.error(f"Login failed: {error_message}. Check your email and password.")
                 logger.error(f"Firebase Auth Error during login: {e}", exc_info=True)
             except Exception as e:
@@ -180,7 +215,7 @@ def login_page():
                 st.success(f"Account created successfully for {user.email}! Please login.")
                 logger.info(f"New user created: {user.uid} with email {user.email} and display name {user.display_name}")
             except firebase_admin.auth.AuthError as e:
-                error_message = e.code.replace('_', ' ').title()
+                error_message = e.code.replace('_', ' ', 1).title() if e.code else "Unknown Error"
                 st.error(f"Sign up failed: {error_message}. User might already exist.")
                 logger.error(f"Firebase Auth Error during signup: {e}", exc_info=True)
             except Exception as e:
@@ -197,9 +232,10 @@ def logout():
 def login_required(func):
     """Decorator to ensure a user is logged in before accessing a page."""
     def wrapper(*args, **kwargs):
+        # The Streamlit app reruns on every interaction.
+        # is_authenticated() will check session state and re-verify periodically.
         if not is_authenticated():
             login_page()
             return None # Stop execution of the decorated function
         return func(*args, **kwargs)
     return wrapper
-

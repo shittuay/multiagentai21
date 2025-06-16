@@ -13,18 +13,25 @@ import time
 from datetime import datetime # Explicitly import datetime here for clarity and robustness
 import io # Added this import statement
 
-# Firebase Imports for Firestore (Client SDK)
-from firebase_admin import credentials # For Firebase Admin SDK
-from firebase_admin import auth # For Firebase Admin SDK
-import firebase_admin # For Firebase Admin SDK
-from google.cloud import firestore # For Firestore client library
-import google.auth # For handling default credentials
-import google.oauth2.credentials # For handling token-based credentials
-
-
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# --- Streamlit Page Configuration (MUST BE FIRST) ---
+try:
+    logger.info("Setting up page configuration...")
+    st.set_page_config(
+        page_title="MultiAgentAI21 - Advanced AI Assistant",
+        page_icon="🚀",
+        layout="wide",
+        initial_sidebar_state="expanded",
+    )
+    logger.info("Page configuration set successfully")
+except Exception as e:
+    logger.error(f"Error in page configuration: {e}", exc_info=True)
+    st.error(f"Error setting up page: {e}. set_page_config() must be the first Streamlit command.")
+    st.stop()
+
 
 logger.info("Application starting...")
 
@@ -38,7 +45,7 @@ logger.info(f"Python path (sys.path) before import: {sys.path}")
 
 # --- START ADDED DEBUGGING FOR MODULE NOT FOUND ERROR ---
 # Explicitly check for the existence of src/auth_manager.py and related paths
-logger.info("--- START DEBUGGING PATHS & FILES ---")
+logger.info("--- START DEBUGGING PATHS & FILES ---\n")
 
 # Check if 'src' directory exists relative to project_root
 src_dir_path = project_root / "src"
@@ -68,8 +75,17 @@ if init_py_path.exists():
 else:
     logger.error(f"'__init__.py' DOES NOT EXIST at {init_py_path}")
 
-logger.info("--- END DEBUGGING PATHS & FILES ---")
+logger.info("\n--- END DEBUGGING PATHS & FILES ---")
 # --- END ADDED DEBUGGING ---
+
+
+# Firebase Imports for Firestore (Client SDK)
+from firebase_admin import credentials # For Firebase Admin SDK
+from firebase_admin import auth # For Firebase Admin SDK
+import firebase_admin # For Firebase Admin SDK
+from google.cloud import firestore # For Firestore client library
+import google.auth # For handling default credentials
+import google.oauth2.credentials # For handling token-based credentials
 
 
 # Import authentication module
@@ -94,6 +110,10 @@ except Exception as e:
     st.stop()
 
 
+# Call setup_google_application_credentials early to ensure GOOGLE_APPLICATION_CREDENTIALS is set
+# This must be done *before* Firebase Admin SDK initialization if it relies on this env var
+setup_google_application_credentials()
+
 # Initialize Firebase Admin SDK first (from auth_manager)
 try:
     initialize_firebase()
@@ -103,8 +123,6 @@ except Exception as e:
     st.error(f"An error occurred during Firebase Admin SDK initialization: {str(e)}")
     st.stop() # Stop the app if Firebase Admin SDK init fails
 
-# Call setup_google_application_credentials early to ensure GOOGLE_APPLICATION_CREDENTIALS is set
-setup_google_application_credentials()
 
 # --- Firestore Initialization (Client-Side) ---
 # Global Firestore client instance
@@ -116,19 +134,17 @@ firebase_config_str = globals().get('__firebase_config', '{}')
 initial_auth_token = globals().get('__initial_auth_token', None)
 
 
-def initialize_firestore():
+@st.cache_resource
+def get_firestore_client():
+    """Initializes and caches the Firestore client."""
     global db
     if db:
-        logger.info("Firestore client already initialized.")
+        logger.info("Firestore client already initialized (from cache).")
         return db
 
     try:
         # Parse the firebase config provided by the Canvas environment
         firebase_config = json.loads(firebase_config_str)
-
-        # Initialize Firebase Admin SDK if not already done (auth_manager does this)
-        if not firebase_admin._apps:
-             initialize_firebase() # Ensure it's initialized
 
         # Initialize Firestore client using the project ID from the config
         db = firestore.Client(project=firebase_config.get("projectId"))
@@ -147,8 +163,8 @@ def initialize_firestore():
         st.error(f"❌ An unexpected error occurred during Firestore initialization: {e}")
         st.stop()
 
-# Initialize Firestore
-initialize_firestore()
+# Initialize Firestore client once and cache it
+db = get_firestore_client()
 
 
 # --- Environment check function to consolidate warnings ---
@@ -205,20 +221,6 @@ except ImportError as e:
     st.error(f"❌ Failed to import required modules: {e}")
     st.stop()
 
-# Page configuration
-try:
-    logger.info("Setting up page configuration...")
-    st.set_page_config(
-        page_title="MultiAgentAI21 - Advanced AI Assistant",
-        page_icon="🚀",
-        layout="wide",
-        initial_sidebar_state="expanded",
-    )
-    logger.info("Page configuration set successfully")
-except Exception as e:
-    logger.error(f"Error in page configuration: {e}", exc_info=True)
-    st.error(f"Error setting up page: {e}")
-    st.stop()
 
 # Enhanced CSS for modern white interface
 st.markdown(
@@ -1052,6 +1054,7 @@ def display_data_analysis_section():
             # Write uploaded file to a temporary location using BytesIO
             # Streamlit's file_uploader gives a BytesIO object directly.
             # We need to pass this BytesIO object to the DataAnalyzer.
+            # No need to write to disk if DataAnalyzer can accept BytesIO.
             
             # Create a BytesIO object from the uploaded file buffer
             uploaded_file_buffer = io.BytesIO(uploaded_file.getvalue())
