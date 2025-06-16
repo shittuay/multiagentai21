@@ -1,228 +1,288 @@
-"""
-Data analysis module for the multi-agent system.
-Provides functionality for analyzing various types of data.
-"""
-
-import logging
-from typing import Dict, List, Optional
 import pandas as pd
+import plotly.express as px
+import plotly.graph_objects as go
+import json
+import logging
 import os
-import plotly.express as px # Import plotly.express
-import tempfile # Import tempfile for temporary file handling
+import io
 
+# Configure logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 class DataAnalyzer:
-    """Class for analyzing data and generating insights."""
-
+    """
+    A class to perform various data analysis tasks on a CSV file.
+    It generates summary statistics, insights, and visualizations.
+    """
     def __init__(self):
-        """Initialize the data analyzer."""
-        self.data = None
-        self.analysis_results = {}
-        # self.temp_files = [] # No longer needed as we're storing HTML directly
+        logger.info("DataAnalyzer initialized.")
 
-    def analyze_data(self, data: pd.DataFrame, selected_analysis_types: Optional[List[str]] = None) -> Dict:
-        """Analyze the provided data and return insights."""
-        if selected_analysis_types is None:
-            selected_analysis_types = ["summary", "insights", "visualizations", "recommendations", "department_analysis", "education_analysis"]
-
+    def _load_data(self, file_path: str) -> pd.DataFrame:
+        """
+        Loads data from a CSV file into a pandas DataFrame.
+        Handles common errors during file loading.
+        """
         try:
-            self.data = data
-            self.analysis_results = {}
-
-            if "summary" in selected_analysis_types:
-                self.analysis_results["summary"] = self._generate_summary()
-            if "insights" in selected_analysis_types:
-                self.analysis_results["insights"] = self._generate_insights()
-
-            # Add dummy data for department and education analysis if not present for testing purposes
-            # Only run if explicitly selected and columns exist
-            if "department_analysis" in selected_analysis_types and 'Department' in self.data.columns and 'Salary' in self.data.columns:
-                self.analysis_results["department_analysis"] = self._analyze_by_department()
-            if "education_analysis" in selected_analysis_types and 'Education' in self.data.columns and 'Salary' in self.data.columns:
-                self.analysis_results["education_analysis"] = self._analyze_by_education()
-
-            # Generate visualizations dynamically only if selected
-            if "visualizations" in selected_analysis_types:
-                self.analysis_results["visualizations"] = self._generate_visualizations()
-
-            if "recommendations" in selected_analysis_types:
-                self.analysis_results["recommendations"] = self.get_recommendations()
-
-            return self.analysis_results
+            # Determine if file_path is a path or a file-like object
+            if isinstance(file_path, str) and os.path.exists(file_path):
+                df = pd.read_csv(file_path)
+                logger.info(f"Data loaded successfully from file: {file_path}")
+            elif hasattr(file_path, 'read'): # Treat as file-like object (e.g., BytesIO from Streamlit)
+                # Rewind the buffer if it has already been read
+                file_path.seek(0) 
+                df = pd.read_csv(file_path)
+                logger.info("Data loaded successfully from file-like object.")
+            else:
+                raise ValueError("Invalid file_path provided. Must be a string path or a file-like object.")
+            
+            # Convert column names to a consistent format (e.g., lowercase, no spaces)
+            df.columns = df.columns.str.strip().str.lower().str.replace(' ', '_').str.replace('[^a-zA-Z0-9_]', '', regex=True)
+            logger.info(f"DataFrame columns standardized: {df.columns.tolist()}")
+            return df
+        except FileNotFoundError:
+            logger.error(f"Error: File not found at {file_path}")
+            raise
+        except pd.errors.EmptyDataError:
+            logger.error("Error: The CSV file is empty.")
+            raise ValueError("The uploaded CSV file is empty. Please upload a file with data.")
+        except pd.errors.ParserError:
+            logger.error("Error: Could not parse the CSV file. Check delimiter or format.")
+            raise ValueError("Could not parse the CSV file. Please ensure it is a valid CSV format.")
         except Exception as e:
-            logger.error(f"Error analyzing data: {e}")
-            return {"error": str(e)}
+            logger.error(f"An unexpected error occurred while loading data: {e}", exc_info=True)
+            raise ValueError(f"Failed to load data: {e}")
 
-    def analyze_file(self, file_path: str, selected_analysis_types: Optional[List[str]] = None) -> Dict:
-        """Reads a file, analyzes its data, and returns insights."""
-        try:
-            logger.info(f"Reading file for analysis: {file_path}")
-            # Explicitly specify UTF-8 encoding to avoid decoding errors
-            df = pd.read_csv(file_path, encoding='utf-8')
-            return self.analyze_data(df, selected_analysis_types) # Pass selected_analysis_types
-        except UnicodeDecodeError as e:
-            logger.error(f"UnicodeDecodeError reading file {file_path}: {e}", exc_info=True)
-            return {"error": f"Error reading file. Please ensure your CSV file is saved with UTF-8 encoding. Original error: {str(e)}"}
-        except Exception as e:
-            logger.error(f"Error reading or analyzing file {file_path}: {e}")
-            return {"error": str(e)}
-
-    def _generate_summary(self) -> Dict:
-        """Generate a summary of the data."""
-        if self.data is None:
-            return {"error": "No data available for analysis"}
+    def _generate_summary_statistics(self, df: pd.DataFrame) -> str:
+        """Generates and returns basic summary statistics of the DataFrame."""
+        if df.empty:
+            return "No data available for summary statistics."
         
-        try:
-            return {
-                "total_records": len(self.data),
-                "columns": list(self.data.columns),
-                "missing_values": self.data.isnull().sum().to_dict(),
-                "data_types": {col: str(dtype) for col, dtype in self.data.dtypes.to_dict().items()}
-            }
-        except Exception as e:
-            logger.error(f"Error generating summary: {e}")
-            return {"error": str(e)}
+        # Select numerical columns for description
+        numerical_cols = df.select_dtypes(include=['number']).columns
+        if numerical_cols.empty:
+            return "No numerical columns found for summary statistics."
 
-    def _generate_insights(self) -> List[str]:
-        """Generate insights from the data."""
-        if self.data is None:
-            return ["No data available for analysis"]
-        
-        try:
-            insights = []
-            
-            # Basic insights
-            insights.append(f"Dataset contains {len(self.data)} records")
-            insights.append(f"Number of columns: {len(self.data.columns)}")
-            
-            # Add more specific insights based on data types
-            numeric_cols = self.data.select_dtypes(include=['int64', 'float64']).columns
-            if len(numeric_cols) > 0:
-                insights.append(f"Numeric columns: {', '.join(numeric_cols)}")
-            
-            categorical_cols = self.data.select_dtypes(include=['object', 'category']).columns
-            if len(categorical_cols) > 0:
-                insights.append(f"Categorical columns: {', '.join(categorical_cols)}")
-            
-            return insights
-        except Exception as e:
-            logger.error(f"Error generating insights: {e}")
-            return [f"Error generating insights: {str(e)}"]
+        summary = df[numerical_cols].describe().to_markdown()
+        logger.info("Generated summary statistics.")
+        return f"### Summary Statistics\n\n```\n{summary}\n```\n\n"
 
-    def _generate_visualizations(self) -> Dict:
-        """Generate a set of common visualizations based on available data."""
-        visualizations = {}
-        if self.data is None or self.data.empty:
-            logger.info("No data or empty data for visualization generation.")
-            return visualizations
+    def _generate_insights(self, df: pd.DataFrame) -> str:
+        """Generates some basic insights based on the DataFrame content."""
+        if df.empty:
+            return "No data available for insights."
 
-        # Remove the extra logging for data head, as it's not needed now
-        # logger.info(f"Data head for visualization generation:\n{self.data.head()}")
+        insights = []
+        insights.append("### Key Insights\n")
 
-        # Example: Scatter plot if at least two numeric columns exist
-        numeric_cols = self.data.select_dtypes(include=['int64', 'float64']).columns
-        logger.info(f"Numeric columns found: {list(numeric_cols)}")
+        # Example: Number of rows and columns
+        insights.append(f"- The dataset contains **{len(df)} rows** and **{len(df.columns)} columns**.")
 
-        if len(numeric_cols) >= 2:
-            x_col = numeric_cols[0]
-            y_col = numeric_cols[1]
-            logger.info(f"Attempting to generate scatter plot for {y_col} vs {x_col}")
-            # Remove the extra logging for unique values
-            # logger.info(f"Unique values for {x_col}: {self.data[x_col].unique()}")
-            # logger.info(f"Unique values for {y_col}: {self.data[y_col].unique()}")
-
-            try:
-                fig = px.scatter(self.data, x=x_col, y=y_col, title=f'{y_col} vs {x_col}')
-                # Store the HTML content directly
-                html_content = fig.to_html(include_plotlyjs='cdn', full_html=False)
-                visualizations["scatter_plot"] = html_content
-                logger.info("Successfully generated scatter plot HTML content")
-            except Exception as e:
-                logger.error(f"Error generating scatter plot for {y_col} vs {x_col}: {e}", exc_info=True)
-        elif len(numeric_cols) == 1:
-            # Example: Histogram if only one numeric column
-            x_col = numeric_cols[0]
-            logger.info(f"Attempting to generate histogram for {x_col}")
-            # Remove the extra logging for unique values
-            # logger.info(f"Unique values for {x_col}: {self.data[x_col].unique()}")
-            try:
-                fig = px.histogram(self.data, x=x_col, title=f'Distribution of {x_col}')
-                # Store the HTML content directly
-                html_content = fig.to_html(include_plotlyjs='cdn', full_html=False)
-                visualizations["histogram"] = html_content
-                logger.info("Successfully generated histogram HTML content")
-            except Exception as e:
-                logger.error(f"Error generating histogram for {x_col}: {e}", exc_info=True)
+        # Example: Check for missing values
+        missing_values_count = df.isnull().sum().sum()
+        if missing_values_count > 0:
+            insights.append(f"- There are **{missing_values_count} missing values** across the dataset. Consider data cleaning steps.")
         else:
-            logger.info("Not enough numeric columns to generate a scatter plot or histogram.")
+            insights.append("- No missing values found in the dataset.")
+        
+        # Example: Identify potential key columns (heuristic)
+        if 'id' in df.columns or 'user_id' in df.columns:
+            insights.append("- An 'id' or 'user_id' column is present, suggesting individual records.")
 
-        logger.info(f"Final visualizations generated: {list(visualizations.keys())}")
+        # Example: Basic value counts for categorical data
+        categorical_cols = df.select_dtypes(include=['object', 'category']).columns
+        if not categorical_cols.empty:
+            for col in categorical_cols[:3]: # Limit to first 3 for brevity
+                top_values = df[col].value_counts().nlargest(3)
+                if not top_values.empty:
+                    insights.append(f"- Top categories in **'{col}'**: " + ", ".join([f"{idx} ({val})" for idx, val in top_values.items()]))
+
+        # Example: Simple average for a numerical column if available
+        numerical_cols = df.select_dtypes(include=['number']).columns
+        if 'salary' in numerical_cols:
+            avg_salary = df['salary'].mean()
+            insights.append(f"- The average salary in the dataset is approximately **${avg_salary:,.2f}**.")
+        elif 'age' in numerical_cols:
+            avg_age = df['age'].mean()
+            insights.append(f"- The average age in the dataset is approximately **{avg_age:.1f} years**.")
+
+        logger.info("Generated basic insights.")
+        return "\n".join(insights) + "\n\n"
+
+    def _generate_visualizations(self, df: pd.DataFrame) -> Dict[str, str]:
+        """Generates Plotly visualizations and returns them as JSON strings."""
+        visualizations = {}
+        if df.empty:
+            return {}
+
+        numerical_cols = df.select_dtypes(include=['number']).columns
+        categorical_cols = df.select_dtypes(include=['object', 'category']).columns
+
+        # Bar chart: e.g., count of a categorical variable
+        if not categorical_cols.empty:
+            try:
+                # Use the first categorical column
+                col = categorical_cols[0]
+                fig_bar = px.bar(df[col].value_counts().reset_index(), 
+                                 x='index', y=col, 
+                                 title=f'Distribution of {col.replace("_", " ").title()}',
+                                 labels={'index': col.replace("_", " ").title(), col: 'Count'})
+                visualizations['Bar Chart'] = fig_bar.to_json()
+                logger.info(f"Generated bar chart for {col}.")
+            except Exception as e:
+                logger.warning(f"Could not generate bar chart for {categorical_cols[0]}: {e}")
+
+        # Histogram: e.g., distribution of a numerical variable
+        if not numerical_cols.empty:
+            try:
+                # Use the first numerical column
+                col = numerical_cols[0]
+                fig_hist = px.histogram(df, x=col, 
+                                        title=f'Distribution of {col.replace("_", " ").title()}',
+                                        nbins=20)
+                visualizations['Histogram'] = fig_hist.to_json()
+                logger.info(f"Generated histogram for {col}.")
+            except Exception as e:
+                logger.warning(f"Could not generate histogram for {numerical_cols[0]}: {e}")
+        
+        # Scatter plot: if at least two numerical columns exist
+        if len(numerical_cols) >= 2:
+            try:
+                x_col = numerical_cols[0]
+                y_col = numerical_cols[1]
+                fig_scatter = px.scatter(df, x=x_col, y=y_col, 
+                                         title=f'{x_col.replace("_", " ").title()} vs {y_col.replace("_", " ").title()}')
+                visualizations['Scatter Plot'] = fig_scatter.to_json()
+                logger.info(f"Generated scatter plot for {x_col} vs {y_col}.")
+            except Exception as e:
+                logger.warning(f"Could not generate scatter plot for {x_col} vs {y_col}: {e}")
+
         return visualizations
 
-    def _analyze_by_department(self) -> Dict:
-        """Analyze data grouped by department (example)."""
-        if self.data is None or 'Department' not in self.data.columns or 'Salary' not in self.data.columns:
-            return {}
+    def _perform_department_analysis(self, df: pd.DataFrame) -> str:
+        """Performs analysis specifically for a 'department' column if available."""
+        if 'department' not in df.columns:
+            return "No 'department' column found for department-specific analysis. Please ensure your CSV has a 'department' column for this analysis type."
         
-        try:
-            dept_salary_mean = self.data.groupby('Department')['Salary'].mean().to_dict()
-            dept_performance_mean = self.data.groupby('Department')['PerformanceScore'].mean().to_dict() if 'PerformanceScore' in self.data.columns else {}
-            return {"salary": {"mean": dept_salary_mean}, "performance_score": {"mean": dept_performance_mean}}
-        except Exception as e:
-            logger.error(f"Error analyzing by department: {e}")
-            return {"error": str(e)}
+        if df.empty:
+            return "No data available for department analysis."
 
-    def _analyze_by_education(self) -> Dict:
-        """Analyze data grouped by education (example)."""
-        if self.data is None or 'Education' not in self.data.columns or 'Salary' not in self.data.columns:
-            return {}
-        
-        try:
-            edu_salary_mean = self.data.groupby('Education')['Salary'].mean().to_dict()
-            return {"salary": {"mean": edu_salary_mean}}
-        except Exception as e:
-            logger.error(f"Error analyzing by education: {e}")
-            return {"error": str(e)}
+        analysis_output = ["### Department Analysis\n"]
+        department_counts = df['department'].value_counts().to_markdown()
+        analysis_output.append(f"#### Department Distribution:\n```\n{department_counts}\n```\n")
 
-    def get_recommendations(self) -> List[str]:
-        """Get recommendations based on the analyzed data."""
-        if not self.analysis_results:
-            return ["No analysis results available"]
-        
-        try:
-            recommendations = []
+        # Example: Average salary by department if 'salary' column exists
+        if 'salary' in df.columns and pd.api.types.is_numeric_dtype(df['salary']):
+            avg_salary_by_dept = df.groupby('department')['salary'].mean().sort_values(ascending=False).to_markdown()
+            analysis_output.append(f"#### Average Salary by Department:\n```\n{avg_salary_by_dept}\n```\n")
             
-            # Add recommendations based on data quality
-            if "summary" in self.analysis_results:
-                summary = self.analysis_results["summary"]
-                if "missing_values" in summary:
-                    missing = summary["missing_values"]
-                    for col, count in missing.items():
-                        if count > 0:
-                            recommendations.append(f"Consider handling missing values in column '{col}'")
+            # Add a visualization for average salary by department
+            try:
+                fig_dept_salary = px.bar(df.groupby('department')['salary'].mean().reset_index(),
+                                        x='department', y='salary',
+                                        title='Average Salary by Department',
+                                        labels={'salary': 'Average Salary', 'department': 'Department'})
+                analysis_output.append(f"\n#### Average Salary by Department Plot:\n")
+                analysis_output.append(f"{{PLOT_JSON::{fig_dept_salary.to_json()}}}\n") # Special tag for Plotly JSON
+            except Exception as e:
+                logger.warning(f"Could not generate department salary bar chart: {e}")
 
-            # Example recommendation based on insights
-            if "insights" in self.analysis_results:
-                for insight in self.analysis_results["insights"]:
-                    if "missing" in insight.lower():
-                        recommendations.append("Further data cleaning might be beneficial.")
+        logger.info("Performed department analysis.")
+        return "\n".join(analysis_output) + "\n\n"
 
-            return list(set(recommendations)) # Return unique recommendations
+    def _perform_education_analysis(self, df: pd.DataFrame) -> str:
+        """Performs analysis specifically for an 'education' column if available."""
+        if 'education' not in df.columns:
+            return "No 'education' column found for education-specific analysis. Please ensure your CSV has an 'education' column for this analysis type."
+        
+        if df.empty:
+            return "No data available for education analysis."
+
+        analysis_output = ["### Education Analysis\n"]
+        education_counts = df['education'].value_counts().to_markdown()
+        analysis_output.append(f"#### Education Level Distribution:\n```\n{education_counts}\n```\n")
+
+        # Example: Average age by education level if 'age' column exists
+        if 'age' in df.columns and pd.api.types.is_numeric_dtype(df['age']):
+            avg_age_by_edu = df.groupby('education')['age'].mean().sort_values(ascending=False).to_markdown()
+            analysis_output.append(f"#### Average Age by Education Level:\n```\n{avg_age_by_edu}\n```\n")
+
+            # Add a visualization for average age by education
+            try:
+                fig_edu_age = px.bar(df.groupby('education')['age'].mean().reset_index(),
+                                    x='education', y='age',
+                                    title='Average Age by Education Level',
+                                    labels={'age': 'Average Age', 'education': 'Education Level'})
+                analysis_output.append(f"\n#### Average Age by Education Plot:\n")
+                analysis_output.append(f"{{PLOT_JSON::{fig_edu_age.to_json()}}}\n") # Special tag for Plotly JSON
+            except Exception as e:
+                logger.warning(f"Could not generate education age bar chart: {e}")
+
+
+        logger.info("Performed education analysis.")
+        return "\n".join(analysis_output) + "\n\n"
+
+    def _generate_recommendations(self, df: pd.DataFrame) -> str:
+        """Generates mock recommendations based on the data, could be LLM-powered."""
+        if df.empty:
+            return "No data available to generate recommendations."
+
+        recommendations = []
+        recommendations.append("### Recommendations\n")
+        recommendations.append("- **Improve Data Quality**: Ensure all necessary columns are present and free of missing values for more comprehensive analysis.")
+        recommendations.append("- **Explore Specific Segments**: Dive deeper into high-performing or low-performing segments (e.g., specific departments, education levels) to understand drivers.")
+        recommendations.append("- **Consider Time-Series Analysis**: If date/time data is available, analyze trends over time for better forecasting.")
+        recommendations.append("- **Integrate External Data**: Combine this dataset with external sources (e.g., economic indicators, market trends) for richer insights.")
+        recommendations.append("- **User Feedback Loop**: Implement mechanisms to gather user feedback on the analysis results to continuously improve relevance and accuracy.")
+        
+        logger.info("Generated mock recommendations.")
+        return "\n".join(recommendations) + "\n\n"
+
+    def analyze_data(self, file_path: str, analysis_types: list) -> Dict[str, str]:
+        """
+        Main method to analyze data based on selected analysis types.
+        Returns a dictionary of analysis type to its string content.
+        """
+        results = {}
+        try:
+            df = self._load_data(file_path)
+            logger.info(f"DataFrame loaded successfully with shape: {df.shape}")
         except Exception as e:
-            logger.error(f"Error generating recommendations: {e}")
-            return [f"Error generating recommendations: {str(e)}"]
+            logger.error(f"Failed to load data for analysis: {e}", exc_info=True)
+            results['Error'] = f"Failed to load data: {e}"
+            return results
 
-    def cleanup(self):
-        """Clean up any temporary files created during analysis."""
-        # No longer needed as we're not using temporary files
-        pass
+        if not analysis_types:
+            results['Info'] = "No analysis types selected. Please select at least one analysis type."
+            return results
 
-    def get_temp_files(self):
-        """Get the list of temporary files."""
-        # No longer needed as we're not using temporary files
-        return []
+        for analysis_type in analysis_types:
+            content = ""
+            if analysis_type == "summary":
+                content = self._generate_summary_statistics(df)
+            elif analysis_type == "insights":
+                content = self._generate_insights(df)
+            elif analysis_type == "visualizations":
+                # Visualizations return a dict of plot_name to json string
+                plot_jsons = self._generate_visualizations(df)
+                # Store plot_jsons directly in the results for this key
+                results[analysis_type] = plot_jsons 
+                continue # Skip the string concatenation below for visualizations
+            elif analysis_type == "department_analysis":
+                content = self._perform_department_analysis(df)
+            elif analysis_type == "education_analysis":
+                content = self._perform_education_analysis(df)
+            elif analysis_type == "recommendations":
+                content = self._generate_recommendations(df)
+            else:
+                content = f"Analysis type '{analysis_type}' not recognized or implemented yet."
+            
+            if content:
+                results[analysis_type] = content
+            else:
+                results[analysis_type] = f"No content generated for {analysis_type}."
+            
+            logger.info(f"Finished generating content for {analysis_type}.")
 
-    def __del__(self):
-        """Destructor to ensure cleanup when the object is destroyed."""
-        self.cleanup() 
+        return results
+
