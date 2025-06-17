@@ -740,20 +740,39 @@ def display_chat_history_sidebar():
     """Display chat history in the sidebar."""
     st.sidebar.title("💬 Chat History")
 
-    # ... your existing buttons (Clear Cache, New Chat) ...
+    if st.sidebar.button("🔄 Clear Cache & Reload", key="clear_cache_btn"):
+        st.cache_resource.clear()
+        st.session_state.agent = None
+        # Clear session state related to user info and auth
+        if "user_info" in st.session_state:
+            del st.session_state.user_info
+        st.success("Cache cleared! Please refresh the page.")
+        st.rerun()
 
-    # Only try to load chat history if user is authenticated
+    # New Chat button
+    if st.sidebar.button("✨ New Chat", key="new_chat_btn"):
+        st.session_state.current_chat_id = f"chat_{int(time.time())}"
+        st.session_state.chat_history = []
+        st.session_state.agent_locked = False
+        st.session_state.selected_agent = None
+        st.success("New chat started!")
+        st.rerun()
+
+    # ADD THIS CHECK - Only load chat history if user is authenticated
     if not is_authenticated():
         st.sidebar.info("🔒 Please log in to see chat history")
         return
 
-    # Only try to get available chats if db is successfully initialized AND user is authenticated
+    # Display available chats
+    # Re-fetch available chats to reflect latest from Firestore
+    # Only try to get available chats if db is successfully initialized
     if db is not None:
         st.session_state.available_chats = get_available_chats() 
     else:
-        st.session_state.available_chats = []
+        st.session_state.available_chats = [] # Ensure it's always a list
         st.sidebar.warning("Firestore client not available. Cannot load chat history.")
 
+    # ... rest of your existing chat history code remains the same
     # ... rest of your existing chat history code ...
 
 
