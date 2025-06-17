@@ -138,11 +138,7 @@ except Exception as e:
 # Global Firestore client instance
 db = None
 
-# Use the global variables provided by the Canvas environment, with a fallback for local execution
-app_id = globals().get('__app_id', 'default-app-id')
-firebase_config_str = globals().get('__firebase_config', '{}')
-initial_auth_token = globals().get('__initial_auth_token', None)
-
+# UPDATED: Removed Canvas environment variables and hardcoded correct project/database
 @st.cache_resource
 def get_firestore_client():
     """Initializes and caches the Firestore client."""
@@ -152,20 +148,19 @@ def get_firestore_client():
         return db
 
     try:
-        # Parse the firebase config provided by the Canvas environment
-        firebase_config = json.loads(firebase_config_str)
-
-        # Initialize Firestore client using the project ID from the config
-        db = firestore.Client(project=firebase_config.get("projectId"))
-        logger.info("Firestore client initialized successfully.")
+        # Use your specific project ID and database name
+        PROJECT_ID = "multiagentai21-9a8fc"
+        DATABASE_NAME = "multiagentaifirestoredatabase"
+        
+        # Initialize Firestore client with explicit project ID and database name
+        db = firestore.Client(project=PROJECT_ID, database=DATABASE_NAME)
+        logger.info(f"Firestore client initialized successfully for project: {PROJECT_ID}, database: {DATABASE_NAME}")
         return db
+        
     except google.auth.exceptions.DefaultCredentialsError as e:
         logger.critical(f"Google Cloud Default Credentials Error for Firestore: {e}. Please ensure GOOGLE_APPLICATION_CREDENTIALS is correctly set up.", exc_info=True)
         st.error(f"❌ Firestore initialization failed: Google Cloud credentials not found. Error: {e}")
-        st.stop()
-    except json.JSONDecodeError as e:
-        logger.critical(f"JSON Decoding Error for __firebase_config: {e}", exc_info=True)
-        st.error(f"❌ Firestore initialization failed: Invalid Firebase configuration provided. Error: {e}")
+        st.error("Please ensure your service account key is properly configured.")
         st.stop()
     except Exception as e:
         logger.critical(f"Error initializing Firestore: {e}", exc_info=True)
@@ -197,13 +192,17 @@ def check_environment():
     if not os.getenv("GOOGLE_API_KEY"):
         issues.append("GOOGLE_API_KEY is not set")
     
-    # Check for Google Cloud Project ID
+    # UPDATED: Check for Google Cloud Project ID with correct project
     if not os.getenv("GOOGLE_CLOUD_PROJECT"):
-        issues.append("GOOGLE_CLOUD_PROJECT is not set")
+        issues.append("GOOGLE_CLOUD_PROJECT is not set (should be 'multiagentai21-9a8fc')")
+    elif os.getenv("GOOGLE_CLOUD_PROJECT") != "multiagentai21-9a8fc":
+        issues.append(f"GOOGLE_CLOUD_PROJECT is set to '{os.getenv('GOOGLE_CLOUD_PROJECT')}' but should be 'multiagentai21-9a8fc'")
 
     # IMPORTANT: Check GOOGLE_APPLICATION_CREDENTIALS
     if not os.getenv("GOOGLE_APPLICATION_CREDENTIALS"):
         issues.append("GOOGLE_APPLICATION_CREDENTIALS is not set (expected a file path to service account key for Firebase Admin SDK and Firestore)")
+    elif not os.path.exists(os.getenv("GOOGLE_APPLICATION_CREDENTIALS")):
+        issues.append(f"GOOGLE_APPLICATION_CREDENTIALS points to non-existent file: {os.getenv('GOOGLE_APPLICATION_CREDENTIALS')}")
     
     return issues
 
@@ -569,7 +568,8 @@ def get_firestore_chat_collection():
             st.session_state.anonymous_user_id = "anon_" + os.urandom(16).hex()
         user_uid = st.session_state.anonymous_user_id
     
-    return db.collection("artifacts").document(app_id).collection("users").document(user_uid).collection(CHAT_HISTORY_COLLECTION_NAME)
+    # UPDATED: Use simplified collection structure since we know the exact database
+    return db.collection("users").document(user_uid).collection(CHAT_HISTORY_COLLECTION_NAME)
 
 def save_chat_history(chat_id: str, messages: list):
     """Save chat history to Firestore."""
@@ -1201,4 +1201,3 @@ if __name__ == "__main__":
     except Exception as e:
         logger.critical(f"Critical error in main application execution: {e}", exc_info=True)
         st.error(f"A critical error prevented the application from running: {str(e)}")
-    
