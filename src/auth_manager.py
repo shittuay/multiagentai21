@@ -5,6 +5,7 @@ import streamlit as st
 import firebase_admin
 from firebase_admin import credentials, auth
 from google.oauth2 import service_account
+from firebase_admin.exceptions import FirebaseError
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(levelname)s:%(name)s:%(message)s')

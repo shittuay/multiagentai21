@@ -2,6 +2,7 @@ import streamlit as st
 import os
 import firebase_admin
 from firebase_admin import credentials, auth
+from firebase_admin.exceptions import FirebaseError  # Add this import
 import logging
 import time # For generating timestamps for session IDs
 from datetime import datetime
@@ -67,7 +68,7 @@ def set_user_session(user_record):
         # Generate custom token for the user, then get ID token from it
         # This is a common pattern for server-side auth to client-side auth continuity
         # However, for Streamlit, we just need to verify the user state.
-        # Firebase Admin SDK's `AuthError` handling is key for session validity.
+        # Firebase Admin SDK's `FirebaseError` handling is key for session validity.
         
         # A lightweight "session" token for Streamlit's state
         st.session_state.user_info = {
@@ -112,8 +113,8 @@ def is_authenticated() -> bool:
             st.session_state.last_auth_check = time.time()
             logger.debug(f"User {user_uid} still active.")
             return True
-        except auth.AuthError as e: # CORRECTED: Use auth.AuthError
-            logger.warning(f"Firebase Auth Error during periodic check for {user_uid}: {e}. Clearing session.", exc_info=True)
+        except FirebaseError as e:  # FIXED: Use FirebaseError instead of auth.AuthError
+            logger.warning(f"Firebase Error during periodic check for {user_uid}: {e}. Clearing session.", exc_info=True)
             clear_user_session()
             st.error("Your session has expired or is invalid. Please log in again.")
             return False
@@ -185,10 +186,10 @@ def login_page():
                 st.success(f"Logged in as {user_record.email}!")
                 set_user_session(user_record) # Set session after "login"
                 st.rerun()
-            except auth.AuthError as e: # CORRECTED: Use auth.AuthError
-                error_message = e.code.replace('_', ' ', 1).title() if e.code else "Unknown Error"
+            except FirebaseError as e:  # FIXED: Use FirebaseError instead of auth.AuthError
+                error_message = str(e).replace('_', ' ', 1).title() if str(e) else "Unknown Error"
                 st.error(f"Login failed: {error_message}. Check your email and password.")
-                logger.error(f"Firebase Auth Error during login: {e}", exc_info=True)
+                logger.error(f"Firebase Error during login: {e}", exc_info=True)
             except Exception as e:
                 st.error(f"An unexpected error occurred during login: {e}")
                 logger.error(f"Unexpected error during login: {e}", exc_info=True)
@@ -221,10 +222,10 @@ def login_page():
                 )
                 st.success(f"Account created successfully for {user.email}! Please login.")
                 logger.info(f"New user created: {user.uid} with email {user.email} and display name {user.display_name}")
-            except auth.AuthError as e: # CORRECTED: Use auth.AuthError
-                error_message = e.code.replace('_', ' ', 1).title() if e.code else "Unknown Error"
+            except FirebaseError as e:  # FIXED: Use FirebaseError instead of auth.AuthError
+                error_message = str(e).replace('_', ' ', 1).title() if str(e) else "Unknown Error"
                 st.error(f"Sign up failed: {error_message}. User might already exist.")
-                logger.error(f"Firebase Auth Error during signup: {e}", exc_info=True)
+                logger.error(f"Firebase Error during signup: {e}", exc_info=True)
             except Exception as e:
                 st.error(f"An unexpected error occurred during sign up: {e}")
                 logger.error(f"Unexpected error during signup: {e}", exc_info=True)

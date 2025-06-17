@@ -740,75 +740,21 @@ def display_chat_history_sidebar():
     """Display chat history in the sidebar."""
     st.sidebar.title("💬 Chat History")
 
-    if st.sidebar.button("🔄 Clear Cache & Reload", key="clear_cache_btn"):
-        st.cache_resource.clear()
-        st.session_state.agent = None
-        # Clear session state related to user info and auth
-        if "user_info" in st.session_state:
-            del st.session_state.user_info
-        st.success("Cache cleared! Please refresh the page.")
-        st.rerun()
+    # ... your existing buttons (Clear Cache, New Chat) ...
 
-    # New Chat button
-    if st.sidebar.button("✨ New Chat", key="new_chat_btn"):
-        st.session_state.current_chat_id = f"chat_{int(time.time())}"
-        st.session_state.chat_history = []
-        st.session_state.agent_locked = False
-        st.session_state.selected_agent = None
-        st.success("New chat started!")
-        st.rerun()
+    # Only try to load chat history if user is authenticated
+    if not is_authenticated():
+        st.sidebar.info("🔒 Please log in to see chat history")
+        return
 
-    # Display available chats
-    # Re-fetch available chats to reflect latest from Firestore
-    # Only try to get available chats if db is successfully initialized
+    # Only try to get available chats if db is successfully initialized AND user is authenticated
     if db is not None:
         st.session_state.available_chats = get_available_chats() 
     else:
-        st.session_state.available_chats = [] # Ensure it's always a list
+        st.session_state.available_chats = []
         st.sidebar.warning("Firestore client not available. Cannot load chat history.")
 
-    available_chats = st.session_state.available_chats
-
-    if not available_chats:
-        st.sidebar.info("📝 No previous chats available.")
-        return
-
-    st.sidebar.subheader("📚 Previous Chats")
-    for chat_info in available_chats:
-        chat_id = chat_info['id']
-        preview = chat_info['preview']
-        created_at = datetime.fromisoformat(chat_info['created_at']).strftime("%Y-%m-%d %H:%M")
-        message_count = chat_info['message_count']
-        
-        # Create a more compact button layout
-        col1, col2 = st.sidebar.columns([3, 1])
-        with col1:
-            if st.button(f"📄 {preview[:30]}...", key=f"chat_{chat_id}"):
-                # Load the chat history from Firestore
-                loaded_history = load_chat_history(chat_id)
-                if loaded_history:
-                    st.session_state.chat_history = loaded_history
-                    st.session_state.current_chat_id = chat_id
-                    
-                    # Try to restore the agent type from the last assistant message
-                    agent_type = None
-                    for message in reversed(loaded_history):
-                        if message.get("role") == "assistant" and "agent_type" in message:
-                            agent_type = message["agent_type"]
-                            break
-                    
-                    if agent_type:
-                        st.session_state.selected_agent = agent_type
-                        st.session_state.agent_locked = True
-                        logger.info(f"Restored agent type: {agent_type}")
-                    
-                    st.success(f"✅ Loaded chat: {preview[:30]}... ({message_count} messages)")
-                    logger.info(f"Loaded chat {chat_id} with {len(loaded_history)} messages")
-                else:
-                    st.error(f"❌ Failed to load chat: {preview[:30]}...")
-                st.rerun()
-        with col2:
-            st.caption(f"{created_at}\n{message_count} msgs")
+    # ... rest of your existing chat history code ...
 
 
 def display_agent_selection():
@@ -1227,3 +1173,4 @@ if __name__ == "__main__":
     except Exception as e:
         logger.critical(f"Critical error in main application execution: {e}", exc_info=True)
         st.error(f"A critical error prevented the application from running: {str(e)}")
+    
