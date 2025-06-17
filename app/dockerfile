@@ -4,10 +4,6 @@ FROM python:3.11-slim
 # Set working directory
 WORKDIR /app
 
-# Ensure a recent version of firebase-admin for AuthError compatibility
-RUN pip install --upgrade firebase-admin==6.12.0 streamlit pandas plotly matplotlib
-
-
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
     gcc \
@@ -15,18 +11,15 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements first for better caching
-# CORRECTED: Assume requirements.txt is at the root of the build context
 COPY requirements.txt .
 
-# Install Python dependencies
+# Install Python dependencies (remove the conflicting firebase-admin install)
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application code and src directory
-# CORRECTED: Copy everything from the root of the build context to /app
 COPY . .
 
 # *** EXTENSIVE DEBUGGING FOR CLOUD RUN ***
-# These commands are excellent for debugging and will now show the correct paths!
 RUN echo "=== Current working directory ===" && pwd
 RUN echo "=== Listing /app contents ===" && ls -la /app
 RUN echo "=== Listing src/ contents ===" && ls -la /app/src/
@@ -40,7 +33,7 @@ RUN echo "=== Testing src import ===" && python -c "import src; print('src impor
 RUN echo "=== Testing src.auth_manager import ===" && python -c "import src.auth_manager; print('src.auth_manager import successful')" || echo "src.auth_manager import FAILED"
 RUN echo "=== Checking for syntax errors in __init__.py ===" && python -m py_compile src/__init__.py && echo "NO SYNTAX ERRORS" || echo "SYNTAX ERRORS FOUND"
 RUN echo "=== Checking for syntax errors in auth_manager.py ===" && python -m py_compile src/auth_manager.py && echo "NO SYNTAX ERRORS" || echo "SYNTAX ERRORS FOUND"
-# **********************************************
+RUN echo "=== Firebase Admin SDK version ===" && python -c "import firebase_admin; print(f'Firebase Admin SDK version: {firebase_admin.__version__}')"
 
 # Set PYTHONPATH
 ENV PYTHONPATH=/app
