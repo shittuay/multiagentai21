@@ -623,6 +623,18 @@ def load_chat_history(chat_id: str) -> list:
 
 def get_available_chats() -> list:
     """Get list of available chat sessions from Firestore."""
+    
+    # Check authentication first
+    if not is_authenticated():
+        logger.debug("User not authenticated - returning empty chat list")
+        return []
+    
+    # Also check if user_info exists in session state
+    user_info = get_current_user()
+    if not user_info or not user_info.get("uid"):
+        logger.debug("No user UID available - returning empty chat list")
+        return []
+    
     chat_collection = get_firestore_chat_collection()
     if chat_collection is None:
         logger.error("Attempted to get available chats but Firestore collection is None.")
@@ -632,45 +644,7 @@ def get_available_chats() -> list:
         chats = []
         chat_docs = chat_collection.order_by("last_updated", direction=firestore.Query.DESCENDING).stream()
         
-        for doc in chat_docs:
-            chat_data = doc.to_dict()
-            chat_id = doc.id
-            messages = chat_data.get("messages", [])
-            
-            preview = "New Chat"
-            for message in messages:
-                if message.get("role") == "user":
-                    preview = message.get("content", "New Chat")[:50]
-                    break
-            
-            created_at = chat_data.get("created_at")
-            if created_at and hasattr(created_at, 'isoformat'):
-                created_at = created_at.isoformat()
-            else:
-                created_at = datetime.now().isoformat()
-
-            last_updated = chat_data.get("last_updated")
-            if last_updated and hasattr(last_updated, 'isoformat'):
-                last_updated = last_updated.isoformat()
-            else:
-                last_updated = datetime.now().isoformat()
-
-            chats.append({
-                "id": chat_id,
-                "preview": preview,
-                "created_at": created_at,
-                "last_updated": last_updated,
-                "message_count": len(messages)
-            })
-        
-        logger.info(f"Found {len(chats)} available chat histories in Firestore.")
-        return chats
-        
-    except Exception as e:
-        logger.error(f"Error getting available chats from Firestore: {e}", exc_info=True)
-        st.error(f"Failed to retrieve available chats from database: {str(e)}")
-        return []
-
+        # ... rest of your existing code stays the same
 # Initialize session state
 if "agent" not in st.session_state:
     st.session_state.agent = None
