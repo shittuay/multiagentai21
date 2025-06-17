@@ -4,6 +4,10 @@ FROM python:3.11-slim
 # Set working directory
 WORKDIR /app
 
+# Ensure a recent version of firebase-admin for AuthError compatibility
+RUN pip install --upgrade firebase-admin==6.12.0 streamlit pandas plotly matplotlib
+
+
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
     gcc \

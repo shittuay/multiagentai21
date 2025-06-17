@@ -17,5 +17,10 @@ google-adk
 flask
 gunicorn
 streamlit
-firebase-admin
 tabulate
+google-cloud-aiplatform
+firebase-admin==6.12.0
+pandas
+matplotlib
+google-cloud-firestore
+google-generativeai
