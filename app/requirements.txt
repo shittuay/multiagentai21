@@ -4,4 +4,6 @@ pandas
 plotly
 matplotlib
 google-cloud-firestore
+google-cloud-bigquery
+google-cloud-storage
 google-generativeai
