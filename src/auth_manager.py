@@ -94,19 +94,269 @@ def create_user(email, password):
         logger.error(f"Unexpected error during user creation: {e}")
         return None, f"User creation failed. An unexpected error occurred: {e}"
 
-# Streamlit-specific functions for UI
+# Modern Streamlit login page matching the screenshot
 def login_page():
-    st.image("https://placehold.co/150x150/lightblue/white?text=Logo", width=150) # Example placeholder
-    st.title("MultiAgentAI21")
-    st.subheader("Login Mode")
+    """Modern login page matching the screenshot design"""
+    
+    # Set page config for centered layout
+    if not st.session_state.get('page_config_set', False):
+        st.set_page_config(
+            page_title="MultiAgentAI21",
+            page_icon="🤖",
+            layout="centered",
+            initial_sidebar_state="collapsed",
+        )
+        st.session_state.page_config_set = True
 
+    # Custom CSS for the modern login design
+    st.markdown(
+        """
+        <style>
+        /* Hide Streamlit default elements */
+        .stApp > header {visibility: hidden;}
+        .stApp > .main > div > div > div > section > div {padding-top: 0rem;}
+        .stApp {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        
+        /* Main container */
+        .main-container {
+            max-width: 500px;
+            margin: 0 auto;
+            padding: 2rem;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+        }
+        
+        /* Login card */
+        .login-card {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(20px);
+            border-radius: 20px;
+            padding: 3rem;
+            width: 100%;
+            max-width: 400px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+            text-align: center;
+        }
+        
+        /* Header */
+        .app-title {
+            font-size: 2.5rem;
+            font-weight: 700;
+            color: #1a202c;
+            margin-bottom: 1rem;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+        }
+        
+        .login-mode {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            margin-bottom: 2rem;
+            color: #4a5568;
+            font-size: 0.9rem;
+        }
+        
+        .toggle-switch {
+            width: 40px;
+            height: 20px;
+            background: #3b82f6;
+            border-radius: 20px;
+            position: relative;
+            cursor: pointer;
+        }
+        
+        .toggle-switch::after {
+            content: '';
+            position: absolute;
+            width: 16px;
+            height: 16px;
+            background: white;
+            border-radius: 50%;
+            top: 2px;
+            right: 2px;
+            transition: all 0.3s ease;
+        }
+        
+        .welcome-text {
+            font-size: 1.8rem;
+            font-weight: 600;
+            color: #1a202c;
+            margin-bottom: 0.5rem;
+        }
+        
+        .subtitle {
+            color: #6b7280;
+            margin-bottom: 2rem;
+            font-size: 0.9rem;
+        }
+        
+        /* Input fields */
+        .stTextInput > div > div > input {
+            background: #f8fafc !important;
+            border: 1px solid #e2e8f0 !important;
+            border-radius: 12px !important;
+            padding: 0.75rem 1rem !important;
+            font-size: 1rem !important;
+            color: #1a202c !important;
+            transition: all 0.3s ease !important;
+        }
+        
+        .stTextInput > div > div > input:focus {
+            border-color: #3b82f6 !important;
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1) !important;
+            outline: none !important;
+        }
+        
+        .stTextInput > label {
+            color: #374151 !important;
+            font-weight: 500 !important;
+            font-size: 0.9rem !important;
+            margin-bottom: 0.5rem !important;
+        }
+        
+        /* Buttons */
+        .stButton > button {
+            background: linear-gradient(135deg, #3b82f6, #1d4ed8) !important;
+            color: white !important;
+            border: none !important;
+            border-radius: 12px !important;
+            padding: 0.75rem 2rem !important;
+            font-size: 1rem !important;
+            font-weight: 600 !important;
+            width: 100% !important;
+            margin: 0.5rem 0 !important;
+            cursor: pointer !important;
+            transition: all 0.3s ease !important;
+            box-shadow: 0 4px 15px rgba(59, 130, 246, 0.3) !important;
+        }
+        
+        .stButton > button:hover {
+            transform: translateY(-2px) !important;
+            box-shadow: 0 8px 25px rgba(59, 130, 246, 0.4) !important;
+        }
+        
+        /* Tab styling */
+        .stTabs [data-baseweb="tab-list"] {
+            gap: 8px;
+            background: #f1f5f9;
+            border-radius: 12px;
+            padding: 4px;
+            margin-bottom: 2rem;
+        }
+        
+        .stTabs [data-baseweb="tab"] {
+            background: transparent;
+            border-radius: 8px;
+            color: #64748b;
+            font-weight: 500;
+        }
+        
+        .stTabs [aria-selected="true"] {
+            background: white !important;
+            color: #1e293b !important;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        }
+        
+        /* Links */
+        .forgot-password {
+            color: #3b82f6;
+            text-decoration: none;
+            font-size: 0.9rem;
+            text-align: right;
+            display: block;
+            margin: 0.5rem 0 1.5rem 0;
+        }
+        
+        .forgot-password:hover {
+            text-decoration: underline;
+        }
+        
+        /* Additional social buttons */
+        .social-button {
+            background: linear-gradient(135deg, #6b7280, #4b5563);
+            color: white;
+            border: none;
+            border-radius: 12px;
+            padding: 0.75rem 2rem;
+            font-size: 1rem;
+            font-weight: 600;
+            width: 100%;
+            margin: 0.5rem 0;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(107, 114, 128, 0.3);
+            text-align: center;
+            display: block;
+            text-decoration: none;
+        }
+        
+        .social-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(107, 114, 128, 0.4);
+        }
+        
+        .google-button {
+            background: linear-gradient(135deg, #ea4335, #d33b2c);
+            box-shadow: 0 4px 15px rgba(234, 67, 53, 0.3);
+        }
+        
+        .google-button:hover {
+            box-shadow: 0 8px 25px rgba(234, 67, 53, 0.4);
+        }
+        
+        /* Success/Error messages */
+        .stAlert {
+            border-radius: 12px !important;
+            margin: 1rem 0 !important;
+        }
+        
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    # Main container with gradient background
+    st.markdown('<div class="main-container">', unsafe_allow_html=True)
+    
+    # Login card
+    st.markdown('<div class="login-card">', unsafe_allow_html=True)
+    
+    # Header
+    st.markdown('<h1 class="app-title">MultiAgentAI21</h1>', unsafe_allow_html=True)
+    
+    # Login mode toggle (visual only for now)
+    st.markdown(
+        '''
+        <div class="login-mode">
+            <div class="toggle-switch"></div>
+            <span>Login Mode</span>
+        </div>
+        ''', 
+        unsafe_allow_html=True
+    )
+
+    # Tabs for Login and Sign Up
     login_tab, signup_tab = st.tabs(["Login", "Sign Up"])
 
     with login_tab:
-        st.subheader("Welcome Back")
-        email = st.text_input("Email Address", key="login_email")
-        password = st.text_input("Password", type="password", key="login_password")
+        # Welcome text
+        st.markdown('<h2 class="welcome-text">Welcome Back</h2>', unsafe_allow_html=True)
+        st.markdown('<p class="subtitle">Sign in to your account</p>', unsafe_allow_html=True)
+        
+        # Login form
+        email = st.text_input("Email Address", key="login_email", placeholder="Enter your email")
+        password = st.text_input("Password", type="password", key="login_password", placeholder="Enter your password")
+        
+        # Forgot password link
+        st.markdown('<a href="#" class="forgot-password">Forgot password?</a>', unsafe_allow_html=True)
 
+        # Sign In button
         if st.button("Sign In", key="signin_button"):
             if email and password:
                 user, message = authenticate_user(email, password)
@@ -115,36 +365,68 @@ def login_page():
                     st.session_state["user_email"] = email
                     st.session_state["user_uid"] = user.uid
                     st.session_state["auth_message"] = "Login successful!"
+                    st.success("✅ Login successful!")
                     st.rerun()
                 else:
-                    st.error(message)
+                    st.error(f"❌ {message}")
             else:
-                st.error("Please enter both email and password.")
+                st.error("❌ Please enter both email and password.")
+
+        # Social login buttons (placeholder for now)
+        st.markdown('<div style="margin-top: 1.5rem;">', unsafe_allow_html=True)
+        st.markdown(
+            '''
+            <div class="social-button">
+                Sign in with GitHub
+            </div>
+            ''',
+            unsafe_allow_html=True
+        )
+        
+        st.markdown(
+            '''
+            <div class="social-button google-button">
+                Sign in with Google
+            </div>
+            ''',
+            unsafe_allow_html=True
+        )
+        st.markdown('</div>', unsafe_allow_html=True)
 
     with signup_tab:
-        st.subheader("Create a New Account")
-        new_email = st.text_input("Email Address", key="signup_email")
-        new_password = st.text_input("Password", type="password", key="signup_password")
-        confirm_password = st.text_input("Confirm Password", type="password", key="confirm_password")
+        # Sign up form
+        st.markdown('<h2 class="welcome-text">Create Account</h2>', unsafe_allow_html=True)
+        st.markdown('<p class="subtitle">Sign up for a new account</p>', unsafe_allow_html=True)
+        
+        new_email = st.text_input("Email Address", key="signup_email", placeholder="Enter your email")
+        new_password = st.text_input("Password", type="password", key="signup_password", placeholder="Create a password")
+        confirm_password = st.text_input("Confirm Password", type="password", key="confirm_password", placeholder="Confirm your password")
 
         if st.button("Sign Up", key="signup_button"):
             if new_email and new_password and confirm_password:
                 if new_password == confirm_password:
-                    user, message = create_user(new_email, new_password)
-                    if user:
-                        st.success(message)
-                        # Optionally auto-login after signup
-                        st.session_state["authenticated"] = True
-                        st.session_state["user_email"] = new_email
-                        st.session_state["user_uid"] = user.uid
-                        st.session_state["auth_message"] = "Account created and logged in!"
-                        st.rerun()
+                    if len(new_password) >= 6:
+                        user, message = create_user(new_email, new_password)
+                        if user:
+                            st.success(f"✅ {message}")
+                            # Optionally auto-login after signup
+                            st.session_state["authenticated"] = True
+                            st.session_state["user_email"] = new_email
+                            st.session_state["user_uid"] = user.uid
+                            st.session_state["auth_message"] = "Account created and logged in!"
+                            st.rerun()
+                        else:
+                            st.error(f"❌ {message}")
                     else:
-                        st.error(message)
+                        st.error("❌ Password must be at least 6 characters long.")
                 else:
-                    st.error("Passwords do not match.")
+                    st.error("❌ Passwords do not match.")
             else:
-                st.error("Please fill in all fields.")
+                st.error("❌ Please fill in all fields.")
+
+    # Close containers
+    st.markdown('</div>', unsafe_allow_html=True)  # Close login-card
+    st.markdown('</div>', unsafe_allow_html=True)  # Close main-container
 
 def logout():
     st.session_state["authenticated"] = False
@@ -171,7 +453,6 @@ def get_current_user():
         # Add other user details if available from Firebase (e.g., display_name, photo_url)
         # For simplicity, we'll just return email and uid for now
     }
-
 
 # --- Handle Google Application Credentials for other Google Cloud services ---
 # This function aims to set GOOGLE_APPLICATION_CREDENTIALS to a temporary file
