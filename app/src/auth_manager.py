@@ -6,7 +6,9 @@ from firebase_admin.exceptions import FirebaseError
 import logging
 import time
 import re
-from datetime import datetime
+import json
+import base64
+from datetime import datetime, timedelta
 
 logger = logging.getLogger(__name__)
 
@@ -83,11 +85,88 @@ def validate_name(name):
         return False, "Name can only contain letters, spaces, hyphens, and apostrophes"
     return True, "Name is valid"
 
+# --- Session Persistence Functions ---
+def save_session_to_browser(user_info):
+    """Save session data to browser using Streamlit's session state as persistence."""
+    try:
+        # Create a session token (simple base64 encoding - not for high security)
+        session_data = {
+            "uid": user_info["uid"],
+            "email": user_info["email"],
+            "display_name": user_info["display_name"],
+            "session_id": user_info["session_id"],
+            "expires_at": (datetime.now() + timedelta(days=7)).isoformat()  # 7 days expiry
+        }
+        
+        # Encode session data
+        session_token = base64.b64encode(json.dumps(session_data).encode()).decode()
+        
+        # Store in Streamlit's session state (persists across refreshes in same browser session)
+        st.session_state.persistent_session = session_token
+        
+        logger.info(f"Session saved for user: {user_info['email']}")
+        
+    except Exception as e:
+        logger.error(f"Failed to save session: {e}")
+
+def load_session_from_browser():
+    """Load session data from browser persistence."""
+    try:
+        # Try to get from session state
+        session_token = st.session_state.get("persistent_session")
+        
+        if session_token:
+            # Decode session data
+            session_data = json.loads(base64.b64decode(session_token.encode()).decode())
+            
+            # Check if session hasn't expired
+            expires_at = datetime.fromisoformat(session_data["expires_at"])
+            if datetime.now() < expires_at:
+                # Verify user still exists in Firebase
+                try:
+                    user_record = auth.get_user(session_data["uid"])
+                    
+                    # Restore session
+                    st.session_state.user_info = {
+                        "uid": user_record.uid,
+                        "email": user_record.email,
+                        "display_name": user_record.display_name or user_record.email,
+                        "photo_url": user_record.photo_url,
+                        "provider": getattr(user_record, 'provider_id', 'email'),
+                        "last_login_at": session_data.get("last_login_at", datetime.now().isoformat()),
+                        "session_id": session_data["session_id"]
+                    }
+                    
+                    logger.info(f"Session restored for user: {user_record.email}")
+                    return True
+                    
+                except FirebaseError:
+                    # User no longer exists, clear session
+                    clear_persistent_session()
+                    return False
+            else:
+                # Session expired
+                clear_persistent_session()
+                return False
+                
+    except Exception as e:
+        logger.error(f"Failed to load session: {e}")
+        clear_persistent_session()
+        
+    return False
+
+def clear_persistent_session():
+    """Clear persistent session data."""
+    if "persistent_session" in st.session_state:
+        del st.session_state.persistent_session
+    
+    logger.info("Persistent session cleared")
+
 # --- Session Management Functions ---
 def set_user_session(user_record):
-    """Sets user information in session state."""
+    """Sets user information in session state with persistence."""
     try:
-        st.session_state.user_info = {
+        user_info = {
             "uid": user_record.uid,
             "email": user_record.email,
             "display_name": user_record.display_name if user_record.display_name else user_record.email,
@@ -96,42 +175,41 @@ def set_user_session(user_record):
             "last_login_at": datetime.now().isoformat(),
             "session_id": f"{user_record.uid}-{int(time.time())}"
         }
+        
+        st.session_state.user_info = user_info
+        
+        # Save to persistent storage
+        save_session_to_browser(user_info)
+        
         logger.info(f"User session set for UID: {user_record.uid}")
     except Exception as e:
         logger.error(f"Error setting user session: {e}", exc_info=True)
         clear_user_session()
 
 def clear_user_session():
-    """Clears user information from session state."""
+    """Clears user information from session state and persistent storage."""
     keys_to_clear = ["user_info", "last_auth_check", "login_attempts", "last_attempt_time"]
     for key in keys_to_clear:
         if key in st.session_state:
             del st.session_state[key]
+    
+    # Clear persistent storage
+    clear_persistent_session()
+    
     logger.info("User session cleared.")
 
 def is_authenticated() -> bool:
-    """Checks if a user is currently authenticated."""
-    if not st.session_state.get("user_info") or not st.session_state.user_info.get("uid"):
-        return False
+    """Checks if a user is currently authenticated with session restoration."""
     
-    user_uid = st.session_state.user_info["uid"]
+    # First check if we have user info in current session
+    if st.session_state.get("user_info") and st.session_state.user_info.get("uid"):
+        return True
     
-    # Re-verify user presence periodically
-    if "last_auth_check" not in st.session_state or \
-       (time.time() - st.session_state.last_auth_check) > 300:  # 5 minutes
-        try:
-            auth.get_user(user_uid)
-            st.session_state.last_auth_check = time.time()
-            return True
-        except FirebaseError as e:
-            logger.warning(f"Firebase Error during periodic check: {e}")
-            clear_user_session()
-            return False
-        except Exception as e:
-            logger.error(f"Unexpected error during auth check: {e}")
-            return True  # Assume authenticated for temporary issues
+    # Try to restore from persistent storage
+    if load_session_from_browser():
+        return True
     
-    return True
+    return False
 
 def get_current_user() -> dict:
     """Returns the current authenticated user's information."""
@@ -168,6 +246,11 @@ def increment_login_attempts():
 
 # --- Enhanced Login Page ---
 def login_page():
+    # Try to restore session on page load
+    if load_session_from_browser():
+        st.rerun()  # Redirect to main app if session restored
+        return
+    
     # Enhanced styling for login page
     st.markdown("""
     <style>
@@ -331,7 +414,7 @@ def login_form():
         st.markdown('</div>', unsafe_allow_html=True)
         return
 
-    # Login form - FIXED: Removed st.form wrapper and used direct inputs with button
+    # Login form
     email = st.text_input(
         "📧 Email Address",
         placeholder="Enter your email address",
@@ -349,12 +432,12 @@ def login_form():
     
     col1, col2 = st.columns([1, 1])
     with col1:
-        remember_me = st.checkbox("Remember me")
+        remember_me = st.checkbox("Remember me", value=True)  # Default to checked
     with col2:
         if st.button("Forgot Password?", help="Reset your password"):
             st.info("📧 Password reset functionality would be implemented here.")
     
-    # FIXED: Added proper submit button
+    # Submit button
     if st.button("🚀 Sign In", use_container_width=True, key="login_submit"):
         handle_login(email, password, remember_me)
 
@@ -364,7 +447,7 @@ def signup_form():
     """Enhanced signup form with validation."""
     st.markdown('<div class="form-section">', unsafe_allow_html=True)
     
-    # FIXED: Removed st.form wrapper and used direct inputs with button
+    # Signup form
     name = st.text_input(
         "👤 Full Name",
         placeholder="Enter your full name",
@@ -409,7 +492,7 @@ def signup_form():
         help="You must agree to our terms to create an account"
     )
     
-    # FIXED: Added proper submit button
+    # Submit button
     if st.button("🎉 Create Account", use_container_width=True, key="signup_submit"):
         handle_signup(name, email, password, confirm_password, agree_terms)
 
