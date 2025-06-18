@@ -1,3 +1,5 @@
+import streamlit as st
+
 def login_page():
     """Modern login page matching the screenshot design"""
     
