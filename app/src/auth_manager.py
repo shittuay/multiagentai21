@@ -278,7 +278,7 @@ def login_page():
     }
     
     .stApp {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%);
         min-height: 100vh;
     }
     </style>
@@ -331,34 +331,32 @@ def login_form():
         st.markdown('</div>', unsafe_allow_html=True)
         return
 
-    # Login form
-    with st.form("login_form", clear_on_submit=False):
-        email = st.text_input(
-            "📧 Email Address",
-            placeholder="Enter your email address",
-            help="The email address associated with your account"
-        )
-        
-        password = st.text_input(
-            "🔒 Password",
-            type="password",
-            placeholder="Enter your password",
-            help="Your account password"
-        )
-        
-        col1, col2 = st.columns([1, 1])
-        with col1:
-            remember_me = st.checkbox("Remember me")
-        with col2:
-            forgot_password = st.button("Forgot Password?", help="Reset your password")
-        
-        submit_button = st.form_submit_button("🚀 Sign In", use_container_width=True)
-        
-        if submit_button:
-            handle_login(email, password, remember_me)
-        
-        if forgot_password:
+    # Login form - FIXED: Removed st.form wrapper and used direct inputs with button
+    email = st.text_input(
+        "📧 Email Address",
+        placeholder="Enter your email address",
+        help="The email address associated with your account",
+        key="login_email"
+    )
+    
+    password = st.text_input(
+        "🔒 Password",
+        type="password",
+        placeholder="Enter your password",
+        help="Your account password",
+        key="login_password"
+    )
+    
+    col1, col2 = st.columns([1, 1])
+    with col1:
+        remember_me = st.checkbox("Remember me")
+    with col2:
+        if st.button("Forgot Password?", help="Reset your password"):
             st.info("📧 Password reset functionality would be implemented here.")
+    
+    # FIXED: Added proper submit button
+    if st.button("🚀 Sign In", use_container_width=True, key="login_submit"):
+        handle_login(email, password, remember_me)
 
     st.markdown('</div>', unsafe_allow_html=True)
 
@@ -366,51 +364,54 @@ def signup_form():
     """Enhanced signup form with validation."""
     st.markdown('<div class="form-section">', unsafe_allow_html=True)
     
-    with st.form("signup_form", clear_on_submit=False):
-        name = st.text_input(
-            "👤 Full Name",
-            placeholder="Enter your full name",
-            help="This will be displayed as your profile name"
-        )
-        
-        email = st.text_input(
-            "📧 Email Address",
-            placeholder="Enter your email address",
-            help="You'll use this to sign in to your account"
-        )
-        
-        password = st.text_input(
-            "🔒 Password",
-            type="password",
-            placeholder="Create a strong password",
-            help="Must be at least 8 characters with uppercase, lowercase, and numbers"
-        )
-        
-        # Password strength indicator
-        if password:
-            is_valid, message = validate_password(password)
-            if is_valid:
-                st.markdown(f'<div class="password-strength strength-strong">✅ {message}</div>', unsafe_allow_html=True)
-            else:
-                st.markdown(f'<div class="password-strength strength-weak">❌ {message}</div>', unsafe_allow_html=True)
-        
-        confirm_password = st.text_input(
-            "🔒 Confirm Password",
-            type="password",
-            placeholder="Re-enter your password",
-            help="Must match the password above"
-        )
-        
-        # Terms and conditions
-        agree_terms = st.checkbox(
-            "I agree to the Terms of Service and Privacy Policy",
-            help="You must agree to our terms to create an account"
-        )
-        
-        submit_button = st.form_submit_button("🎉 Create Account", use_container_width=True)
-        
-        if submit_button:
-            handle_signup(name, email, password, confirm_password, agree_terms)
+    # FIXED: Removed st.form wrapper and used direct inputs with button
+    name = st.text_input(
+        "👤 Full Name",
+        placeholder="Enter your full name",
+        help="This will be displayed as your profile name",
+        key="signup_name"
+    )
+    
+    email = st.text_input(
+        "📧 Email Address",
+        placeholder="Enter your email address",
+        help="You'll use this to sign in to your account",
+        key="signup_email"
+    )
+    
+    password = st.text_input(
+        "🔒 Password",
+        type="password",
+        placeholder="Create a strong password",
+        help="Must be at least 8 characters with uppercase, lowercase, and numbers",
+        key="signup_password"
+    )
+    
+    # Password strength indicator
+    if password:
+        is_valid, message = validate_password(password)
+        if is_valid:
+            st.markdown(f'<div class="password-strength strength-strong">✅ {message}</div>', unsafe_allow_html=True)
+        else:
+            st.markdown(f'<div class="password-strength strength-weak">❌ {message}</div>', unsafe_allow_html=True)
+    
+    confirm_password = st.text_input(
+        "🔒 Confirm Password",
+        type="password",
+        placeholder="Re-enter your password",
+        help="Must match the password above",
+        key="signup_confirm_password"
+    )
+    
+    # Terms and conditions
+    agree_terms = st.checkbox(
+        "I agree to the Terms of Service and Privacy Policy",
+        help="You must agree to our terms to create an account"
+    )
+    
+    # FIXED: Added proper submit button
+    if st.button("🎉 Create Account", use_container_width=True, key="signup_submit"):
+        handle_signup(name, email, password, confirm_password, agree_terms)
 
     st.markdown('</div>', unsafe_allow_html=True)
 
