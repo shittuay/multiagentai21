@@ -461,6 +461,37 @@ st.markdown(
         color: #9ca3af;
     }
 
+    /* Enhanced text input styling */
+    .stTextInput > div > div > input {
+        background: rgba(255, 255, 255, 0.95);
+        border: 2px solid rgba(59, 130, 246, 0.2);
+        border-radius: 12px;
+        color: #1a202c;
+        padding: 0.75rem 1rem;
+        font-size: 1rem;
+        transition: all 0.3s ease;
+    }
+
+    .stTextInput > div > div > input:focus {
+        border-color: #3b82f6;
+        box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+        outline: none;
+    }
+
+    /* File uploader styling */
+    .stFileUploader > div {
+        background: rgba(255, 255, 255, 0.95);
+        border: 2px dashed rgba(59, 130, 246, 0.3);
+        border-radius: 12px;
+        padding: 1rem;
+        transition: all 0.3s ease;
+    }
+
+    .stFileUploader > div:hover {
+        border-color: #3b82f6;
+        background: rgba(59, 130, 246, 0.05);
+    }
+
     .no-agent-selected {
         text-align: center;
         color: #6b7280;
@@ -527,6 +558,32 @@ st.markdown(
         margin-bottom: 2rem;
         border: 1px solid rgba(0, 0, 0, 0.1);
         box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+    }
+
+    /* Hide the default Streamlit footer */
+    footer {
+        visibility: hidden;
+        height: 0;
+    }
+
+    /* Custom footer styling */
+    .custom-footer {
+        position: relative;
+        margin-top: 2rem;
+        padding: 1rem 0;
+        border-top: 1px solid rgba(0, 0, 0, 0.1);
+    }
+
+    /* Chat input area styling */
+    .chat-input-container {
+        position: sticky;
+        bottom: 0;
+        background: rgba(255, 255, 255, 0.98);
+        backdrop-filter: blur(20px);
+        padding: 1rem;
+        border-radius: 20px 20px 0 0;
+        box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.08);
+        z-index: 100;
     }
 </style>
 """,
@@ -997,11 +1054,95 @@ def display_chat_interface():
     # Display chat messages
     display_chat_messages()
 
-    # Chat input at the bottom of the main chat area
-    user_input = st.chat_input("Type your message here...")
-    if user_input:
-        process_and_display_user_message(user_input)
-
+    # Advanced chat input area
+    st.markdown('<div class="chat-input-container">', unsafe_allow_html=True)
+    
+    # Create columns for better layout
+    col1, col2, col3 = st.columns([5, 2, 1])
+    
+    with col1:
+        # Text input with placeholder
+        user_input = st.text_area(
+            "Message",
+            placeholder="Type your message here... (Press Ctrl+Enter to send)",
+            height=70,
+            key="chat_input",
+            label_visibility="collapsed"
+        )
+    
+    with col2:
+        # File upload section
+        uploaded_files = st.file_uploader(
+            "📎 Attach files",
+            accept_multiple_files=True,
+            key="chat_file_upload",
+            type=['txt', 'pdf', 'csv', 'xlsx', 'json', 'py', 'js', 'html', 'css', 'md', 
+                  'jpg', 'jpeg', 'png', 'gif', 'doc', 'docx', 'xml', 'yaml', 'yml'],
+            help="Upload files to include with your message"
+        )
+    
+    with col3:
+        # Send button
+        send_clicked = st.button("Send 📤", key="send_button", type="primary", use_container_width=True)
+    
+    # Display uploaded files info
+    if uploaded_files:
+        st.markdown("**Attached files:**")
+        for file in uploaded_files:
+            file_size = f"{file.size / 1024:.1f} KB" if file.size < 1024*1024 else f"{file.size / (1024*1024):.1f} MB"
+            st.caption(f"📄 {file.name} ({file_size})")
+    
+    # Process message when send is clicked or Enter is pressed
+    if send_clicked and (user_input or uploaded_files):
+        # Prepare the message with file information
+        message_parts = []
+        
+        if user_input:
+            message_parts.append(user_input)
+        
+        if uploaded_files:
+            file_info = []
+            for uploaded_file in uploaded_files:
+                # Store file temporarily if needed for processing
+                temp_dir = tempfile.mkdtemp()
+                file_path = os.path.join(temp_dir, uploaded_file.name)
+                
+                with open(file_path, "wb") as f:
+                    f.write(uploaded_file.getbuffer())
+                
+                # Add to temp files for cleanup
+                if "temp_files" not in st.session_state:
+                    st.session_state.temp_files = []
+                st.session_state.temp_files.append(file_path)
+                
+                file_info.append({
+                    "name": uploaded_file.name,
+                    "type": uploaded_file.type,
+                    "size": uploaded_file.size,
+                    "path": file_path
+                })
+            
+            # Add file information to message
+            files_text = "\n\n📎 **Attached files:**\n"
+            for f in file_info:
+                files_text += f"- {f['name']} ({f['type']}, {f['size']} bytes)\n"
+            
+            message_parts.append(files_text)
+        
+        # Combine all parts into final message
+        full_message = "\n".join(message_parts)
+        
+        # Process the message
+        process_and_display_user_message(full_message)
+        
+        # Clear the inputs after sending
+        st.session_state.chat_input = ""
+        st.rerun()
+    
+    # Keyboard shortcut hint
+    st.caption("💡 Tip: Press Ctrl+Enter to send your message quickly")
+    
+    st.markdown('</div>', unsafe_allow_html=True)
     st.markdown('</div>', unsafe_allow_html=True)
 
 def show_agent_examples():
@@ -1059,6 +1200,22 @@ def cleanup_analysis_files():
             except Exception as e:
                 logger.error(f"Error removing temporary file {file_path}: {e}")
         st.session_state.analysis_temp_files = []
+
+def cleanup_temp_files():
+    """Clean up temporary files created during chat."""
+    if "temp_files" in st.session_state and st.session_state.temp_files:
+        for file_path in st.session_state.temp_files:
+            try:
+                if os.path.exists(file_path):
+                    os.remove(file_path)
+                    logger.info(f"Removed temporary file: {file_path}")
+                # Also try to remove the directory if empty
+                dir_path = os.path.dirname(file_path)
+                if os.path.exists(dir_path) and not os.listdir(dir_path):
+                    os.rmdir(dir_path)
+            except Exception as e:
+                logger.error(f"Error removing temporary file {file_path}: {e}")
+        st.session_state.temp_files = []
 
 def display_data_analysis_section():
     """Display the data analysis section of the app"""
@@ -1183,8 +1340,9 @@ def display_analytics_dashboard():
 
 def display_footer():
     """Display the global footer."""
-    st.markdown("---")
-    st.markdown("<p style='text-align: center; font-size: small;'>Powered by Gemini | MultiAgentAI21 can make mistakes. Always verify important information.</p>", unsafe_allow_html=True)
+    st.markdown('<div class="custom-footer">', unsafe_allow_html=True)
+    st.markdown("<p style='text-align: center; font-size: small; color: #6b7280; margin: 0;'>Powered by Gemini | MultiAgentAI21 can make mistakes. Always verify important information.</p>", unsafe_allow_html=True)
+    st.markdown('</div>', unsafe_allow_html=True)
 
 def user_profile_sidebar():
     """Display user profile in sidebar"""
@@ -1310,9 +1468,7 @@ def main_app():
 
         # Clean up temporary files when the app is closed
         atexit.register(cleanup_analysis_files)
-
-        # Display the global footer
-        display_footer()
+        atexit.register(cleanup_temp_files)
 
     except Exception as e:
         logger.error(f"Error in main application: {e}", exc_info=True)
