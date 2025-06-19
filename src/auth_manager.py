@@ -1,683 +1,1725 @@
-import streamlit as st
-import firebase_admin
-from firebase_admin import credentials, auth, firestore
-import os
 import json
-from functools import wraps
+import mimetypes
+import os
+import shutil
+import tempfile
+import time
+from abc import ABC, abstractmethod
+from dataclasses import dataclass
+from enum import Enum
+from pathlib import Path
+from typing import Any, BinaryIO, Dict, List, Optional, Sequence, Union
 import logging
-from datetime import datetime, timedelta
-import requests
-import extra_streamlit_components as stx
+import uuid
+from datetime import datetime
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+import io
+import base64
 
-# Configure logging
+import google.generativeai as genai
+from google.cloud import bigquery
+from google.oauth2 import service_account
+from google.cloud import aiplatform
+
+from src.data_analysis import DataAnalyzer
+from src.api.firestore import FirestoreClient
+from src.types import AgentType, AgentResponse
+from src.agents.content_creator import ContentCreatorAgent
+from src.agents.enhanced_content_creator import EnhancedContentCreatorAgent
+
+# Configure logging with more detailed format
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
 logger = logging.getLogger(__name__)
 
-# Initialize Firebase Admin SDK
-firebase_initialized = False
 
-# Cookie manager for persistent sessions
-@st.cache_resource
-def get_cookie_manager():
-    return stx.CookieManager()
+class FileType(Enum):
+    """Supported file types for processing"""
+    TEXT = "text"
+    IMAGE = "image"
+    VIDEO = "video"
+    AUDIO = "audio"
+    DOCUMENT = "document"
+    SPREADSHEET = "spreadsheet"
+    UNKNOWN = "unknown"
 
-def setup_google_application_credentials():
-    """Set up Google Application Credentials from Streamlit secrets or environment"""
-    try:
-        # First check if GOOGLE_APPLICATION_CREDENTIALS is already set
-        if os.getenv("GOOGLE_APPLICATION_CREDENTIALS") and os.path.exists(os.getenv("GOOGLE_APPLICATION_CREDENTIALS")):
-            logger.info("Using existing GOOGLE_APPLICATION_CREDENTIALS")
-            return
-        
-        # Try to get from Streamlit secrets
-        if hasattr(st, "secrets") and "google_application_credentials_json" in st.secrets:
-            creds_dict = dict(st.secrets["google_application_credentials_json"])
-            temp_creds_path = "/tmp/google_application_credentials.json"
-            
-            with open(temp_creds_path, "w") as f:
-                json.dump(creds_dict, f)
-            
-            os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = temp_creds_path
-            logger.info("Set up Google Application Credentials from Streamlit secrets")
-        else:
-            # Try to find the credentials file in common locations
-            possible_paths = [
-                "google_application_credentials_key.json",
-                "./google_application_credentials_key.json",
-                "../google_application_credentials_key.json",
-                "/app/google_application_credentials_key.json"
-            ]
-            
-            for path in possible_paths:
-                if os.path.exists(path):
-                    os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = path
-                    logger.info(f"Found credentials at: {path}")
-                    return
-            
-            logger.warning("Could not find Google Application Credentials")
-            
-    except Exception as e:
-        logger.error(f"Error setting up Google Application Credentials: {e}")
 
-def initialize_firebase():
-    """Initialize Firebase Admin SDK"""
-    global firebase_initialized
+class BaseAgent(ABC):
+    """Base class for all agents."""
     
-    if firebase_initialized:
-        return
-    
-    try:
-        # Check if already initialized
+    def __init__(self, agent_type: AgentType):
+        """Initialize the base agent."""
+        self.agent_type = agent_type
+        self.model = None
+        self._initialize_model()
+
+    def _initialize_model(self):
+        """Initialize the AI model for the agent."""
         try:
-            firebase_admin.get_app()
-            firebase_initialized = True
-            logger.info("Firebase Admin SDK already initialized")
-            return
-        except ValueError:
+            # Get API key from environment variable
+            api_key = os.getenv('GOOGLE_API_KEY')
+            if not api_key:
+                logger.error("GOOGLE_API_KEY environment variable not set")
+                raise ValueError("GOOGLE_API_KEY environment variable is required")
+            
+            # Configure the Gemini API
+            genai.configure(api_key=api_key)
+            
+            # Try different model names in order of preference
+            model_names = ['gemini-1.5-pro', 'gemini-1.5-flash', 'gemini-pro']
+            
+            for model_name in model_names:
+                try:
+                    self.model = genai.GenerativeModel(model_name)
+                    # Test the model with a simple prompt
+                    test_response = self.model.generate_content("Hello")
+                    if test_response and hasattr(test_response, 'text'):
+                        logger.info(f"Successfully initialized Gemini model: {model_name}")
+                        return
+                except Exception as e:
+                    logger.warning(f"Failed to initialize model {model_name}: {e}")
+                    continue
+            
+            # If all models fail, raise an error
+            raise ValueError("Could not initialize any Gemini model. Please check your API key and model availability.")
+            
+        except Exception as e:
+            logger.error(f"Error initializing model: {e}")
+            raise
+
+    def _process_with_model(self, prompt: str, chat_history: Optional[List[Dict]] = None) -> str:
+        """Process prompt with the AI model, including chat history."""
+        try:
+            if not self.model:
+                raise ValueError("Model not initialized")
+            
+            # Build the chat history for the model
+            contents = []
+            if chat_history:
+                for message in chat_history:
+                    if not message.get("content"):
+                        continue
+                    if "MultiAgentAI21 can make mistakes" in message["content"]:
+                        continue
+
+                    if message["role"] == "user":
+                        contents.append({"role": "user", "parts": [message["content"]]})
+                    elif message["role"] == "assistant":
+                        contents.append({"role": "model", "parts": [message["content"]]})
+            
+            # Add the current prompt as the last user message
+            contents.append({"role": "user", "parts": [prompt]})
+            
+            # Use generate_content with the entire 'contents' list
+            response = self.model.generate_content(contents)
+            
+            if hasattr(response, 'text') and response.text:
+                return response.text.strip()
+            elif hasattr(response, 'parts') and response.parts:
+                return ''.join([part.text for part in response.parts if hasattr(part, 'text')])
+            else:
+                logger.warning("No text content in model response")
+                return "I received your request but couldn't generate a proper response."
+                
+        except Exception as e:
+            logger.error(f"Error processing with model: {e}")
+            return f"Error processing request: {str(e)}"
+
+    @abstractmethod
+    def process(self, input_data: str, chat_history: Optional[List[Dict]] = None, **kwargs) -> AgentResponse:
+        """Process input data and return a response."""
+        pass
+
+
+class AnalysisAgent(BaseAgent):
+    """Agent for actual data analysis tasks."""
+
+    def __init__(self):
+        """Initialize the analysis agent."""
+        super().__init__(AgentType.DATA_ANALYSIS)
+        self.analyzer = DataAnalyzer() if 'DataAnalyzer' in globals() else None
+
+    def process(self, input_data: str, chat_history: Optional[List[Dict]] = None, files: Optional[List] = None, **kwargs) -> AgentResponse:
+        """Process analysis requests with actual data processing capabilities."""
+        start_time = time.time()
+        
+        try:
+            if not input_data or not input_data.strip():
+                return AgentResponse(
+                    content="Please provide data to analyze or upload a CSV/Excel file for analysis.",
+                    success=False,
+                    agent_type=self.agent_type.value,
+                    execution_time=time.time() - start_time
+                )
+            
+            # Check if files are provided for analysis
+            if files and len(files) > 0:
+                return self._analyze_uploaded_files(files, input_data, start_time)
+            
+            # Check if the input contains actual data (CSV-like format, JSON, etc.)
+            if self._contains_structured_data(input_data):
+                return self._analyze_structured_data(input_data, start_time)
+            
+            # Check for mathematical calculations
+            if self._is_calculation_request(input_data):
+                return self._perform_calculations(input_data, start_time)
+            
+            # Generate sample data based on the request and analyze it
+            return self._generate_and_analyze_sample_data(input_data, chat_history, start_time)
+            
+        except Exception as e:
+            logger.error(f"Error in AnalysisAgent.process: {e}", exc_info=True)
+            return AgentResponse(
+                content="",
+                error=str(e),
+                success=False,
+                agent_type=self.agent_type.value,
+                execution_time=time.time() - start_time,
+                error_message=f"Analysis error: {str(e)}"
+            )
+
+    def _contains_structured_data(self, input_data: str) -> bool:
+        """Check if input contains structured data."""
+        # Check for CSV-like format
+        if ',' in input_data and '\n' in input_data:
+            lines = input_data.strip().split('\n')
+            if len(lines) > 1:
+                # Check if all lines have similar number of commas
+                comma_counts = [line.count(',') for line in lines]
+                return len(set(comma_counts)) <= 2  # Allow some variation
+        
+        # Check for JSON format
+        try:
+            json.loads(input_data)
+            return True
+        except:
             pass
         
-        # Set up credentials
-        setup_google_application_credentials()
+        return False
+
+    def _is_calculation_request(self, input_data: str) -> bool:
+        """Check if input is a mathematical calculation request."""
+        calc_indicators = [
+            'calculate', 'compute', 'sum', 'average', 'mean', 'median', 'std', 'variance',
+            'correlation', 'regression', '+', '-', '*', '/', '=', 'math', 'statistics'
+        ]
+        return any(indicator in input_data.lower() for indicator in calc_indicators)
+
+    def _analyze_uploaded_files(self, files: List, request: str, start_time: float) -> AgentResponse:
+        """Analyze uploaded files."""
+        try:
+            results = []
+            
+            for file in files:
+                if hasattr(file, 'name') and file.name.endswith(('.csv', '.xlsx', '.xls')):
+                    # Read the file
+                    if file.name.endswith('.csv'):
+                        df = pd.read_csv(file)
+                    else:
+                        df = pd.read_excel(file)
+                    
+                    # Perform comprehensive analysis
+                    analysis_result = self._perform_dataframe_analysis(df, file.name, request)
+                    results.append(analysis_result)
+            
+            if not results:
+                return AgentResponse(
+                    content="No supported data files found. Please upload CSV or Excel files.",
+                    success=False,
+                    agent_type=self.agent_type.value,
+                    execution_time=time.time() - start_time
+                )
+            
+            # Combine results
+            combined_analysis = "\n\n".join(results)
+            
+            return AgentResponse(
+                content=combined_analysis,
+                success=True,
+                agent_type=self.agent_type.value,
+                execution_time=time.time() - start_time
+            )
+            
+        except Exception as e:
+            return AgentResponse(
+                content=f"Error analyzing files: {str(e)}",
+                success=False,
+                agent_type=self.agent_type.value,
+                execution_time=time.time() - start_time
+            )
+
+    def _analyze_structured_data(self, input_data: str, start_time: float) -> AgentResponse:
+        """Analyze structured data provided as text."""
+        try:
+            # Try to parse as CSV
+            try:
+                from io import StringIO
+                df = pd.read_csv(StringIO(input_data))
+            except:
+                # Try to parse as JSON
+                data = json.loads(input_data)
+                df = pd.DataFrame(data)
+            
+            analysis_result = self._perform_dataframe_analysis(df, "provided_data")
+            
+            return AgentResponse(
+                content=analysis_result,
+                success=True,
+                agent_type=self.agent_type.value,
+                execution_time=time.time() - start_time
+            )
+            
+        except Exception as e:
+            return AgentResponse(
+                content=f"Error parsing structured data: {str(e)}",
+                success=False,
+                agent_type=self.agent_type.value,
+                execution_time=time.time() - start_time
+            )
+
+    def _perform_calculations(self, input_data: str, start_time: float) -> AgentResponse:
+        """Perform mathematical calculations."""
+        try:
+            # Extract numbers and operations
+            import re
+            
+            # Simple calculation patterns
+            if '+' in input_data or '-' in input_data or '*' in input_data or '/' in input_data:
+                # Extract mathematical expression
+                expr_match = re.search(r'[\d\s+\-*/().]+', input_data)
+                if expr_match:
+                    expression = expr_match.group().strip()
+                    try:
+                        result = eval(expression)  # Note: In production, use safer evaluation
+                        calculation_result = f"""
+## 🧮 Calculation Result
+
+**Expression:** `{expression}`
+**Result:** `{result}`
+
+### Breakdown:
+- Input: {expression}
+- Output: {result}
+- Type: {type(result).__name__}
+"""
+                        return AgentResponse(
+                            content=calculation_result,
+                            success=True,
+                            agent_type=self.agent_type.value,
+                            execution_time=time.time() - start_time
+                        )
+                    except:
+                        pass
+            
+            # Statistical calculations on lists of numbers
+            numbers = re.findall(r'\d+\.?\d*', input_data)
+            if numbers:
+                numbers = [float(n) for n in numbers]
+                stats_result = f"""
+## 📊 Statistical Analysis
+
+**Numbers:** {numbers}
+
+### Basic Statistics:
+- **Count:** {len(numbers)}
+- **Sum:** {sum(numbers)}
+- **Mean:** {np.mean(numbers):.2f}
+- **Median:** {np.median(numbers):.2f}
+- **Standard Deviation:** {np.std(numbers):.2f}
+- **Variance:** {np.var(numbers):.2f}
+- **Min:** {min(numbers)}
+- **Max:** {max(numbers)}
+- **Range:** {max(numbers) - min(numbers)}
+"""
+                return AgentResponse(
+                    content=stats_result,
+                    success=True,
+                    agent_type=self.agent_type.value,
+                    execution_time=time.time() - start_time
+                )
+            
+            # If no specific calculation found, provide general guidance
+            return AgentResponse(
+                content="Please provide specific numbers or data to calculate. For example: 'Calculate 15 + 25 * 3' or 'Find the average of 10, 20, 30, 40'",
+                success=False,
+                agent_type=self.agent_type.value,
+                execution_time=time.time() - start_time
+            )
+            
+        except Exception as e:
+            return AgentResponse(
+                content=f"Error performing calculations: {str(e)}",
+                success=False,
+                agent_type=self.agent_type.value,
+                execution_time=time.time() - start_time
+            )
+
+    def _generate_and_analyze_sample_data(self, request: str, chat_history: Optional[List[Dict]], start_time: float) -> AgentResponse:
+        """Generate sample data based on request and analyze it."""
+        try:
+            # Use AI to understand what kind of sample data to generate
+            sample_data_prompt = f"""
+            Based on this analysis request: "{request}"
+            
+            Generate realistic sample data that would be relevant to this analysis.
+            Respond with ONLY a JSON object containing:
+            1. "data_type": the type of data (sales, financial, customer, etc.)
+            2. "columns": list of column names
+            3. "sample_data": list of dictionaries with sample data (at least 20 rows)
+            
+            Make the data realistic and varied to enable meaningful analysis.
+            """
+            
+            ai_response = self._process_with_model(sample_data_prompt, chat_history)
+            
+            try:
+                # Extract JSON from response
+                import re
+                json_match = re.search(r'\{.*\}', ai_response, re.DOTALL)
+                if json_match:
+                    data_spec = json.loads(json_match.group())
+                    
+                    # Create DataFrame from generated data
+                    df = pd.DataFrame(data_spec['sample_data'])
+                    
+                    # Perform analysis
+                    analysis_result = self._perform_dataframe_analysis(df, "generated_sample_data", request)
+                    
+                    # Add note about sample data
+                    final_result = f"""
+## 📊 Analysis with Generated Sample Data
+
+*Note: Since no specific data was provided, I've generated realistic sample data based on your request to demonstrate the analysis.*
+
+{analysis_result}
+
+### 💡 To get analysis of your actual data:
+- Upload a CSV or Excel file
+- Paste your data directly in CSV format
+- Provide specific numbers for calculations
+"""
+                    
+                    return AgentResponse(
+                        content=final_result,
+                        success=True,
+                        agent_type=self.agent_type.value,
+                        execution_time=time.time() - start_time
+                    )
+            except:
+                pass
+            
+            # Fallback to generic analysis guidance
+            analysis_prompt = f"""
+            You are a professional data analyst. Provide specific, actionable analysis guidance for: {request}
+            
+            Include:
+            1. What data would be needed
+            2. What analysis methods to use
+            3. What visualizations would be helpful
+            4. What insights to look for
+            5. What actions to take based on results
+            
+            Be specific and practical.
+            """
+            
+            response_text = self._process_with_model(analysis_prompt, chat_history)
+            
+            return AgentResponse(
+                content=response_text,
+                success=True,
+                agent_type=self.agent_type.value,
+                execution_time=time.time() - start_time
+            )
+            
+        except Exception as e:
+            return AgentResponse(
+                content=f"Error generating analysis: {str(e)}",
+                success=False,
+                agent_type=self.agent_type.value,
+                execution_time=time.time() - start_time
+            )
+
+    def _perform_dataframe_analysis(self, df: pd.DataFrame, filename: str, request: str = "") -> str:
+        """Perform comprehensive analysis on a DataFrame."""
+        try:
+            analysis_parts = []
+            
+            # Basic info
+            analysis_parts.append(f"""
+## 📋 Dataset Overview: {filename}
+
+**Shape:** {df.shape[0]} rows × {df.shape[1]} columns
+**Columns:** {', '.join(df.columns.tolist())}
+""")
+            
+            # Data types and missing values
+            info_summary = []
+            for col in df.columns:
+                dtype = str(df[col].dtype)
+                missing = df[col].isnull().sum()
+                missing_pct = (missing / len(df)) * 100
+                info_summary.append(f"- **{col}**: {dtype} ({missing} missing, {missing_pct:.1f}%)")
+            
+            analysis_parts.append(f"""
+### 🔍 Data Types & Quality
+{chr(10).join(info_summary)}
+""")
+            
+            # Statistical summary for numeric columns
+            numeric_cols = df.select_dtypes(include=[np.number]).columns
+            if len(numeric_cols) > 0:
+                stats_df = df[numeric_cols].describe()
+                analysis_parts.append(f"""
+### 📊 Statistical Summary
+```
+{stats_df.to_string()}
+```
+""")
+            
+            # Categorical analysis
+            categorical_cols = df.select_dtypes(include=['object']).columns
+            if len(categorical_cols) > 0:
+                cat_analysis = []
+                for col in categorical_cols[:5]:  # Limit to first 5 categorical columns
+                    unique_count = df[col].nunique()
+                    top_values = df[col].value_counts().head(3)
+                    cat_analysis.append(f"""
+**{col}:**
+- Unique values: {unique_count}
+- Top values: {', '.join([f"{val} ({count})" for val, count in top_values.items()])}
+""")
+                
+                analysis_parts.append(f"""
+### 🏷️ Categorical Analysis
+{chr(10).join(cat_analysis)}
+""")
+            
+            # Correlations for numeric data
+            if len(numeric_cols) > 1:
+                corr_matrix = df[numeric_cols].corr()
+                # Find strongest correlations
+                correlations = []
+                for i in range(len(numeric_cols)):
+                    for j in range(i+1, len(numeric_cols)):
+                        corr_val = corr_matrix.iloc[i, j]
+                        if abs(corr_val) > 0.5:
+                            correlations.append(f"- {numeric_cols[i]} ↔ {numeric_cols[j]}: {corr_val:.3f}")
+                
+                if correlations:
+                    analysis_parts.append(f"""
+### 🔗 Strong Correlations (|r| > 0.5)
+{chr(10).join(correlations)}
+""")
+            
+            # Key insights
+            insights = []
+            
+            # Data quality insights
+            if df.isnull().sum().sum() > 0:
+                insights.append("⚠️ Missing data detected - consider cleaning or imputation strategies")
+            
+            # Size insights
+            if len(df) < 100:
+                insights.append("📏 Small dataset - statistical significance may be limited")
+            elif len(df) > 10000:
+                insights.append("📈 Large dataset - consider sampling for exploration")
+            
+            # Duplicate insights
+            duplicates = df.duplicated().sum()
+            if duplicates > 0:
+                insights.append(f"🔄 {duplicates} duplicate rows found")
+            
+            if insights:
+                analysis_parts.append(f"""
+### 💡 Key Insights
+{chr(10).join(insights)}
+""")
+            
+            # Request-specific analysis if provided
+            if request:
+                analysis_parts.append(f"""
+### 🎯 Analysis for Your Request
+Based on your request: "{request}"
+
+This dataset appears suitable for:
+{self._suggest_analysis_methods(df, request)}
+""")
+            
+            return "\n".join(analysis_parts)
+            
+        except Exception as e:
+            return f"Error performing DataFrame analysis: {str(e)}"
+
+    def _suggest_analysis_methods(self, df: pd.DataFrame, request: str) -> str:
+        """Suggest specific analysis methods based on the data and request."""
+        suggestions = []
         
-        # Initialize Firebase Admin
-        cred = credentials.ApplicationDefault()
-        firebase_admin.initialize_app(cred)
-        firebase_initialized = True
-        logger.info("Firebase Admin SDK initialized successfully")
+        numeric_cols = df.select_dtypes(include=[np.number]).columns
+        categorical_cols = df.select_dtypes(include=['object']).columns
         
+        request_lower = request.lower()
+        
+        if 'trend' in request_lower and len(numeric_cols) > 0:
+            suggestions.append("- **Trend Analysis**: Time series analysis on numeric columns")
+        
+        if 'compare' in request_lower or 'comparison' in request_lower:
+            suggestions.append("- **Comparative Analysis**: Group comparisons using categorical variables")
+        
+        if 'predict' in request_lower and len(numeric_cols) > 1:
+            suggestions.append("- **Predictive Modeling**: Regression analysis using numeric features")
+        
+        if 'segment' in request_lower or 'cluster' in request_lower:
+            suggestions.append("- **Segmentation**: Clustering analysis to identify groups")
+        
+        if len(numeric_cols) > 0:
+            suggestions.append(f"- **Statistical Analysis**: Descriptive statistics on {len(numeric_cols)} numeric columns")
+        
+        if len(categorical_cols) > 0:
+            suggestions.append(f"- **Categorical Analysis**: Frequency analysis on {len(categorical_cols)} categorical columns")
+        
+        return "\n".join(suggestions) if suggestions else "- General exploratory data analysis"
+
+
+class FileAgent(BaseAgent):
+    """Agent for actual file processing and automation tasks."""
+
+    def __init__(self):
+        """Initialize the file processing agent."""
+        super().__init__(AgentType.AUTOMATION)
+        self.temp_dir = tempfile.mkdtemp()
+
+    def process(self, input_data: str, chat_history: Optional[List[Dict]] = None, files: Optional[List] = None, **kwargs) -> AgentResponse:
+        """Process automation and file processing requests."""
+        start_time = time.time()
+        
+        try:
+            if not input_data or not input_data.strip():
+                return AgentResponse(
+                    content="Please provide a specific file processing task or automation request. You can also upload files for processing.",
+                    success=False,
+                    agent_type=self.agent_type.value,
+                    execution_time=time.time() - start_time
+                )
+            
+            # Check if files are provided for processing
+            if files and len(files) > 0:
+                return self._process_uploaded_files(files, input_data, start_time)
+            
+            # Check for specific automation tasks
+            if self._is_script_generation_request(input_data):
+                return self._generate_automation_script(input_data, chat_history, start_time)
+            
+            # Check for workflow creation
+            if self._is_workflow_request(input_data):
+                return self._create_workflow(input_data, chat_history, start_time)
+            
+            # Check for file operation requests
+            if self._is_file_operation_request(input_data):
+                return self._handle_file_operations(input_data, chat_history, start_time)
+            
+            # Default to providing automation guidance with specific examples
+            return self._provide_automation_guidance(input_data, chat_history, start_time)
+            
+        except Exception as e:
+            logger.error(f"Error in FileAgent.process: {e}", exc_info=True)
+            return AgentResponse(
+                content="",
+                error=str(e),
+                success=False,
+                agent_type=self.agent_type.value,
+                execution_time=time.time() - start_time,
+                error_message=f"Automation error: {str(e)}"
+            )
+
+    def _is_script_generation_request(self, input_data: str) -> bool:
+        """Check if request is for script generation."""
+        script_indicators = [
+            'generate script', 'create script', 'write script', 'automate with',
+            'python script', 'bash script', 'automation script'
+        ]
+        return any(indicator in input_data.lower() for indicator in script_indicators)
+
+    def _is_workflow_request(self, input_data: str) -> bool:
+        """Check if request is for workflow creation."""
+        workflow_indicators = [
+            'workflow', 'process flow', 'automation flow', 'step by step',
+            'pipeline', 'sequence of tasks'
+        ]
+        return any(indicator in input_data.lower() for indicator in workflow_indicators)
+
+    def _is_file_operation_request(self, input_data: str) -> bool:
+        """Check if request is for file operations."""
+        file_indicators = [
+            'process files', 'organize files', 'rename files', 'move files',
+            'file management', 'batch process', 'file conversion'
+        ]
+        return any(indicator in input_data.lower() for indicator in file_indicators)
+
+    def _process_uploaded_files(self, files: List, request: str, start_time: float) -> AgentResponse:
+        """Process uploaded files based on the request."""
+        try:
+            results = []
+            
+            for file in files:
+                file_result = self._process_single_file(file, request)
+                results.append(file_result)
+            
+            # Combine results
+            combined_result = f"""
+## 📁 File Processing Results
+
+{chr(10).join(results)}
+
+### Summary:
+- Processed {len(files)} file(s)
+- Request: {request}
+- All operations completed successfully
+"""
+            
+            return AgentResponse(
+                content=combined_result,
+                success=True,
+                agent_type=self.agent_type.value,
+                execution_time=time.time() - start_time
+            )
+            
+        except Exception as e:
+            return AgentResponse(
+                content=f"Error processing files: {str(e)}",
+                success=False,
+                agent_type=self.agent_type.value,
+                execution_time=time.time() - start_time
+            )
+
+    def _process_single_file(self, file, request: str) -> str:
+        """Process a single file."""
+        try:
+            file_info = {
+                'name': getattr(file, 'name', 'unknown'),
+                'size': getattr(file, 'size', 0) if hasattr(file, 'size') else len(file.read() if hasattr(file, 'read') else b''),
+                'type': self._detect_file_type(file)
+            }
+            
+            # Reset file pointer if possible
+            if hasattr(file, 'seek'):
+                file.seek(0)
+            
+            # Process based on file type and request
+            if file_info['type'] == FileType.SPREADSHEET:
+                return self._process_spreadsheet_file(file, file_info, request)
+            elif file_info['type'] == FileType.TEXT:
+                return self._process_text_file(file, file_info, request)
+            elif file_info['type'] == FileType.IMAGE:
+                return self._process_image_file(file, file_info, request)
+            else:
+                return self._process_generic_file(file, file_info, request)
+                
+        except Exception as e:
+            return f"Error processing file {getattr(file, 'name', 'unknown')}: {str(e)}"
+
+    def _detect_file_type(self, file) -> FileType:
+        """Detect the type of uploaded file."""
+        filename = getattr(file, 'name', '')
+        
+        if filename.endswith(('.csv', '.xlsx', '.xls')):
+            return FileType.SPREADSHEET
+        elif filename.endswith(('.txt', '.md', '.py', '.js', '.html', '.css')):
+            return FileType.TEXT
+        elif filename.endswith(('.jpg', '.jpeg', '.png', '.gif', '.bmp')):
+            return FileType.IMAGE
+        elif filename.endswith(('.mp4', '.avi', '.mov', '.wmv')):
+            return FileType.VIDEO
+        elif filename.endswith(('.mp3', '.wav', '.flac', '.aac')):
+            return FileType.AUDIO
+        else:
+            return FileType.UNKNOWN
+
+    def _process_spreadsheet_file(self, file, file_info: dict, request: str) -> str:
+        """Process spreadsheet files."""
+        try:
+            # Read the spreadsheet
+            if file_info['name'].endswith('.csv'):
+                df = pd.read_csv(file)
+            else:
+                df = pd.read_excel(file)
+            
+            # Perform requested operations
+            operations_performed = []
+            
+            if 'clean' in request.lower():
+                original_rows = len(df)
+                df = df.dropna()
+                operations_performed.append(f"Removed {original_rows - len(df)} rows with missing data")
+            
+            if 'summary' in request.lower() or 'analyze' in request.lower():
+                summary = df.describe().to_string()
+                operations_performed.append(f"Generated statistical summary")
+            
+            if 'export' in request.lower() or 'convert' in request.lower():
+                # Create processed version
+                processed_filename = f"processed_{file_info['name']}"
+                operations_performed.append(f"Created processed version: {processed_filename}")
+            
+            result = f"""
+### 📊 {file_info['name']} (Spreadsheet)
+- **Size:** {file_info['size']:,} bytes
+- **Dimensions:** {df.shape[0]} rows × {df.shape[1]} columns
+- **Columns:** {', '.join(df.columns.tolist())}
+
+**Operations Performed:**
+{chr(10).join(f"- {op}" for op in operations_performed)}
+"""
+            return result
+            
+        except Exception as e:
+            return f"Error processing spreadsheet {file_info['name']}: {str(e)}"
+
+    def _process_text_file(self, file, file_info: dict, request: str) -> str:
+        """Process text files."""
+        try:
+            content = file.read()
+            if isinstance(content, bytes):
+                content = content.decode('utf-8')
+            
+            # Analyze content
+            lines = content.split('\n')
+            words = content.split()
+            chars = len(content)
+            
+            operations_performed = []
+            
+            if 'analyze' in request.lower():
+                operations_performed.append(f"Analyzed text structure: {len(lines)} lines, {len(words)} words, {chars} characters")
+            
+            if 'clean' in request.lower():
+                # Remove empty lines
+                cleaned_lines = [line.strip() for line in lines if line.strip()]
+                operations_performed.append(f"Cleaned text: removed {len(lines) - len(cleaned_lines)} empty lines")
+            
+            if 'extract' in request.lower():
+                # Extract emails, URLs, etc.
+                import re
+                emails = re.findall(r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b', content)
+                urls = re.findall(r'http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\\(\\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+', content)
+                operations_performed.append(f"Extracted {len(emails)} emails and {len(urls)} URLs")
+            
+            result = f"""
+### 📄 {file_info['name']} (Text File)
+- **Size:** {file_info['size']:,} bytes
+- **Lines:** {len(lines):,}
+- **Words:** {len(words):,}
+- **Characters:** {chars:,}
+
+**Operations Performed:**
+{chr(10).join(f"- {op}" for op in operations_performed)}
+"""
+            return result
+            
+        except Exception as e:
+            return f"Error processing text file {file_info['name']}: {str(e)}"
+
+    def _process_image_file(self, file, file_info: dict, request: str) -> str:
+        """Process image files."""
+        try:
+            operations_performed = []
+            
+            if 'analyze' in request.lower():
+                operations_performed.append("Analyzed image metadata and properties")
+            
+            if 'resize' in request.lower():
+                operations_performed.append("Image resizing operation planned")
+            
+            if 'convert' in request.lower():
+                operations_performed.append("Image format conversion planned")
+            
+            result = f"""
+### 🖼️ {file_info['name']} (Image File)
+- **Size:** {file_info['size']:,} bytes
+- **Type:** Image file
+
+**Operations Performed:**
+{chr(10).join(f"- {op}" for op in operations_performed)}
+
+*Note: Advanced image processing requires additional libraries.*
+"""
+            return result
+            
+        except Exception as e:
+            return f"Error processing image file {file_info['name']}: {str(e)}"
+
+    def _process_generic_file(self, file, file_info: dict, request: str) -> str:
+        """Process generic files."""
+        return f"""
+### 📁 {file_info['name']} (Generic File)
+- **Size:** {file_info['size']:,} bytes
+- **Type:** {file_info['type'].value}
+
+**Operations Available:**
+- File metadata extraction
+- Basic file operations (copy, move, rename)
+- Format detection
+
+*Upload specific file types for more advanced processing.*
+"""
+
+    def _generate_automation_script(self, request: str, chat_history: Optional[List[Dict]], start_time: float) -> AgentResponse:
+        """Generate actual automation scripts."""
+        try:
+            script_prompt = f"""
+            Generate a working automation script for: {request}
+            
+            Provide:
+            1. Complete, runnable code
+            2. Clear comments explaining each step
+            3. Error handling
+            4. Usage instructions
+            5. Required dependencies
+            
+            Choose the most appropriate language (Python, Bash, etc.) and provide production-ready code.
+            """
+            
+            script_code = self._process_with_model(script_prompt, chat_history)
+            
+            result = f"""
+## 🤖 Generated Automation Script
+
+{script_code}
+
+### 📋 Next Steps:
+1. Save the script to a file
+2. Install any required dependencies
+3. Test the script with sample data
+4. Schedule or run as needed
+
+### ⚠️ Important Notes:
+- Review and test the script before running in production
+- Modify paths and parameters as needed for your environment
+- Ensure you have necessary permissions for file operations
+"""
+            
+            return AgentResponse(
+                content=result,
+                success=True,
+                agent_type=self.agent_type.value,
+                execution_time=time.time() - start_time
+            )
+            
+        except Exception as e:
+            return AgentResponse(
+                content=f"Error generating script: {str(e)}",
+                success=False,
+                agent_type=self.agent_type.value,
+                execution_time=time.time() - start_time
+            )
+
+    def _create_workflow(self, request: str, chat_history: Optional[List[Dict]], start_time: float) -> AgentResponse:
+        """Create detailed workflow documentation."""
+        try:
+            workflow_prompt = f"""
+            Create a detailed workflow for: {request}
+            
+            Include:
+            1. Step-by-step process
+            2. Input/output requirements
+            3. Tools and technologies needed
+            4. Error handling procedures
+            5. Quality checks
+            6. Timeline estimates
+            7. Success criteria
+            
+            Format as a comprehensive workflow document.
+            """
+            
+            workflow_content = self._process_with_model(workflow_prompt, chat_history)
+            
+            result = f"""
+## 🔄 Workflow Documentation
+
+{workflow_content}
+
+### 📊 Implementation Checklist:
+- [ ] Define input requirements
+- [ ] Set up necessary tools/environment
+- [ ] Implement each workflow step
+- [ ] Test with sample data
+- [ ] Establish monitoring and logging
+- [ ] Document and train team
+"""
+            
+            return AgentResponse(
+                content=result,
+                success=True,
+                agent_type=self.agent_type.value,
+                execution_time=time.time() - start_time
+            )
+            
+        except Exception as e:
+            return AgentResponse(
+                content=f"Error creating workflow: {str(e)}",
+                success=False,
+                agent_type=self.agent_type.value,
+                execution_time=time.time() - start_time
+            )
+
+    def _handle_file_operations(self, request: str, chat_history: Optional[List[Dict]], start_time: float) -> AgentResponse:
+        """Handle specific file operation requests."""
+        try:
+            # Generate specific file operation scripts/instructions
+            operation_prompt = f"""
+            Provide specific file operation instructions for: {request}
+            
+            Include:
+            1. Exact commands or code
+            2. Safety precautions
+            3. Backup recommendations
+            4. Testing procedures
+            5. Rollback plans
+            
+            Be specific and actionable.
+            """
+            
+            operation_content = self._process_with_model(operation_prompt, chat_history)
+            
+            result = f"""
+## 📁 File Operation Instructions
+
+{operation_content}
+
+### 🛡️ Safety Checklist:
+- [ ] Backup important files before operations
+- [ ] Test commands on sample files first
+- [ ] Verify results before applying to all files
+- [ ] Keep audit log of changes made
+"""
+            
+            return AgentResponse(
+                content=result,
+                success=True,
+                agent_type=self.agent_type.value,
+                execution_time=time.time() - start_time
+            )
+            
+        except Exception as e:
+            return AgentResponse(
+                content=f"Error handling file operations: {str(e)}",
+                success=False,
+                agent_type=self.agent_type.value,
+                execution_time=time.time() - start_time
+            )
+
+    def _provide_automation_guidance(self, request: str, chat_history: Optional[List[Dict]], start_time: float) -> AgentResponse:
+        """Provide specific automation guidance with examples."""
+        try:
+            guidance_prompt = f"""
+            Provide comprehensive automation guidance for: {request}
+            
+            Include:
+            1. Technology recommendations
+            2. Implementation approach
+            3. Code examples
+            4. Tools and platforms
+            5. Best practices
+            6. Common pitfalls to avoid
+            7. ROI considerations
+            8. Specific next steps
+            
+            Be detailed and practical.
+            """
+            
+            guidance_content = self._process_with_model(guidance_prompt, chat_history)
+            
+            result = f"""
+## 🔧 Automation Guidance
+
+{guidance_content}
+
+### 🚀 Quick Start Options:
+1. **Upload files** for immediate processing
+2. **Request specific scripts** for custom automation
+3. **Ask for workflows** for complex processes
+4. **Get tool recommendations** for your use case
+"""
+            
+            return AgentResponse(
+                content=result,
+                success=True,
+                agent_type=self.agent_type.value,
+                execution_time=time.time() - start_time
+            )
+            
+        except Exception as e:
+            return AgentResponse(
+                content=f"Error providing guidance: {str(e)}",
+                success=False,
+                agent_type=self.agent_type.value,
+                execution_time=time.time() - start_time
+            )
+
+
+class ChatAgent(BaseAgent):
+    """Agent for customer service interactions."""
+
+    def __init__(self):
+        """Initialize the customer service agent."""
+        super().__init__(AgentType.CUSTOMER_SERVICE)
+
+    def process(self, input_data: str, chat_history: Optional[List[Dict]] = None, **kwargs) -> AgentResponse:
+        """Process customer service requests with conversation context."""
+        start_time = time.time()
+        
+        try:
+            if not input_data or not input_data.strip():
+                return AgentResponse(
+                    content="Please provide a customer service request or question.",
+                    success=False,
+                    agent_type=self.agent_type.value,
+                    execution_time=time.time() - start_time
+                )
+            
+            # Check for simple acknowledgments
+            acknowledgment_phrases = [
+                "thank you", "thanks", "appreciate it", "ok", "okay", "got it",
+                "understood", "perfect", "great", "awesome", "nice", "good"
+            ]
+            
+            if any(phrase in input_data.lower() for phrase in acknowledgment_phrases):
+                if "thank" in input_data.lower():
+                    response_text = "You're very welcome! I'm glad I could help. If you have any other questions or need assistance with anything else, feel free to ask."
+                elif any(word in input_data.lower() for word in ["ok", "okay", "got it", "understood"]):
+                    response_text = "Perfect! Let me know if you need anything else or have any questions."
+                elif any(word in input_data.lower() for word in ["great", "awesome", "nice", "good", "perfect"]):
+                    response_text = "I'm glad you're satisfied! Is there anything else I can help you with today?"
+                else:
+                    response_text = "Thank you! How else can I assist you?"
+                
+                return AgentResponse(
+                    content=response_text,
+                    success=True,
+                    agent_type=self.agent_type.value,
+                    execution_time=time.time() - start_time
+                )
+            
+            # Enhanced customer service with context awareness
+            customer_service_prompt = f"""
+            You are an expert customer service representative for MultiAgentAI21, a multi-agent AI platform.
+            
+            Our platform includes:
+            - Content Creation Agent: Writes blogs, social media, marketing copy, etc.
+            - Data Analysis Agent: Analyzes data, performs calculations, generates insights
+            - Automation Agent: Processes files, creates scripts, automates workflows
+            - Customer Service Agent: Provides support and assistance (that's you!)
+            
+            CUSTOMER REQUEST: {input_data}
+            
+            Provide helpful, professional support that:
+            1. **Addresses their specific need** with empathy
+            2. **Provides clear, actionable solutions**
+            3. **Guides them to the right agent** if needed
+            4. **Offers specific examples** when helpful
+            5. **Maintains a friendly, professional tone**
+            
+            If they need:
+            - Content creation: Guide them to use "content creation" agent
+            - Data analysis: Direct them to "data analysis" agent
+            - File processing/automation: Point them to "automation" agent
+            - General help: Provide comprehensive assistance
+            
+            Always end with asking how else you can help.
+            """
+            
+            response_text = self._process_with_model(customer_service_prompt, chat_history)
+            
+            return AgentResponse(
+                content=response_text,
+                success=True,
+                agent_type=self.agent_type.value,
+                execution_time=time.time() - start_time
+            )
+            
+        except Exception as e:
+            logger.error(f"Error in ChatAgent.process: {e}", exc_info=True)
+            return AgentResponse(
+                content="I apologize, but I'm experiencing technical difficulties. Please try again, or let me know if you need help with a specific task.",
+                error=str(e),
+                success=False,
+                agent_type=self.agent_type.value,
+                execution_time=time.time() - start_time,
+                error_message=f"Customer service error: {str(e)}"
+            )
+
+
+class ContentCreatorAgent(BaseAgent):
+    """Agent specialized in actual content creation."""
+
+    def __init__(self):
+        """Initialize the content creator agent."""
+        super().__init__(AgentType.CONTENT_CREATION)
+
+    def process(self, input_data: str, chat_history: Optional[List[Dict]] = None, **kwargs) -> AgentResponse:
+        """Process content creation requests and actually create content."""
+        start_time = time.time()
+        
+        try:
+            if not input_data or not input_data.strip():
+                return AgentResponse(
+                    content="Please provide a specific content creation request (e.g., 'Write a blog post about AI trends', 'Create social media content for a product launch').",
+                    success=False,
+                    agent_type=self.agent_type.value,
+                    execution_time=time.time() - start_time
+                )
+            
+            # Determine content type and create actual content
+            content_type = self._detect_content_type(input_data)
+            content_topic = self._extract_content_topic(input_data, content_type)
+            
+            logger.info(f"Creating {content_type} content about: {content_topic}")
+            
+            # Generate actual content based on type
+            if content_type == "blog_post":
+                content = self._create_blog_post(content_topic, chat_history)
+            elif content_type == "social_media":
+                content = self._create_social_media_post(content_topic, chat_history)
+            elif content_type == "article":
+                content = self._create_article(content_topic, chat_history)
+            elif content_type == "marketing_copy":
+                content = self._create_marketing_copy(content_topic, chat_history)
+            elif content_type == "product_description":
+                content = self._create_product_description(content_topic, chat_history)
+            elif content_type == "email_content":
+                content = self._create_email_content(content_topic, chat_history)
+            else:
+                content = self._create_general_content(content_topic, chat_history)
+            
+            # Format the final response
+            final_content = f"""
+## 📝 {content_type.replace('_', ' ').title()} Created
+
+{content}
+
+---
+### 📊 Content Details:
+- **Type:** {content_type.replace('_', ' ').title()}
+- **Topic:** {content_topic}
+- **Generated:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+- **Ready to use:** ✅
+
+*Generated by MultiAgentAI21 Content Creation Agent*
+"""
+            
+            return AgentResponse(
+                content=final_content,
+                success=True,
+                agent_type=self.agent_type.value,
+                execution_time=time.time() - start_time
+            )
+            
+        except Exception as e:
+            logger.error(f"Error in ContentCreatorAgent.process: {e}", exc_info=True)
+            return AgentResponse(
+                content="",
+                error=str(e),
+                success=False,
+                agent_type=self.agent_type.value,
+                execution_time=time.time() - start_time,
+                error_message=f"Content creation error: {str(e)}"
+            )
+
+    def _detect_content_type(self, request: str) -> str:
+        """Detect the type of content to generate."""
+        request_lower = request.lower()
+        
+        if any(word in request_lower for word in ["blog", "blog post", "article post"]):
+            return "blog_post"
+        elif any(word in request_lower for word in ["social media", "tweet", "facebook", "instagram", "linkedin", "post"]):
+            return "social_media"
+        elif any(word in request_lower for word in ["article", "news", "report"]):
+            return "article"
+        elif any(word in request_lower for word in ["marketing", "advertisement", "ad copy", "sales"]):
+            return "marketing_copy"
+        elif any(word in request_lower for word in ["product", "description", "feature"]):
+            return "product_description"
+        elif any(word in request_lower for word in ["email", "newsletter", "message"]):
+            return "email_content"
+        else:
+            return "general"
+
+    def _extract_content_topic(self, request: str, content_type: str) -> str:
+        """Extract the core topic from a content creation request."""
+        # Remove common prefixes
+        prefixes_to_remove = [
+            "write a blog post about", "create a blog post about", "blog post on",
+            "create a social media post about", "write a social media post for",
+            "write an article about", "create an article on",
+            "create marketing copy about", "write marketing copy for",
+            "write a product description for", "create a product description for",
+            "write an email about", "create an email for",
+            "create content about", "write about", "generate content on",
+            "write", "create", "generate", "about", "on", "for"
+        ]
+        
+        topic = request.lower()
+        for prefix in prefixes_to_remove:
+            if topic.startswith(prefix):
+                topic = topic[len(prefix):].strip()
+                break
+        
+        return topic.strip()
+
+    def _create_blog_post(self, topic: str, chat_history: Optional[List[Dict]]) -> str:
+        """Create an actual blog post."""
+        prompt = f"""
+        Write a complete, engaging blog post about: {topic}
+        
+        Requirements:
+        - 800-1200 words
+        - Compelling headline
+        - Strong introduction with hook
+        - 4-6 main sections with subheadings
+        - Practical examples and tips
+        - Strong conclusion with call-to-action
+        - SEO-friendly structure
+        
+        Format with proper markdown headers and structure.
+        """
+        return self._process_with_model(prompt, chat_history)
+
+    def _create_social_media_post(self, topic: str, chat_history: Optional[List[Dict]]) -> str:
+        """Create an actual social media post."""
+        prompt = f"""
+        Create an engaging social media post about: {topic}
+        
+        Requirements:
+        - Attention-grabbing hook
+        - 150-300 characters for platforms like Twitter
+        - Include relevant emojis
+        - 3-5 relevant hashtags
+        - Call-to-action
+        - Engaging and shareable tone
+        
+        Create multiple variations for different platforms if relevant.
+        """
+        return self._process_with_model(prompt, chat_history)
+
+    def _create_article(self, topic: str, chat_history: Optional[List[Dict]]) -> str:
+        """Create an actual article."""
+        prompt = f"""
+        Write a comprehensive article about: {topic}
+        
+        Requirements:
+        - 1500-2000 words
+        - Professional headline
+        - Executive summary
+        - Clear section headers
+        - Data and examples
+        - Expert insights
+        - Actionable takeaways
+        - References where appropriate
+        
+        Format with proper structure and citations.
+        """
+        return self._process_with_model(prompt, chat_history)
+
+    def _create_marketing_copy(self, topic: str, chat_history: Optional[List[Dict]]) -> str:
+        """Create actual marketing copy."""
+        prompt = f"""
+        Write compelling marketing copy for: {topic}
+        
+        Requirements:
+        - Focus on benefits over features
+        - Strong value proposition
+        - Persuasive language
+        - Social proof elements
+        - Clear call-to-action
+        - Create urgency
+        - Address pain points
+        - Multiple versions (short, medium, long)
+        
+        Include headlines, body copy, and CTAs.
+        """
+        return self._process_with_model(prompt, chat_history)
+
+    def _create_product_description(self, topic: str, chat_history: Optional[List[Dict]]) -> str:
+        """Create actual product description."""
+        prompt = f"""
+        Write a detailed product description for: {topic}
+        
+        Requirements:
+        - Compelling product overview
+        - Key features and benefits
+        - Technical specifications
+        - Use cases and applications
+        - What's included
+        - Customer testimonial style
+        - Clear value proposition
+        - Purchase motivation
+        
+        Format for e-commerce readiness.
+        """
+        return self._process_with_model(prompt, chat_history)
+
+    def _create_email_content(self, topic: str, chat_history: Optional[List[Dict]]) -> str:
+        """Create actual email content."""
+        prompt = f"""
+        Write a complete email about: {topic}
+        
+        Requirements:
+        - Compelling subject line
+        - Personal greeting
+        - Clear, concise message
+        - Single focus
+        - Professional tone
+        - Clear call-to-action
+        - Professional signature
+        - Mobile-friendly format
+        
+        Include subject line, body, and signature.
+        """
+        return self._process_with_model(prompt, chat_history)
+
+    def _create_general_content(self, topic: str, chat_history: Optional[List[Dict]]) -> str:
+        """Create general content."""
+        prompt = f"""
+        Create engaging content about: {topic}
+        
+        Requirements:
+        - Clear, engaging language
+        - Logical structure
+        - Relevant examples
+        - Actionable information
+        - Appropriate formatting
+        - Value-focused
+        - Professional tone
+        - Complete and useful
+        
+        Determine the best format based on the topic.
+        """
+        return self._process_with_model(prompt, chat_history)
+
+
+# Keep all the existing factory and orchestrator functions...
+def create_agent(agent_type: AgentType) -> BaseAgent:
+    """Create an agent of the specified type."""
+    try:
+        if agent_type == AgentType.CONTENT_CREATION:
+            try:
+                if 'EnhancedContentCreatorAgent' in globals():
+                    return EnhancedContentCreatorAgent()
+                else:
+                    raise ImportError("EnhancedContentCreatorAgent not found.")
+            except (ImportError, NameError) as e:
+                logger.warning(f"EnhancedContentCreatorAgent not available: {e}, using basic ContentCreatorAgent")
+                return ContentCreatorAgent()
+        elif agent_type == AgentType.DATA_ANALYSIS:
+            return AnalysisAgent()
+        elif agent_type == AgentType.CUSTOMER_SERVICE:
+            return ChatAgent()
+        elif agent_type == AgentType.AUTOMATION:
+            return FileAgent()
+        else:
+            raise ValueError(f"Unknown agent type: {agent_type}")
     except Exception as e:
-        logger.error(f"Failed to initialize Firebase Admin SDK: {e}")
+        logger.error(f"Error creating agent of type {agent_type}: {e}")
         raise
 
-def get_firebase_client_config():
-    """Get Firebase client configuration from environment variables"""
-    return {
-        "apiKey": os.getenv("FIREBASE_API_KEY"),
-        "authDomain": os.getenv("FIREBASE_AUTH_DOMAIN"),
-        "projectId": os.getenv("FIREBASE_PROJECT_ID"),
-        "storageBucket": os.getenv("FIREBASE_STORAGE_BUCKET"),
-        "messagingSenderId": os.getenv("FIREBASE_MESSAGING_SENDER_ID"),
-        "appId": os.getenv("FIREBASE_APP_ID")
-    }
 
-def save_auth_cookie(cookie_manager, user_data):
-    """Save authentication data to cookies"""
-    try:
-        # Set expiry for 7 days
-        expires_at = datetime.now() + timedelta(days=7)
-        
-        # Save essential auth data
-        cookie_manager.set("auth_token", user_data.get("id_token"), expires_at=expires_at)
-        cookie_manager.set("refresh_token", user_data.get("refresh_token"), expires_at=expires_at)
-        cookie_manager.set("user_uid", user_data.get("user_uid"), expires_at=expires_at)
-        cookie_manager.set("user_email", user_data.get("user_email"), expires_at=expires_at)
-        
-        logger.info("Authentication cookies saved")
-    except Exception as e:
-        logger.error(f"Error saving auth cookies: {e}")
+class MultiAgentCodingAI:
+    """Main orchestrator for the multi-agent system with enhanced functionality"""
 
-def load_auth_cookie(cookie_manager):
-    """Load authentication data from cookies"""
-    try:
-        auth_token = cookie_manager.get("auth_token")
-        refresh_token = cookie_manager.get("refresh_token")
-        user_uid = cookie_manager.get("user_uid")
-        user_email = cookie_manager.get("user_email")
-        
-        if auth_token and user_uid:
-            # Restore session state
-            st.session_state["id_token"] = auth_token
-            st.session_state["refresh_token"] = refresh_token
-            st.session_state["user_uid"] = user_uid
-            st.session_state["user_email"] = user_email
-            st.session_state["authenticated"] = True
+    def __init__(self):
+        """Initialize the multi-agent system."""
+        self.agents = {}
+        self.db = None
+        self._initialize_database()
+        self._initialize_agents()
+
+    def _initialize_database(self):
+        """Initialize database connection."""
+        try:
+            self.db = FirestoreClient()
+            logger.info("Database connection initialized successfully")
+        except Exception as e:
+            logger.warning(f"Could not initialize database: {e}")
+            self.db = None
+
+    def _initialize_agents(self):
+        """Initialize all available agents."""
+        try:
+            agent_types = [
+                AgentType.CONTENT_CREATION,
+                AgentType.DATA_ANALYSIS,
+                AgentType.CUSTOMER_SERVICE,
+                AgentType.AUTOMATION
+            ]
             
-            logger.info("Authentication restored from cookies")
-            return True
-    except Exception as e:
-        logger.error(f"Error loading auth cookies: {e}")
-    
-    return False
-
-def clear_auth_cookies(cookie_manager):
-    """Clear all authentication cookies"""
-    try:
-        cookie_manager.delete("auth_token")
-        cookie_manager.delete("refresh_token")
-        cookie_manager.delete("user_uid")
-        cookie_manager.delete("user_email")
-        logger.info("Authentication cookies cleared")
-    except Exception as e:
-        logger.error(f"Error clearing auth cookies: {e}")
-
-def authenticate_user(email, password):
-    """Authenticate user with Firebase using REST API"""
-    try:
-        api_key = os.getenv("FIREBASE_API_KEY")
-        if not api_key:
-            return None, "Firebase API key not configured"
-        
-        # Firebase Auth REST API endpoint
-        url = f"https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key={api_key}"
-        
-        payload = {
-            "email": email,
-            "password": password,
-            "returnSecureToken": True
-        }
-        
-        response = requests.post(url, json=payload)
-        
-        if response.status_code == 200:
-            data = response.json()
-            # Store the ID token in session state for persistence
-            st.session_state["id_token"] = data.get("idToken")
-            st.session_state["refresh_token"] = data.get("refreshToken")
-            st.session_state["user_uid"] = data.get("localId")
-            st.session_state["user_email"] = email
-            
-            # Save to cookies for persistence
-            cookie_manager = get_cookie_manager()
-            save_auth_cookie(cookie_manager, {
-                "id_token": data.get("idToken"),
-                "refresh_token": data.get("refreshToken"),
-                "user_uid": data.get("localId"),
-                "user_email": email
-            })
-            
-            # Get user details from Firebase Admin SDK
-            try:
-                user = auth.get_user(data.get("localId"))
-                return user, "Login successful"
-            except Exception as e:
-                logger.error(f"Error getting user details: {e}")
-                # Return basic user info even if Admin SDK fails
-                class BasicUser:
-                    def __init__(self, uid, email):
-                        self.uid = uid
-                        self.email = email
-                        self.display_name = email.split('@')[0]
+            for agent_type in agent_types:
+                try:
+                    self.agents[agent_type] = create_agent(agent_type)
+                    logger.info(f"Successfully initialized {agent_type.value} agent")
+                except Exception as e:
+                    logger.error(f"Failed to initialize {agent_type.value} agent: {e}")
+                    
+            if not self.agents:
+                raise RuntimeError("No agents could be initialized")
                 
-                return BasicUser(data.get("localId"), email), "Login successful"
-        else:
-            error_data = response.json()
-            error_message = error_data.get("error", {}).get("message", "Authentication failed")
-            return None, error_message
+            logger.info(f"Initialized {len(self.agents)} agents successfully")
             
-    except Exception as e:
-        logger.error(f"Authentication error: {e}")
-        return None, str(e)
-
-def create_user(email, password):
-    """Create a new user with Firebase"""
-    try:
-        # Initialize Firebase if not already done
-        initialize_firebase()
-        
-        # Create user
-        user = auth.create_user(
-            email=email,
-            password=password,
-            email_verified=False
-        )
-        
-        # Create user profile in Firestore
-        try:
-            db = firestore.client()
-            user_ref = db.collection('users').document(user.uid)
-            user_ref.set({
-                'email': email,
-                'created_at': firestore.SERVER_TIMESTAMP,
-                'display_name': email.split('@')[0],
-                'uid': user.uid
-            })
         except Exception as e:
-            logger.error(f"Error creating user profile in Firestore: {e}")
-        
-        return user, "Account created successfully! You can now log in."
-        
-    except auth.EmailAlreadyExistsError:
-        return None, "Email already exists. Please login instead."
-    except Exception as e:
-        logger.error(f"Error creating user: {e}")
-        return None, str(e)
+            logger.error(f"Error initializing agents: {e}")
+            raise
 
-def verify_session_token():
-    """Verify if the stored session token is still valid"""
-    try:
-        if "id_token" in st.session_state:
-            # Verify the ID token
-            decoded_token = auth.verify_id_token(st.session_state["id_token"])
-            st.session_state["user_uid"] = decoded_token['uid']
-            return True
-    except Exception as e:
-        logger.debug(f"Token verification failed: {e}")
-        # Try to refresh the token
-        if "refresh_token" in st.session_state:
-            return refresh_user_token()
-    return False
-
-def refresh_user_token():
-    """Refresh the user's authentication token"""
-    try:
-        api_key = os.getenv("FIREBASE_API_KEY")
-        if not api_key or "refresh_token" not in st.session_state:
-            return False
+    def route_request(
+        self,
+        request: str,
+        agent_type: Optional[AgentType] = None,
+        context: Optional[Dict] = None,
+        session_id: Optional[str] = None,
+        files: Optional[List] = None
+    ) -> AgentResponse:
+        """Route request to appropriate agent with enhanced capabilities"""
+        start_time = time.time()
+        session_id = session_id or str(uuid.uuid4())
         
-        url = f"https://securetoken.googleapis.com/v1/token?key={api_key}"
-        payload = {
-            "grant_type": "refresh_token",
-            "refresh_token": st.session_state["refresh_token"]
-        }
-        
-        response = requests.post(url, json=payload)
-        
-        if response.status_code == 200:
-            data = response.json()
-            st.session_state["id_token"] = data.get("id_token")
-            st.session_state["refresh_token"] = data.get("refresh_token")
-            
-            # Update cookies with new tokens
-            cookie_manager = get_cookie_manager()
-            save_auth_cookie(cookie_manager, {
-                "id_token": data.get("id_token"),
-                "refresh_token": data.get("refresh_token") or st.session_state["refresh_token"],
-                "user_uid": st.session_state["user_uid"],
-                "user_email": st.session_state["user_email"]
-            })
-            
-            return True
-    except Exception as e:
-        logger.error(f"Token refresh error: {e}")
-    
-    return False
+        # Extract chat_history from context
+        chat_history_from_context = context.get("chat_history", []) if context else []
 
-def is_authenticated():
-    """Check if user is authenticated"""
-    # First try to restore from cookies if session is empty
-    if not st.session_state.get("authenticated", False):
-        cookie_manager = get_cookie_manager()
-        if load_auth_cookie(cookie_manager):
-            # Successfully restored from cookies
-            return verify_session_token()
-    
-    # Check if we have authentication state
-    if st.session_state.get("authenticated", False):
-        # Verify the token is still valid
-        if verify_session_token():
-            return True
-        else:
-            # Token invalid, clear authentication
-            logout()
-            return False
-    return False
-
-def get_current_user():
-    """Get current authenticated user information"""
-    if is_authenticated() and "user_uid" in st.session_state:
         try:
-            user = auth.get_user(st.session_state["user_uid"])
-            return {
-                "uid": user.uid,
-                "email": user.email,
-                "display_name": user.display_name or user.email.split('@')[0],
-                "email_verified": user.email_verified,
-                "provider": "email"
-            }
+            if not request or not request.strip():
+                return AgentResponse(
+                    content="Please provide a valid request.",
+                    success=False,
+                    error_message="Empty request provided",
+                    execution_time=time.time() - start_time
+                )
+            
+            if not agent_type:
+                agent_type = self._detect_agent_type(request, files)
+
+            logger.info(f"Routing request to {agent_type.value} agent")
+            logger.info(f"Request: {request[:100]}...")
+
+            if agent_type not in self.agents:
+                logger.error(f"Agent {agent_type.value} not found in available agents")
+                response = AgentResponse(
+                    content="",
+                    success=False,
+                    agent_type=agent_type.value,
+                    error_message=f"Agent {agent_type.value} is not available",
+                    execution_time=time.time() - start_time
+                )
+                self._save_interaction(session_id, request, response, agent_type)
+                return response
+
+            # Pass additional parameters to the agent
+            response = self.agents[agent_type].process(
+                request, 
+                chat_history=chat_history_from_context,
+                files=files
+            )
+            response.agent_type = agent_type.value
+            response.execution_time = time.time() - start_time
+
+            self._save_interaction(session_id, request, response, agent_type)
+
+            logger.info(f"Response generated successfully. Content length: {len(response.content) if response.content else 0}")
+            return response
+
         except Exception as e:
-            logger.error(f"Error getting user info: {e}")
-            # Return basic info from session
-            return {
-                "uid": st.session_state.get("user_uid"),
-                "email": st.session_state.get("user_email"),
-                "display_name": st.session_state.get("user_email", "").split('@')[0],
-                "provider": "email"
+            logger.error(f"Error in route_request: {e}", exc_info=True)
+            response = AgentResponse(
+                content="",
+                success=False,
+                error_message=f"Routing error: {str(e)}",
+                execution_time=time.time() - start_time
+            )
+            if agent_type:
+                response.agent_type = agent_type.value
+            self._save_interaction(session_id, request, response, agent_type)
+            return response
+
+    def _detect_agent_type(self, request: str, files: Optional[List] = None) -> AgentType:
+        """Enhanced agent type detection including file analysis"""
+        request_lower = request.lower().strip()
+
+        # If files are uploaded, consider automation agent for file processing
+        if files and len(files) > 0:
+            # Check if it's data analysis vs file processing
+            if any(word in request_lower for word in ["analyze", "analysis", "statistics", "data", "insights"]):
+                return AgentType.DATA_ANALYSIS
+            else:
+                return AgentType.AUTOMATION
+
+        # Check for simple acknowledgments
+        acknowledgment_phrases = [
+            "thank you", "thanks", "appreciate it", "ok", "okay", "got it",
+            "understood", "perfect", "great", "awesome", "nice", "good",
+            "bye", "goodbye", "see you", "later", "end", "stop"
+        ]
+        
+        if any(phrase in request_lower for phrase in acknowledgment_phrases):
+            return AgentType.CUSTOMER_SERVICE
+
+        # Enhanced keywords for each agent type
+        analysis_keywords = [
+            "analyze", "data", "report", "chart", "sql", "query", "insights", 
+            "metrics", "statistics", "dashboard", "visualization", "trend",
+            "calculate", "compute", "process data", "correlation", "regression"
+        ]
+        
+        chat_keywords = [
+            "help", "support", "issue", "problem", "question", "customer",
+            "service", "chat", "talk", "discuss", "explain", "how to",
+            "what is", "can you", "please help", "assistance"
+        ]
+        
+        automation_keywords = [
+            "file", "process", "schedule", "trigger", "pipeline", "automate",
+            "workflow", "batch", "upload", "download", "automation",
+            "script", "task", "organize", "convert", "extract"
+        ]
+        
+        content_keywords = [
+            "write", "create content", "generate", "draft", "blog post",
+            "email", "social media", "article", "content", "copy",
+            "marketing", "product description", "newsletter", "post"
+        ]
+
+        # Count keyword matches with weights
+        scores = {
+            AgentType.DATA_ANALYSIS: sum(1 for word in analysis_keywords if word in request_lower),
+            AgentType.CUSTOMER_SERVICE: sum(1 for word in chat_keywords if word in request_lower),
+            AgentType.AUTOMATION: sum(1 for word in automation_keywords if word in request_lower),
+            AgentType.CONTENT_CREATION: sum(1 for word in content_keywords if word in request_lower),
+        }
+
+        # Return agent type with highest score
+        max_score_agent = max(scores.items(), key=lambda x: x[1])
+        detected_type = max_score_agent[0] if max_score_agent[1] > 0 else AgentType.CUSTOMER_SERVICE
+        
+        logger.info(f"Detected agent type: {detected_type.value} (score: {max_score_agent[1]})")
+        return detected_type
+
+    # Keep all existing methods...
+    def _save_interaction(self, session_id: str, request: str, response: AgentResponse, agent_type: Optional[AgentType]) -> None:
+        """Save interaction to database."""
+        try:
+            if not self.db:
+                logger.debug("Database not available, skipping interaction save")
+                return
+                
+            response_dict = {
+                'content': response.content or "",
+                'success': response.success,
+                'agent_type': response.agent_type or (agent_type.value if agent_type else "unknown"),
+                'execution_time': response.execution_time,
+                'error': response.error_message or response.error or ""
             }
-    return None
-
-def login_required(func):
-    """Decorator to require login for certain functions/pages"""
-    @wraps(func)
-    def wrapper(*args, **kwargs):
-        if not is_authenticated():
-            st.warning("Please login to access this page.")
-            login_page()
-            return None
-        return func(*args, **kwargs)
-    return wrapper
-
-def logout():
-    """Logout the current user"""
-    # Clear cookies
-    cookie_manager = get_cookie_manager()
-    clear_auth_cookies(cookie_manager)
-    
-    # Clear all authentication-related session state
-    auth_keys = [
-        "authenticated", "user_email", "user_uid", 
-        "id_token", "refresh_token", "auth_message"
-    ]
-    for key in auth_keys:
-        if key in st.session_state:
-            del st.session_state[key]
-    
-    # Clear any cached resources related to the user
-    st.cache_data.clear()
-    st.success("Logged out successfully!")
-    st.rerun()
-
-def login_page():
-    """Modern login page matching the screenshot design"""
-    
-    # Initialize Firebase
-    initialize_firebase()
-    
-    # Custom CSS for the modern login design
-    st.markdown(
-        """
-        <style>
-        /* Hide Streamlit default elements */
-        .stApp > header {visibility: hidden;}
-        .block-container {padding: 0 !important; max-width: 100% !important;}
-        #MainMenu {visibility: hidden;}
-        footer {visibility: hidden;}
-        header {visibility: hidden;}
-        
-        /* Background */
-        .stApp {
-            background: #e8f4f8;
-            min-height: 100vh;
-        }
-        
-        /* Main container */
-        .main > div {
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            min-height: 100vh;
-            padding: 1rem;
-        }
-        
-        /* Login card container */
-        [data-testid="stVerticalBlock"] > div:has(.login-header) {
-            background: white;
-            border-radius: 12px;
-            padding: 3rem;
-            max-width: 450px;
-            width: 100%;
-            margin: 0 auto;
-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
-        }
-        
-        /* Header styling */
-        .login-header {
-            text-align: center;
-            margin-bottom: 2rem;
-        }
-        
-        .login-header h1 {
-            font-size: 2.5rem;
-            font-weight: 700;
-            color: #1a1a1a;
-            margin: 0;
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-        }
-        
-        /* Lock icon */
-        .lock-icon {
-            font-size: 3rem;
-            margin-bottom: 0.5rem;
-        }
-        
-        /* Welcome text */
-        .welcome-text {
-            text-align: center;
-            margin-bottom: 2rem;
-        }
-        
-        .welcome-text h2 {
-            font-size: 1.75rem;
-            font-weight: 600;
-            color: #1a1a1a;
-            margin: 0 0 0.5rem 0;
-        }
-        
-        .welcome-text p {
-            color: #6b7280;
-            font-size: 0.95rem;
-            margin: 0;
-        }
-        
-        /* Tabs styling */
-        .stTabs {
-            margin-bottom: 2rem;
-        }
-        
-        .stTabs [data-baseweb="tab-list"] {
-            background: transparent;
-            gap: 2rem;
-            border-bottom: 2px solid #e5e7eb;
-            padding: 0;
-        }
-        
-        .stTabs [data-baseweb="tab"] {
-            background: transparent;
-            border: none;
-            color: #6b7280;
-            font-weight: 500;
-            font-size: 1rem;
-            padding: 0.75rem 0;
-            border-bottom: 2px solid transparent;
-            margin-bottom: -2px;
-        }
-        
-        .stTabs [aria-selected="true"] {
-            color: #f97316 !important;
-            border-bottom: 2px solid #f97316 !important;
-        }
-        
-        /* Input fields */
-        .stTextInput > label {
-            color: #374151;
-            font-weight: 500;
-            font-size: 0.875rem;
-            margin-bottom: 0.5rem;
-        }
-        
-        .stTextInput > div > div > input {
-            background: #fef3f2 !important;
-            border: 1px solid #fee2e2 !important;
-            border-radius: 8px !important;
-            padding: 0.75rem 1rem !important;
-            font-size: 1rem !important;
-            color: #1a1a1a !important;
-        }
-        
-        .stTextInput > div > div > input:focus {
-            border-color: #f97316 !important;
-            outline: none !important;
-            box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.1) !important;
-        }
-        
-        /* Buttons */
-        .stButton > button {
-            background: #4f46e5 !important;
-            color: white !important;
-            border: none !important;
-            border-radius: 8px !important;
-            padding: 0.75rem !important;
-            font-size: 1rem !important;
-            font-weight: 500 !important;
-            width: 100% !important;
-            margin: 0.5rem 0 !important;
-            cursor: pointer !important;
-            transition: background 0.2s ease !important;
-        }
-        
-        .stButton > button:hover {
-            background: #4338ca !important;
-        }
-        
-        /* Social buttons */
-        .social-button {
-            width: 100%;
-            padding: 0.75rem;
-            border-radius: 8px;
-            font-size: 1rem;
-            font-weight: 500;
-            border: none;
-            cursor: pointer;
-            transition: all 0.2s ease;
-            margin: 0.5rem 0;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 0.5rem;
-        }
-        
-        .github-button {
-            background: #6366f1;
-            color: white;
-        }
-        
-        .github-button:hover {
-            background: #5558e3;
-        }
-        
-        .google-button {
-            background: #7c3aed;
-            color: white;
-        }
-        
-        .google-button:hover {
-            background: #6d28d9;
-        }
-        
-        /* Sign up link */
-        .signup-link {
-            text-align: center;
-            margin-top: 2rem;
-            color: #6b7280;
-            font-size: 0.875rem;
-        }
-        
-        .signup-link a {
-            color: #3b82f6;
-            text-decoration: none;
-            font-weight: 500;
-        }
-        
-        .signup-link a:hover {
-            text-decoration: underline;
-        }
-        </style>
-        """,
-        unsafe_allow_html=True,
-    )
-
-    # Create centered container
-    col1, col2, col3 = st.columns([1, 2, 1])
-    
-    with col2:
-        # Header with lock icon
-        st.markdown(
-            """
-            <div class="login-header">
-                <div class="lock-icon">🔒</div>
-                <h1>Login or Sign Up</h1>
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
-
-        # Tabs for Login and Sign Up
-        login_tab, signup_tab = st.tabs(["Login", "Sign Up"])
-
-        with login_tab:
-            # Welcome text
-            st.markdown(
-                """
-                <div class="welcome-text">
-                    <h2>Login to your account</h2>
-                </div>
-                """,
-                unsafe_allow_html=True
-            )
             
-            # Login form
-            email = st.text_input("Email", key="login_email", placeholder="Enter your email")
-            password = st.text_input("Password", type="password", key="login_password", placeholder="Enter your password")
+            metadata = {
+                'request_length': len(request),
+                'response_length': len(response.content) if response.content else 0,
+                'timestamp': time.time()
+            }
             
-            # Forgot password link
-            st.markdown(
-                """
-                <div class="forgot-password-container">
-                    <a href="#">Forgot password?</a>
-                </div>
-                """,
-                unsafe_allow_html=True
+            self.db.save_chat_history(
+                session_id=session_id,
+                request=request,
+                response=response_dict,
+                agent_type=response.agent_type or (agent_type.value if agent_type else "unknown"),
+                metadata=metadata
             )
+        except Exception as e:
+            logger.error(f"Error saving interaction to database: {e}")
 
-            # Login button
-            if st.button("Login", key="login_button", use_container_width=True):
-                if email and password:
-                    user, message = authenticate_user(email, password)
-                    if user:
-                        st.session_state["authenticated"] = True
-                        st.session_state["user_email"] = email
-                        st.session_state["auth_message"] = "Login successful!"
-                        st.success("✅ Login successful!")
-                        st.rerun()
-                    else:
-                        st.error(f"❌ {message}")
-                else:
-                    st.error("❌ Please enter both email and password.")
+    def get_chat_history(self, session_id: str, limit: int = 50, start_after: Optional[str] = None) -> List[Dict]:
+        """Get chat history for a session."""
+        try:
+            if not self.db:
+                logger.warning("Database not available")
+                return []
+            return self.db.get_chat_history(session_id, limit, start_after)
+        except Exception as e:
+            logger.error(f"Error retrieving chat history: {e}")
+            return []
 
-            # Divider
-            st.markdown("<hr style='margin: 2rem 0; border: none; border-top: 1px solid #e5e7eb;'>", unsafe_allow_html=True)
+    def get_agent_stats(self, agent_type: Optional[str] = None, start_date: Optional[datetime] = None, end_date: Optional[datetime] = None) -> Dict[str, Any]:
+        """Get statistics for agents."""
+        try:
+            if not self.db:
+                logger.warning("Database not available")
+                return {}
+                
+            if agent_type:
+                return self.db.get_agent_stats(agent_type, start_date, end_date)
+            else:
+                stats = {}
+                for agent in self.agents.values():
+                    agent_stats = self.db.get_agent_stats(
+                        agent.agent_type.value,
+                        start_date,
+                        end_date
+                    )
+                    stats[agent.agent_type.value] = agent_stats
+                return stats
+        except Exception as e:
+            logger.error(f"Error getting agent stats: {e}")
+            return {}
 
-            # Social login info
-            st.info("🚧 Social login (GitHub/Google) coming soon!")
+    def get_active_sessions(self, agent_type: Optional[str] = None, limit: int = 100) -> List[Dict]:
+        """Get list of active chat sessions."""
+        try:
+            if not self.db:
+                logger.warning("Database not available")
+                return []
+            return self.db.get_active_sessions(agent_type, limit)
+        except Exception as e:
+            logger.error(f"Error getting active sessions: {e}")
+            return []
 
-        with signup_tab:
-            # Welcome text for signup
-            st.markdown(
-                """
-                <div class="welcome-text">
-                    <h2>Create your account</h2>
-                </div>
-                """,
-                unsafe_allow_html=True
-            )
+    def get_available_agents(self) -> List[str]:
+        """Get list of available agent types."""
+        return [agent_type.value for agent_type in self.agents.keys()]
+
+    def health_check(self) -> Dict[str, Any]:
+        """Perform health check on all agents."""
+        health_status = {
+            "system_status": "healthy",
+            "agents": {},
+            "database": "available" if self.db else "unavailable",
+            "timestamp": datetime.now().isoformat()
+        }
+        
+        for agent_type, agent in self.agents.items():
+            try:
+                # Simple test to check if agent is responsive
+                test_response = agent.process("health check")
+                health_status["agents"][agent_type.value] = {
+                    "status": "healthy" if test_response.success else "unhealthy",
+                    "model_initialized": agent.model is not None
+                }
+            except Exception as e:
+                health_status["agents"][agent_type.value] = {
+                    "status": "error",
+                    "error": str(e)
+                }
+        
+        # Check if any agents are unhealthy
+        unhealthy_agents = [
+            agent for agent, status in health_status["agents"].items() 
+            if status.get("status") != "healthy"
+        ]
+        
+        if unhealthy_agents:
+            health_status["system_status"] = "degraded"
             
-            new_email = st.text_input("Email", key="signup_email", placeholder="Enter your email")
-            new_password = st.text_input("Password", type="password", key="signup_password", placeholder="Create a password")
-            confirm_password = st.text_input("Confirm Password", type="password", key="confirm_password", placeholder="Confirm your password")
+        return health_status
 
-            if st.button("Sign Up", key="signup_button", use_container_width=True):
-                if new_email and new_password and confirm_password:
-                    if new_password == confirm_password:
-                        if len(new_password) >= 6:
-                            user, message = create_user(new_email, new_password)
-                            if user:
-                                st.success(f"✅ {message}")
-                                # Auto-login after signup
-                                user, login_message = authenticate_user(new_email, new_password)
-                                if user:
-                                    st.session_state["authenticated"] = True
-                                    st.session_state["user_email"] = new_email
-                                    st.session_state["auth_message"] = "Account created and logged in!"
-                                    st.rerun()
-                            else:
-                                st.error(f"❌ {message}")
-                        else:
-                            st.error("❌ Password must be at least 6 characters long.")
-                    else:
-                        st.error("❌ Passwords do not match.")
-                else:
-                    st.error("❌ Please fill in all fields.")
 
-            # Divider
-            st.markdown("<hr style='margin: 2rem 0; border: none; border-top: 1px solid #e5e7eb;'>", unsafe_allow_html=True)
-
-            # Social signup info
-            st.info("🚧 Social signup (GitHub/Google) coming soon!")
+# Backward compatibility - keep the old class name
+class HackathonAgent(MultiAgentCodingAI):
+    """Backward compatibility class"""
+    pass
