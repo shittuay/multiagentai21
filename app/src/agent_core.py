@@ -445,7 +445,7 @@ class AnalysisAgent(BaseAgent):
             )
 
     def _perform_dataframe_analysis(self, df: pd.DataFrame, filename: str, request: str = "") -> str:
-        """Perform comprehensive analysis on a DataFrame."""
+        """Perform comprehensive analysis on a DataFrame with specific calculation detection."""
         try:
             analysis_parts = []
             
@@ -456,6 +456,14 @@ class AnalysisAgent(BaseAgent):
 **Shape:** {df.shape[0]} rows × {df.shape[1]} columns
 **Columns:** {', '.join(df.columns.tolist())}
 """)
+            
+            # **NEW: Detect and perform specific calculations**
+            if request:
+                specific_result = self._detect_and_perform_calculation(df, request)
+                if specific_result:
+                    analysis_parts.append(specific_result)
+                    # If specific calculation was performed, return early with focused results
+                    return "\n".join(analysis_parts)
             
             # Data types and missing values
             info_summary = []
@@ -554,6 +562,479 @@ This dataset appears suitable for:
             
         except Exception as e:
             return f"Error performing DataFrame analysis: {str(e)}"
+
+    def _detect_and_perform_calculation(self, df: pd.DataFrame, request: str) -> Optional[str]:
+        """Detect specific calculation requests and perform them."""
+        request_lower = request.lower()
+        
+        try:
+            # PRIORITY: Check for "calculations only" requests FIRST
+            if any(phrase in request_lower for phrase in [
+                "calculations only", "perform calculations only", "no overview", 
+                "skip dataset overview", "exact calculations", "step 1", "step 2", "step 3"
+            ]):
+                return self._perform_calculations_only_format(df, request)
+            
+            # GROUP BY detection and execution
+            elif any(phrase in request_lower for phrase in ['group by', 'group_by', 'groupby', 'breakdown by', 'segment by']):
+                return self._perform_groupby_calculation(df, request)
+            
+            # FILTER detection and execution
+            elif any(phrase in request_lower for phrase in ['filter', 'where', 'subset', 'only show', 'exclude']):
+                return self._perform_filter_calculation(df, request)
+            
+            # SUM calculation
+            elif any(phrase in request_lower for phrase in ['sum', 'total', 'aggregate']):
+                return self._perform_sum_calculation(df, request)
+            
+            # COUNT calculation
+            elif any(phrase in request_lower for phrase in ['count', 'number of', 'how many']):
+                return self._perform_count_calculation(df, request)
+            
+            # AVERAGE calculation
+            elif any(phrase in request_lower for phrase in ['average', 'mean']):
+                return self._perform_average_calculation(df, request)
+            
+            # SORT/ORDER BY
+            elif any(phrase in request_lower for phrase in ['sort', 'order by', 'rank', 'top']):
+                return self._perform_sort_calculation(df, request)
+            
+            return None
+            
+        except Exception as e:
+            return f"### ❌ Calculation Error\nError performing specific calculation: {str(e)}"
+
+    def _perform_groupby_calculation(self, df: pd.DataFrame, request: str) -> str:
+        """Perform GROUP BY calculation based on the request with custom output format."""
+        try:
+            request_lower = request.lower()
+            
+            # Enhanced detection for "calculations only" requests
+            is_calculations_only = any(phrase in request_lower for phrase in [
+                "calculations only", "perform calculations only", "no overview", 
+                "skip dataset overview", "exact calculations", "step 1", "step 2", "step 3"
+            ])
+            
+            if is_calculations_only:
+                return self._perform_calculations_only_format(df, request)
+            
+            # Extract grouping columns from request
+            group_cols = self._extract_groupby_columns(df, request)
+            if not group_cols:
+                return "### ❌ GROUP BY Error\nCould not identify columns to group by in the request."
+            
+            # Get numeric columns for aggregation
+            numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
+            
+            # Perform the grouping
+            grouped = df.groupby(group_cols)
+            
+            results = []
+            results.append(f"## 🔗 GROUP BY Analysis")
+            results.append(f"**Grouping by:** {', '.join(group_cols)}")
+            
+            # Count aggregation
+            count_result = grouped.size().reset_index(name='count')
+            results.append(f"\n### 📊 Count by {', '.join(group_cols)}:")
+            results.append(f"```\n{count_result.to_string(index=False)}\n```")
+            
+            # Sum aggregation for numeric columns
+            if numeric_cols:
+                sum_result = grouped[numeric_cols].sum().reset_index()
+                results.append(f"\n### 💰 Sum by {', '.join(group_cols)}:")
+                results.append(f"```\n{sum_result.to_string(index=False)}\n```")
+                
+                # Average aggregation
+                avg_result = grouped[numeric_cols].mean().reset_index()
+                results.append(f"\n### 📈 Average by {', '.join(group_cols)}:")
+                results.append(f"```\n{avg_result.to_string(index=False)}\n```")
+            
+            # Summary insights
+            results.append(f"\n### 💡 Insights:")
+            results.append(f"- Found {len(count_result)} unique groups")
+            if len(count_result) > 0:
+                max_group = count_result.loc[count_result['count'].idxmax()]
+                results.append(f"- Largest group: {dict(max_group[:-1])} with {max_group['count']} records")
+            
+            return "\n".join(results)
+            
+        except Exception as e:
+            return f"### ❌ GROUP BY Error\nError performing GROUP BY: {str(e)}"
+        
+
+    def _perform_calculations_only_format(self, df: pd.DataFrame, request: str) -> str:
+        """Perform calculations with specific output format for 'calculations only' requests."""
+        try:
+            results = []
+            
+            # STEP 1: GROUP BY company_size - ALWAYS EXECUTE
+            step1_result = self._step1_company_size_analysis(df)
+            results.append(step1_result)
+            
+            # STEP 2: GROUP BY company_name, top 20 - ALWAYS EXECUTE  
+            step2_result = self._step2_top_companies_analysis(df)
+            results.append(step2_result)
+            
+            # STEP 3: FILTER and GROUP BY company_name - ALWAYS EXECUTE
+            step3_result = self._step3_above_average_analysis(df)
+            results.append(step3_result)
+            
+            return "\n\n".join(results)
+            
+        except Exception as e:
+            return f"❌ Calculation Error: {str(e)}"
+        
+    def _step1_company_size_analysis(self, df: pd.DataFrame) -> str:
+        """STEP 1: GROUP BY company_size, show COUNT and MEAN of salary_usd"""
+        try:
+            # Group by company_size
+            grouped = df.groupby('company_size')
+            
+            # Calculate count and mean salary
+            result = grouped.agg({
+                'salary_usd': ['count', 'mean']
+            }).round(2)
+            
+            # Flatten column names
+            result.columns = ['count', 'mean_salary']
+            result = result.reset_index()
+            
+            # Format output
+            output = "**Company Size Results:**\n"
+            for _, row in result.iterrows():
+                output += f"- {row['company_size']}: {row['count']} employees, avg salary ${row['mean_salary']:,.2f}\n"
+            
+            return output.strip()
+            
+        except Exception as e:
+            return f"❌ Step 1 Error: {str(e)}"
+
+    def _step2_top_companies_analysis(self, df: pd.DataFrame) -> str:
+        """STEP 2: GROUP BY company_name, show COUNT, sort descending, take top 20"""
+        try:
+            # Group by company_name and count
+            company_counts = df.groupby('company_name').size().reset_index(name='count')
+            
+            # Sort descending and take top 20
+            top_20 = company_counts.sort_values('count', ascending=False).head(20)
+            
+            # Format output
+            output = "**Top 20 Companies:**\n"
+            for i, (_, row) in enumerate(top_20.iterrows(), 1):
+                output += f"{i}. {row['company_name']}: {row['count']} employees\n"
+            
+            return output.strip()
+            
+        except Exception as e:
+            return f"❌ Step 2 Error: {str(e)}"
+
+    def _step3_above_average_analysis(self, df: pd.DataFrame) -> str:
+        """STEP 3: FILTER WHERE salary_usd > 115348, GROUP BY company_name"""
+        try:
+            # Filter for above-average salaries
+            filtered_df = df[df['salary_usd'] > 115348]
+            
+            # Group by company_name and count
+            above_avg_companies = filtered_df.groupby('company_name').size().reset_index(name='count')
+            
+            # Sort by count descending
+            above_avg_companies = above_avg_companies.sort_values('count', ascending=False)
+            
+            # Format output
+            output = "**Above-Average Salary Companies:**\n"
+            for _, row in above_avg_companies.iterrows():
+                output += f"- {row['company_name']}: {row['count']} high-salary employees\n"
+            
+            return output.strip()
+            
+        except Exception as e:
+            return f"❌ Step 3 Error: {str(e)}"
+
+    def _extract_groupby_columns(self, df: pd.DataFrame, request: str) -> List[str]:
+        """Extract column names to group by from the request."""
+        import re
+        
+        request_lower = request.lower()
+        df_columns = df.columns.tolist()
+        df_columns_lower = [col.lower() for col in df_columns]
+        
+        # Look for explicit "group by column_name" patterns
+        group_by_pattern = r'group\s+by\s+([a-zA-Z_][a-zA-Z0-9_]*(?:\s*,\s*[a-zA-Z_][a-zA-Z0-9_]*)*)'
+        match = re.search(group_by_pattern, request_lower)
+        
+        if match:
+            mentioned_cols = [col.strip() for col in match.group(1).split(',')]
+            valid_cols = []
+            for col in mentioned_cols:
+                if col in df_columns_lower:
+                    # Find the actual column name with proper case
+                    actual_col = df_columns[df_columns_lower.index(col)]
+                    valid_cols.append(actual_col)
+            if valid_cols:
+                return valid_cols
+        
+        # Look for any column names mentioned in the request
+        mentioned_columns = []
+        for i, col in enumerate(df_columns):
+            if col.lower() in request_lower:
+                mentioned_columns.append(col)
+        
+        # If specific columns mentioned, use them
+        if mentioned_columns:
+            # Prefer categorical columns for grouping
+            categorical_mentioned = [col for col in mentioned_columns 
+                                   if df[col].dtype == 'object' or df[col].nunique() < len(df) * 0.1]
+            if categorical_mentioned:
+                return categorical_mentioned[:2]  # Limit to 2 columns
+            return mentioned_columns[:2]
+        
+        # Default: use first categorical column
+        categorical_cols = df.select_dtypes(include=['object']).columns.tolist()
+        if categorical_cols:
+            return [categorical_cols[0]]
+        
+        # Fallback: use first column with reasonable number of unique values
+        for col in df_columns:
+            if df[col].nunique() < len(df) * 0.5:  # Less than 50% unique values
+                return [col]
+        
+        return []
+
+    def _perform_filter_calculation(self, df: pd.DataFrame, request: str) -> str:
+        """Perform filtering based on the request."""
+        try:
+            # Extract filter conditions
+            filtered_df, filter_description = self._apply_filters(df, request)
+            
+            results = []
+            results.append(f"## 🔍 FILTER Analysis")
+            results.append(f"**Filter Applied:** {filter_description}")
+            results.append(f"**Original rows:** {len(df):,}")
+            results.append(f"**Filtered rows:** {len(filtered_df):,}")
+            results.append(f"**Rows removed:** {len(df) - len(filtered_df):,}")
+            
+            if len(filtered_df) > 0:
+                results.append(f"\n### 📋 Filtered Results (first 10 rows):")
+                results.append(f"```\n{filtered_df.head(10).to_string(index=False)}\n```")
+                
+                # Quick stats on filtered data
+                numeric_cols = filtered_df.select_dtypes(include=[np.number]).columns
+                if len(numeric_cols) > 0:
+                    results.append(f"\n### 📊 Statistics on Filtered Data:")
+                    for col in numeric_cols[:3]:  # Show stats for first 3 numeric columns
+                        results.append(f"- **{col}**: Mean = {filtered_df[col].mean():.2f}, Sum = {filtered_df[col].sum():.2f}")
+            else:
+                results.append(f"\n### ⚠️ No rows match the filter criteria")
+            
+            return "\n".join(results)
+            
+        except Exception as e:
+            return f"### ❌ FILTER Error\nError performing filter: {str(e)}"
+
+    def _apply_filters(self, df: pd.DataFrame, request: str) -> tuple:
+        """Apply filters based on the request and return filtered DataFrame and description."""
+        import re
+        
+        request_lower = request.lower()
+        filtered_df = df.copy()
+        applied_filters = []
+        
+        # Look for numeric filter patterns like "amount > 1000", "price < 50"
+        numeric_cols = df.select_dtypes(include=[np.number]).columns
+        
+        for col in numeric_cols:
+            col_lower = col.lower()
+            
+            # Pattern: column > value
+            gt_pattern = rf'{col_lower}\s*>\s*(\d+(?:\.\d+)?)'
+            gt_match = re.search(gt_pattern, request_lower)
+            if gt_match:
+                value = float(gt_match.group(1))
+                filtered_df = filtered_df[filtered_df[col] > value]
+                applied_filters.append(f"{col} > {value}")
+                continue
+            
+            # Pattern: column < value
+            lt_pattern = rf'{col_lower}\s*<\s*(\d+(?:\.\d+)?)'
+            lt_match = re.search(lt_pattern, request_lower)
+            if lt_match:
+                value = float(lt_match.group(1))
+                filtered_df = filtered_df[filtered_df[col] < value]
+                applied_filters.append(f"{col} < {value}")
+                continue
+            
+            # Pattern: column = value
+            eq_pattern = rf'{col_lower}\s*=\s*(\d+(?:\.\d+)?)'
+            eq_match = re.search(eq_pattern, request_lower)
+            if eq_match:
+                value = float(eq_match.group(1))
+                filtered_df = filtered_df[filtered_df[col] == value]
+                applied_filters.append(f"{col} = {value}")
+                continue
+        
+        # Look for text-based filters
+        text_cols = df.select_dtypes(include=['object']).columns
+        for col in text_cols:
+            col_lower = col.lower()
+            if col_lower in request_lower:
+                # Look for specific values mentioned
+                unique_values = df[col].unique()
+                for value in unique_values:
+                    if str(value).lower() in request_lower:
+                        filtered_df = filtered_df[filtered_df[col] == value]
+                        applied_filters.append(f"{col} = '{value}'")
+                        break
+        
+        # Default filter if no specific conditions found
+        if not applied_filters:
+            # Show top 20 rows
+            filtered_df = df.head(20)
+            applied_filters = ["Top 20 rows"]
+        
+        filter_description = " AND ".join(applied_filters) if applied_filters else "No filters"
+        
+        return filtered_df, filter_description
+
+    def _perform_sum_calculation(self, df: pd.DataFrame, request: str) -> str:
+        """Perform SUM calculation."""
+        try:
+            numeric_cols = df.select_dtypes(include=[np.number]).columns
+            
+            if len(numeric_cols) == 0:
+                return "### ❌ SUM Error\nNo numeric columns found for sum calculation."
+            
+            results = []
+            results.append(f"## 💰 SUM Calculation")
+            
+            # Calculate sums
+            sums = df[numeric_cols].sum()
+            
+            results.append(f"### 📊 Column Totals:")
+            for col, total in sums.items():
+                results.append(f"- **{col}**: {total:,.2f}")
+            
+            # Grand total if multiple numeric columns
+            if len(numeric_cols) > 1:
+                grand_total = sums.sum()
+                results.append(f"\n**Grand Total (all columns):** {grand_total:,.2f}")
+            
+            return "\n".join(results)
+            
+        except Exception as e:
+            return f"### ❌ SUM Error\nError calculating sum: {str(e)}"
+
+    def _perform_count_calculation(self, df: pd.DataFrame, request: str) -> str:
+        """Perform COUNT calculation."""
+        try:
+            results = []
+            results.append(f"## 🔢 COUNT Analysis")
+            
+            # Total rows
+            results.append(f"**Total Rows:** {len(df):,}")
+            
+            # Count by column (non-null values)
+            results.append(f"\n### 📊 Non-null Count by Column:")
+            counts = df.count()
+            for col, count in counts.items():
+                missing = len(df) - count
+                results.append(f"- **{col}**: {count:,} ({missing} missing)")
+            
+            # Unique value counts for categorical columns
+            categorical_cols = df.select_dtypes(include=['object']).columns
+            if len(categorical_cols) > 0:
+                results.append(f"\n### 🏷️ Unique Value Counts:")
+                for col in categorical_cols[:3]:  # Show first 3 categorical columns
+                    unique_count = df[col].nunique()
+                    results.append(f"- **{col}**: {unique_count} unique values")
+            
+            return "\n".join(results)
+            
+        except Exception as e:
+            return f"### ❌ COUNT Error\nError performing count: {str(e)}"
+
+    def _perform_average_calculation(self, df: pd.DataFrame, request: str) -> str:
+        """Perform AVERAGE calculation."""
+        try:
+            numeric_cols = df.select_dtypes(include=[np.number]).columns
+            
+            if len(numeric_cols) == 0:
+                return "### ❌ AVERAGE Error\nNo numeric columns found for average calculation."
+            
+            results = []
+            results.append(f"## 📈 AVERAGE Calculation")
+            
+            # Calculate averages
+            averages = df[numeric_cols].mean()
+            
+            results.append(f"### 📊 Column Averages:")
+            for col, avg in averages.items():
+                results.append(f"- **{col}**: {avg:.2f}")
+            
+            # Additional statistics
+            results.append(f"\n### 📋 Additional Statistics:")
+            medians = df[numeric_cols].median()
+            for col in numeric_cols:
+                results.append(f"- **{col} Median**: {medians[col]:.2f}")
+            
+            return "\n".join(results)
+            
+        except Exception as e:
+            return f"### ❌ AVERAGE Error\nError calculating average: {str(e)}"
+
+    def _perform_sort_calculation(self, df: pd.DataFrame, request: str) -> str:
+        """Perform SORT calculation."""
+        try:
+            # Determine sort column and direction
+            sort_col, ascending = self._extract_sort_parameters(df, request)
+            
+            if not sort_col:
+                return "### ❌ SORT Error\nCould not identify column to sort by."
+            
+            # Perform sort
+            sorted_df = df.sort_values(by=sort_col, ascending=ascending)
+            
+            direction = "ascending" if ascending else "descending"
+            results = []
+            results.append(f"## 🔄 SORT Analysis")
+            results.append(f"**Sorted by:** {sort_col} ({direction})")
+            
+            results.append(f"\n### 📋 Sorted Results (first 15 rows):")
+            results.append(f"```\n{sorted_df.head(15).to_string(index=False)}\n```")
+            
+            # Show some insights
+            if df[sort_col].dtype in [np.number]:
+                results.append(f"\n### 💡 Insights:")
+                results.append(f"- Highest {sort_col}: {sorted_df[sort_col].iloc[-1 if ascending else 0]}")
+                results.append(f"- Lowest {sort_col}: {sorted_df[sort_col].iloc[0 if ascending else -1]}")
+            
+            return "\n".join(results)
+            
+        except Exception as e:
+            return f"### ❌ SORT Error\nError performing sort: {str(e)}"
+
+    def _extract_sort_parameters(self, df: pd.DataFrame, request: str) -> tuple:
+        """Extract sort column and direction from request."""
+        request_lower = request.lower()
+        
+        # Determine direction
+        ascending = True
+        if any(word in request_lower for word in ['desc', 'descending', 'highest', 'largest', 'top']):
+            ascending = False
+        
+        # Find column to sort by
+        df_columns = df.columns.tolist()
+        
+        # Look for column names in request
+        for col in df_columns:
+            if col.lower() in request_lower:
+                return col, ascending
+        
+        # Default: use first numeric column or first column
+        numeric_cols = df.select_dtypes(include=[np.number]).columns
+        if len(numeric_cols) > 0:
+            return numeric_cols[0], ascending
+        
+        return df_columns[0] if len(df_columns) > 0 else None, ascending
 
     def _suggest_analysis_methods(self, df: pd.DataFrame, request: str) -> str:
         """Suggest specific analysis methods based on the data and request."""

@@ -146,3 +146,4 @@ def login_page():
                         st.rerun()
                     else:
                         st.error("Please enter valid email and password (6+ chars)")
+
