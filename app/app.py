@@ -480,7 +480,7 @@ def user_profile_sidebar():
                 logout()
 
 # Main application logic
-@login_required # Ensure this decorator works after import
+# @login_required # Ensure this decorator works after import
 def main_app():
     try:
         # Display header
