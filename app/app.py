@@ -10,13 +10,10 @@ import plotly.graph_objects as go
 import json
 import tempfile
 import time
-from datetime import datetime # Explicitly import datetime here for clarity and robustness
-import io # Added this import statement for BytesIO usage
-
+from datetime import datetime
+import io
 
 # --- Streamlit Page Configuration (MUST BE FIRST) ---
-# This ensures set_page_config is called only once and at the very beginning of script execution.
-# Added a more robust check for st._page_config_set and st.session_state.page_config_set
 if not hasattr(st, '_page_config_set') or not st.session_state.get('page_config_set', False):
     try:
         st.set_page_config(
@@ -25,30 +22,20 @@ if not hasattr(st, '_page_config_set') or not st.session_state.get('page_config_
             layout="wide",
             initial_sidebar_state="expanded",
         )
-        # Set a flag to indicate that set_page_config has been called.
-        st._page_config_set = True # Attribute on st module
-        st.session_state.page_config_set = True # Attribute in session_state
+        st._page_config_set = True
+        st.session_state.page_config_set = True
     except Exception as e:
-        # If set_page_config was already called, log it but continue
         if "set_page_config()" in str(e) or "already been called" in str(e):
             print(f"Warning: set_page_config already called by an earlier script rerun: {e}")
         else:
-            # Critical error at startup should stop the app from running further
             st.error(f"A critical error occurred at startup (set_page_config): {e}")
             st.stop()
-else:
-    # If the flag is already set, it means set_page_config was called in a previous rerun
-    # This block is for logging purposes and will not re-call set_page_config
-    pass
 
-
-# Configure logging (moved after st.set_page_config)
+# Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 logger.info("Setting up page configuration and logging...")
 logger.info("Page configuration set successfully")
-
-
 logger.info("Application starting...")
 
 # Add the project root to Python path
@@ -59,7 +46,7 @@ if str(project_root) not in sys.path:
 logger.info(f"Project root (app.py detected as): {project_root}")
 logger.info(f"Python path (sys.path) before import: {sys.path}")
 
-# --- START ADDED DEBUGGING FOR MODULE NOT FOUND ERROR ---
+# --- START DEBUGGING FOR MODULE NOT FOUND ERROR ---
 logger.info("--- START DEBUGGING PATHS & FILES ---\n")
 
 # Check if 'src' directory exists relative to project_root
@@ -72,7 +59,6 @@ else:
     logger.error(f"'src' directory DOES NOT EXIST at {src_dir_path}")
     logger.error(f"Contents of project_root ({project_root}): {[p.name for p in project_root.iterdir()]}")
 
-
 # Check for auth_manager.py inside src
 auth_manager_path = src_dir_path / "auth_manager.py"
 logger.info(f"Checking for 'auth_manager.py' at: {auth_manager_path}")
@@ -80,7 +66,6 @@ if auth_manager_path.exists():
     logger.info(f"'auth_manager.py' EXISTS at {auth_manager_path}")
 else:
     logger.error(f"'auth_manager.py' DOES NOT EXIST at {auth_manager_path}")
-
 
 # Check for __init__.py inside src
 init_py_path = src_dir_path / "__init__.py"
@@ -91,15 +76,14 @@ else:
     logger.error(f"'__init__.py' DOES NOT EXIST at {init_py_path}")
 
 logger.info("\n--- END DEBUGGING PATHS & FILES ---")
-# --- END ADDED DEBUGGING ---
 
 # Firebase Imports for Firestore (Client SDK)
-from firebase_admin import credentials # For Firebase Admin SDK
-from firebase_admin import auth # For Firebase Admin SDK
-import firebase_admin # For Firebase Admin SDK
-from google.cloud import firestore # For Firestore client library
-import google.auth # For handling default credentials
-import google.oauth2.credentials # For handling token-based credentials
+from firebase_admin import credentials
+from firebase_admin import auth
+import firebase_admin
+from google.cloud import firestore
+import google.auth
+import google.oauth2.credentials
 
 # Import authentication module
 try:
@@ -138,7 +122,6 @@ except Exception as e:
 # Global Firestore client instance
 db = None
 
-# UPDATED: Removed Canvas environment variables and hardcoded correct project/database
 @st.cache_resource
 def get_firestore_client():
     """Initializes and caches the Firestore client."""
@@ -192,7 +175,7 @@ def check_environment():
     if not os.getenv("GOOGLE_API_KEY"):
         issues.append("GOOGLE_API_KEY is not set")
     
-    # UPDATED: Check for Google Cloud Project ID with correct project
+    # Check for Google Cloud Project ID with correct project
     if not os.getenv("GOOGLE_CLOUD_PROJECT"):
         issues.append("GOOGLE_CLOUD_PROJECT is not set (should be 'multiagentai21-9a8fc')")
     elif os.getenv("GOOGLE_CLOUD_PROJECT") != "multiagentai21-9a8fc":
@@ -568,7 +551,6 @@ def get_firestore_chat_collection():
             st.session_state.anonymous_user_id = "anon_" + os.urandom(16).hex()
         user_uid = st.session_state.anonymous_user_id
     
-    # UPDATED: Use simplified collection structure since we know the exact database
     return db.collection("users").document(user_uid).collection(CHAT_HISTORY_COLLECTION_NAME)
 
 def save_chat_history(chat_id: str, messages: list):
@@ -624,10 +606,15 @@ def load_chat_history(chat_id: str) -> list:
 def get_available_chats() -> list:
     """Get list of available chat sessions from Firestore."""
     
-    # Check authentication first - ADD THIS
+    # Check authentication first
     if not is_authenticated():
         logger.debug("User not authenticated - returning empty chat list")
         return []
+    
+    # Get current user info for debugging
+    user_info = get_current_user()
+    user_uid = user_info.get("uid")
+    logger.info(f"Getting chats for user: {user_uid}")
     
     chat_collection = get_firestore_chat_collection()
     if chat_collection is None:
@@ -636,41 +623,57 @@ def get_available_chats() -> list:
 
     try:
         chats = []
+        
+        # Debug: Check collection path
+        logger.info(f"Querying collection path: {chat_collection.path}")
+        
+        # Get all documents first to see what's there
+        all_docs = list(chat_collection.stream())
+        logger.info(f"Total documents in collection: {len(all_docs)}")
+        
+        # Now query with ordering
         chat_docs = chat_collection.order_by("last_updated", direction=firestore.Query.DESCENDING).stream()
         
-        # COMPLETE THE FUNCTION - ADD THIS BACK:
         for doc in chat_docs:
-            chat_data = doc.to_dict()
-            chat_id = doc.id
-            messages = chat_data.get("messages", [])
-            
-            preview = "New Chat"
-            for message in messages:
-                if message.get("role") == "user":
-                    preview = message.get("content", "New Chat")[:50]
-                    break
-            
-            created_at = chat_data.get("created_at")
-            if created_at and hasattr(created_at, 'isoformat'):
-                created_at = created_at.isoformat()
-            else:
-                created_at = datetime.now().isoformat()
+            try:
+                chat_data = doc.to_dict()
+                chat_id = doc.id
+                
+                logger.debug(f"Processing chat {chat_id} with data keys: {list(chat_data.keys())}")
+                
+                messages = chat_data.get("messages", [])
+                
+                preview = "New Chat"
+                for message in messages:
+                    if message.get("role") == "user":
+                        preview = message.get("content", "New Chat")[:50]
+                        break
+                
+                created_at = chat_data.get("created_at")
+                if created_at and hasattr(created_at, 'isoformat'):
+                    created_at = created_at.isoformat()
+                else:
+                    created_at = datetime.now().isoformat()
 
-            last_updated = chat_data.get("last_updated")
-            if last_updated and hasattr(last_updated, 'isoformat'):
-                last_updated = last_updated.isoformat()
-            else:
-                last_updated = datetime.now().isoformat()
+                last_updated = chat_data.get("last_updated")
+                if last_updated and hasattr(last_updated, 'isoformat'):
+                    last_updated = last_updated.isoformat()
+                else:
+                    last_updated = datetime.now().isoformat()
 
-            chats.append({
-                "id": chat_id,
-                "preview": preview,
-                "created_at": created_at,
-                "last_updated": last_updated,
-                "message_count": len(messages)
-            })
+                chats.append({
+                    "id": chat_id,
+                    "preview": preview,
+                    "created_at": created_at,
+                    "last_updated": last_updated,
+                    "message_count": len(messages)
+                })
+                
+            except Exception as e:
+                logger.error(f"Error processing chat document {doc.id}: {e}", exc_info=True)
+                continue
         
-        logger.info(f"Found {len(chats)} available chat histories in Firestore.")
+        logger.info(f"Successfully retrieved {len(chats)} chat histories.")
         return chats
         
     except Exception as e:
@@ -678,8 +681,113 @@ def get_available_chats() -> list:
         st.error(f"Failed to retrieve available chats from database: {str(e)}")
         return []
 
-# Then continue with your session state initialization...
-        
+def display_chat_history_sidebar():
+    """Display chat history in the sidebar."""
+    st.sidebar.title("💬 Chat History")
+
+    if st.sidebar.button("🔄 Clear Cache & Reload", key="clear_cache_btn"):
+        st.cache_resource.clear()
+        st.session_state.agent = None
+        # Clear session state related to user info and auth
+        if "user_info" in st.session_state:
+            del st.session_state.user_info
+        st.success("Cache cleared! Please refresh the page.")
+        st.rerun()
+
+    # New Chat button
+    if st.sidebar.button("✨ New Chat", key="new_chat_btn"):
+        st.session_state.current_chat_id = f"chat_{int(time.time())}"
+        st.session_state.chat_history = []
+        st.session_state.agent_locked = False
+        st.session_state.selected_agent = None
+        st.success("New chat started!")
+        st.rerun()
+
+    # Check authentication
+    if not is_authenticated():
+        st.sidebar.info("🔒 Please log in to see chat history")
+        return
+
+    # Display available chats
+    # Re-fetch available chats to reflect latest from Firestore
+    if db is not None:
+        try:
+            st.session_state.available_chats = get_available_chats()
+            
+            # Display the chats
+            if st.session_state.available_chats:
+                st.sidebar.subheader("Recent Chats")
+                
+                # Display current chat indicator
+                if st.session_state.current_chat_id:
+                    st.sidebar.caption(f"Current: {st.session_state.current_chat_id[:8]}...")
+                
+                # Display each chat as a button
+                for chat in st.session_state.available_chats:
+                    chat_id = chat["id"]
+                    preview = chat["preview"][:30] + "..." if len(chat["preview"]) > 30 else chat["preview"]
+                    message_count = chat.get("message_count", 0)
+                    
+                    # Format the last updated time
+                    try:
+                        last_updated = datetime.fromisoformat(chat.get("last_updated", ""))
+                        time_str = last_updated.strftime("%m/%d %H:%M")
+                    except:
+                        time_str = "Unknown"
+                    
+                    # Highlight current chat
+                    is_current = chat_id == st.session_state.current_chat_id
+                    button_label = f"{'▶ ' if is_current else ''}💬 {preview} ({message_count} msgs) - {time_str}"
+                    
+                    if st.sidebar.button(button_label, key=f"chat_{chat_id}", disabled=is_current):
+                        # Load the selected chat
+                        st.session_state.current_chat_id = chat_id
+                        loaded_messages = load_chat_history(chat_id)
+                        
+                        if loaded_messages:
+                            st.session_state.chat_history = loaded_messages
+                            st.session_state.agent_locked = True
+                            
+                            # Extract agent type from chat history if available
+                            for msg in loaded_messages:
+                                if msg.get("agent_type"):
+                                    st.session_state.selected_agent = msg["agent_type"]
+                                    st.session_state.agent_locked = True
+                                    break
+                            
+                            st.success(f"Loaded chat: {preview}")
+                        else:
+                            st.warning("Chat history is empty or could not be loaded.")
+                        
+                        st.rerun()
+                
+                # Add delete functionality
+                st.sidebar.markdown("---")
+                if st.sidebar.button("🗑️ Delete Current Chat", key="delete_chat_btn"):
+                    if st.session_state.current_chat_id:
+                        try:
+                            chat_collection = get_firestore_chat_collection()
+                            if chat_collection:
+                                chat_collection.document(st.session_state.current_chat_id).delete()
+                                st.success("Chat deleted!")
+                                # Start a new chat
+                                st.session_state.current_chat_id = f"chat_{int(time.time())}"
+                                st.session_state.chat_history = []
+                                st.session_state.agent_locked = False
+                                st.session_state.selected_agent = None
+                                st.rerun()
+                        except Exception as e:
+                            st.error(f"Failed to delete chat: {e}")
+                            
+            else:
+                st.sidebar.info("No previous chats found. Start a new conversation!")
+                
+        except Exception as e:
+            logger.error(f"Error displaying chat history: {e}", exc_info=True)
+            st.sidebar.error(f"Failed to load chat history: {str(e)}")
+    else:
+        st.sidebar.warning("Firestore client not available. Cannot load chat history.")
+
 # Initialize session state
 if "agent" not in st.session_state:
     st.session_state.agent = None
@@ -745,46 +853,6 @@ def display_enhanced_header():
         unsafe_allow_html=True,
     )
 
-def display_chat_history_sidebar():
-    """Display chat history in the sidebar."""
-    st.sidebar.title("💬 Chat History")
-
-    if st.sidebar.button("🔄 Clear Cache & Reload", key="clear_cache_btn"):
-        st.cache_resource.clear()
-        st.session_state.agent = None
-        # Clear session state related to user info and auth
-        if "user_info" in st.session_state:
-            del st.session_state.user_info
-        st.success("Cache cleared! Please refresh the page.")
-        st.rerun()
-
-    # New Chat button
-    if st.sidebar.button("✨ New Chat", key="new_chat_btn"):
-        st.session_state.current_chat_id = f"chat_{int(time.time())}"
-        st.session_state.chat_history = []
-        st.session_state.agent_locked = False
-        st.session_state.selected_agent = None
-        st.success("New chat started!")
-        st.rerun()
-
-    # ADD THIS CHECK - Only load chat history if user is authenticated
-    if not is_authenticated():
-        st.sidebar.info("🔒 Please log in to see chat history")
-        return
-
-    # Display available chats
-    # Re-fetch available chats to reflect latest from Firestore
-    # Only try to get available chats if db is successfully initialized
-    if db is not None:
-        st.session_state.available_chats = get_available_chats() 
-    else:
-        st.session_state.available_chats = [] # Ensure it's always a list
-        st.sidebar.warning("Firestore client not available. Cannot load chat history.")
-
-    # ... rest of your existing chat history code remains the same
-    # ... rest of your existing chat history code ...
-
-
 def display_agent_selection():
     """Display agent selection interface."""
     if not st.session_state.agent_locked:
@@ -808,7 +876,6 @@ def display_agent_selection():
             st.session_state.selected_agent = None
             st.rerun()
 
-
 def display_chat_messages():
     """Display chat messages in the main area."""
     # Add the warning as an assistant message to chat history when it's empty
@@ -818,8 +885,7 @@ def display_chat_messages():
             "content": "MultiAgentAI21 can make mistakes. Always verify important information."
         })
 
-    # Display chat messages (no explicit header for conversation count)
-    # The messages will fill the available space dynamically
+    # Display chat messages
     for i, message in enumerate(st.session_state.chat_history):
         with st.chat_message(message["role"]):
             st.write(message["content"])
@@ -837,7 +903,6 @@ def display_chat_messages():
                 
                 if metadata:
                     st.caption(" | ".join(metadata))
-
 
 def process_and_display_user_message(user_input):
     """Process user message and update chat history."""
@@ -899,10 +964,7 @@ def process_and_display_user_message(user_input):
         st.session_state.chat_history.append(error_message)
         st.error(f"❌ Error: {str(e)}")
 
-    # Save updated chat history (redundant but safe after adding to history)
-    # save_chat_history(st.session_state.current_chat_id, st.session_state.chat_history)
     st.rerun()
-
 
 def display_chat_interface():
     """Display the main chat interface"""
@@ -912,19 +974,15 @@ def display_chat_interface():
     # Agent selection (at the top of the chat area)
     display_agent_selection()
 
-    # Display chat messages (includes system warning if history is empty)
+    # Display chat messages
     display_chat_messages()
 
     # Chat input at the bottom of the main chat area
-    # This is the single, primary chat input for the page
     user_input = st.chat_input("Type your message here...")
     if user_input:
         process_and_display_user_message(user_input)
 
-    # The sidebar chat history is handled in main() as it's a global element
-    # No more redundant containers or headers here
-    st.markdown('</div>', unsafe_allow_html=True) # Close the page-content-container
-
+    st.markdown('</div>', unsafe_allow_html=True)
 
 def show_agent_examples():
     """Show examples based on selected agent"""
@@ -932,26 +990,26 @@ def show_agent_examples():
     st.header("📚 Agent Examples")
     if not st.session_state.selected_agent:
         st.info("Please select an agent in the 'Agent Chat' section to see examples.")
-        st.markdown('</div>', unsafe_allow_html=True) # Close page-content-container
+        st.markdown('</div>', unsafe_allow_html=True)
         return
 
     examples = {
-        AgentType.AUTOMATION: [
+        AgentType.AUTOMATION.value: [
             "Automate our customer onboarding process",
             "Create a workflow for invoice processing",
             "Set up automated email responses",
         ],
-        AgentType.DATA_ANALYSIS: [
+        AgentType.DATA_ANALYSIS.value: [
             "Analyze sales trends for the last quarter",
             "Create a customer satisfaction dashboard",
             "Generate insights from marketing data",
         ],
-        AgentType.CUSTOMER_SERVICE: [
+        AgentType.CUSTOMER_SERVICE.value: [
             "Handle an angry customer complaint about a defective product",
             "Resolve a technical support issue",
             "Explain our return policy",
         ],
-        AgentType.CONTENT_CREATION: [
+        AgentType.CONTENT_CREATION.value: [
             "Write a blog post about AI trends",
             "Create social media content",
             "Draft a professional email newsletter",
@@ -963,13 +1021,12 @@ def show_agent_examples():
     st.info("💡 Try these examples:")
     for example in agent_examples:
         if st.button(f"▶️ {example}", key=f"example_{example}"):
-            # You would call a function here to send the example to the agent
-            # For now, let's just add it to chat history for demonstration
-            # process_user_request(example)
-            st.session_state.chat_history.append({"role": "user", "content": example, "timestamp": datetime.now().isoformat()})
-            st.warning("Example functionality not fully implemented. Add your agent call here!")
+            # Navigate to Agent Chat page and send the example
+            st.session_state.pending_message = example
+            st.session_state.page = "🤖 Agent Chat"
             st.rerun()
-
+    
+    st.markdown('</div>', unsafe_allow_html=True)
 
 def cleanup_analysis_files():
     """Clean up temporary analysis files."""
@@ -982,7 +1039,6 @@ def cleanup_analysis_files():
             except Exception as e:
                 logger.error(f"Error removing temporary file {file_path}: {e}")
         st.session_state.analysis_temp_files = []
-
 
 def display_data_analysis_section():
     """Display the data analysis section of the app"""
@@ -1002,7 +1058,7 @@ def display_data_analysis_section():
     selected_analysis_keys = st.multiselect(
         "Choose the types of analysis to perform:",
         options=list(analysis_options.keys()),
-        default=list(analysis_options.keys()), # Select all by default
+        default=list(analysis_options.keys()),
         key="analysis_type_selection"
     )
     selected_analysis_types = [analysis_options[key] for key in selected_analysis_keys]
@@ -1032,7 +1088,7 @@ def display_data_analysis_section():
             with st.spinner("Analyzing data... This may take a moment."):
                 # Pass the BytesIO object directly to the analyzer
                 results = data_analyzer.analyze_data(uploaded_file_buffer, selected_analysis_types)
-                st.session_state.last_analysis_results = results # Store results for display
+                st.session_state.last_analysis_results = results
 
             if st.session_state.last_analysis_results:
                 st.subheader("Analysis Results:")
@@ -1047,12 +1103,12 @@ def display_data_analysis_section():
                                     st.plotly_chart(fig, use_container_width=True)
                                 except json.JSONDecodeError:
                                     st.warning(f"Could not load plot '{plot_name}'. Invalid JSON.")
-                                    st.json(fig_json) # Show raw JSON for debugging
+                                    st.json(fig_json)
                         else:
                             # Check if the content contains our special Plotly JSON tag
                             if isinstance(content, str) and "{PLOT_JSON::" in content:
                                 parts = content.split("{PLOT_JSON::")
-                                st.markdown(parts[0], unsafe_allow_html=True) # Display text before plot
+                                st.markdown(parts[0], unsafe_allow_html=True)
                                 for part in parts[1:]:
                                     if "}" in part:
                                         plot_json_str = part.split("}")[0]
@@ -1061,10 +1117,10 @@ def display_data_analysis_section():
                                             st.plotly_chart(fig, use_container_width=True)
                                         except json.JSONDecodeError:
                                             st.warning(f"Could not load embedded plot. Invalid JSON.")
-                                            st.text(plot_json_str) # Show raw JSON
-                                        st.markdown(part.split("}", 1)[1], unsafe_allow_html=True) # Display text after plot
+                                            st.text(plot_json_str)
+                                        st.markdown(part.split("}", 1)[1], unsafe_allow_html=True)
                                     else:
-                                        st.markdown(part, unsafe_allow_html=True) # In case of malformed tag
+                                        st.markdown(part, unsafe_allow_html=True)
                             else:
                                 st.markdown(f"**{analysis_type.replace('_', ' ').title()}**")
                                 st.write(content)
@@ -1079,8 +1135,7 @@ def display_data_analysis_section():
             if "Authentication" in str(e) or "credentials" in str(e):
                 st.warning("It looks like there might be a Google Cloud authentication issue. Please ensure your `google_application_credentials_key.json` is correct and properly mounted.")
 
-    st.markdown('</div>', unsafe_allow_html=True) # Close page-content-container
-
+    st.markdown('</div>', unsafe_allow_html=True)
 
 def display_analytics_dashboard():
     """Display an analytics dashboard."""
@@ -1106,12 +1161,10 @@ def display_analytics_dashboard():
     st.plotly_chart(fig2)
     st.markdown('</div>', unsafe_allow_html=True)
 
-
 def display_footer():
     """Display the global footer."""
     st.markdown("---")
     st.markdown("<p style='text-align: center; font-size: small;'>Powered by Gemini | MultiAgentAI21 can make mistakes. Always verify important information.</p>", unsafe_allow_html=True)
-
 
 def user_profile_sidebar():
     """Display user profile in sidebar"""
@@ -1130,9 +1183,48 @@ def user_profile_sidebar():
             if st.button("Logout", key="sidebar_logout"):
                 logout()
 
+def debug_firestore_structure():
+    """Debug function to check Firestore structure"""
+    if not is_authenticated():
+        st.error("Please login first")
+        return
+        
+    user_info = get_current_user()
+    user_uid = user_info.get("uid")
+    
+    st.write("### Firestore Debug Info")
+    st.write(f"User UID: {user_uid}")
+    st.write(f"Project ID: multiagentai21-9a8fc")
+    st.write(f"Database: multiagentaifirestoredatabase")
+    
+    try:
+        # Check if user document exists
+        user_doc = db.collection("users").document(user_uid).get()
+        st.write(f"User document exists: {user_doc.exists}")
+        
+        # Check chat histories collection
+        chat_collection_path = f"users/{user_uid}/{CHAT_HISTORY_COLLECTION_NAME}"
+        st.write(f"Chat collection path: {chat_collection_path}")
+        
+        # List all chats
+        chats = db.collection("users").document(user_uid).collection(CHAT_HISTORY_COLLECTION_NAME).stream()
+        chat_list = list(chats)
+        st.write(f"Number of chats found: {len(chat_list)}")
+        
+        # Show first few chats
+        for i, chat in enumerate(chat_list[:3]):
+            st.write(f"\nChat {i+1} ID: {chat.id}")
+            chat_data = chat.to_dict()
+            st.write(f"Keys: {list(chat_data.keys())}")
+            if "messages" in chat_data:
+                st.write(f"Message count: {len(chat_data['messages'])}")
+                
+    except Exception as e:
+        st.error(f"Debug error: {e}")
+        logger.error(f"Firestore debug error: {e}", exc_info=True)
 
 # Main application logic
-@login_required # Ensure this decorator works after import
+@login_required
 def main_app():
     try:
         # Display header
@@ -1148,23 +1240,43 @@ def main_app():
             else:
                 logger.error("Failed to get agent system. Further agent operations will fail.")
                 st.error("Failed to initialize the agent system. Please check logs and environment variables.")
-                return # Stop if agent system couldn't be initialized
-
+                return
 
         # Create sidebar navigation
         logger.info("Setting up navigation...")
         st.sidebar.title("Navigation")
         
-        # Display user profile and chat history in sidebar (if logged in)
+        # Initialize page in session state if not present
+        if "page" not in st.session_state:
+            st.session_state.page = "🤖 Agent Chat"
+        
+        # Display user profile and chat history in sidebar
         user_profile_sidebar()
-        display_chat_history_sidebar() # Moved from main_app to a separate function
+        display_chat_history_sidebar()
 
         page = st.sidebar.radio(
             "Select a page",
             ["🤖 Agent Chat", "📊 Data Analysis", "📈 Analytics Dashboard", "📚 Examples"],
+            key="navigation_radio",
+            index=["🤖 Agent Chat", "📊 Data Analysis", "📈 Analytics Dashboard", "📚 Examples"].index(st.session_state.page)
         )
+        
+        # Update session state page
+        st.session_state.page = page
+
+        # Debug button (optional - remove in production)
+        if st.sidebar.button("🐛 Debug Firestore", key="debug_firestore_btn"):
+            debug_firestore_structure()
 
         logger.info(f"Selected page: {page}")
+
+        # Handle pending message from examples
+        if hasattr(st.session_state, 'pending_message') and st.session_state.pending_message:
+            if page == "🤖 Agent Chat":
+                # Process the pending message
+                pending_msg = st.session_state.pending_message
+                st.session_state.pending_message = None
+                process_and_display_user_message(pending_msg)
 
         if page == "🤖 Agent Chat":
             display_chat_interface()
@@ -1173,7 +1285,7 @@ def main_app():
         elif page == "📈 Analytics Dashboard":
             display_analytics_dashboard()
         elif page == "📚 Examples":
-            show_agent_examples() # Changed to show_agent_examples
+            show_agent_examples()
         
         logger.info("Main application completed successfully")
 
@@ -1188,11 +1300,9 @@ def main_app():
         st.error(f"An error occurred: {str(e)}")
         st.error("Please check the logs for more details")
 
-
 if __name__ == "__main__":
     try:
         logger.info("Entering main execution block.")
-        # The st.set_page_config is now handled at the very top of the script globally.
         # Check authentication state and run main app or login page.
         if not is_authenticated():
             login_page()
