@@ -13,3 +13,4 @@ google-generativeai
 python-dotenv
 tabulate
 requests
+extra-streamlit-components

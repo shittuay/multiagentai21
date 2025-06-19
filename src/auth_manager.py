@@ -5,14 +5,20 @@ import os
 import json
 from functools import wraps
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 import requests
+import extra_streamlit_components as stx
 
 # Configure logging
 logger = logging.getLogger(__name__)
 
 # Initialize Firebase Admin SDK
 firebase_initialized = False
+
+# Cookie manager for persistent sessions
+@st.cache_resource
+def get_cookie_manager():
+    return stx.CookieManager()
 
 def setup_google_application_credentials():
     """Set up Google Application Credentials from Streamlit secrets or environment"""
@@ -93,6 +99,56 @@ def get_firebase_client_config():
         "appId": os.getenv("FIREBASE_APP_ID")
     }
 
+def save_auth_cookie(cookie_manager, user_data):
+    """Save authentication data to cookies"""
+    try:
+        # Set expiry for 7 days
+        expires_at = datetime.now() + timedelta(days=7)
+        
+        # Save essential auth data
+        cookie_manager.set("auth_token", user_data.get("id_token"), expires_at=expires_at)
+        cookie_manager.set("refresh_token", user_data.get("refresh_token"), expires_at=expires_at)
+        cookie_manager.set("user_uid", user_data.get("user_uid"), expires_at=expires_at)
+        cookie_manager.set("user_email", user_data.get("user_email"), expires_at=expires_at)
+        
+        logger.info("Authentication cookies saved")
+    except Exception as e:
+        logger.error(f"Error saving auth cookies: {e}")
+
+def load_auth_cookie(cookie_manager):
+    """Load authentication data from cookies"""
+    try:
+        auth_token = cookie_manager.get("auth_token")
+        refresh_token = cookie_manager.get("refresh_token")
+        user_uid = cookie_manager.get("user_uid")
+        user_email = cookie_manager.get("user_email")
+        
+        if auth_token and user_uid:
+            # Restore session state
+            st.session_state["id_token"] = auth_token
+            st.session_state["refresh_token"] = refresh_token
+            st.session_state["user_uid"] = user_uid
+            st.session_state["user_email"] = user_email
+            st.session_state["authenticated"] = True
+            
+            logger.info("Authentication restored from cookies")
+            return True
+    except Exception as e:
+        logger.error(f"Error loading auth cookies: {e}")
+    
+    return False
+
+def clear_auth_cookies(cookie_manager):
+    """Clear all authentication cookies"""
+    try:
+        cookie_manager.delete("auth_token")
+        cookie_manager.delete("refresh_token")
+        cookie_manager.delete("user_uid")
+        cookie_manager.delete("user_email")
+        logger.info("Authentication cookies cleared")
+    except Exception as e:
+        logger.error(f"Error clearing auth cookies: {e}")
+
 def authenticate_user(email, password):
     """Authenticate user with Firebase using REST API"""
     try:
@@ -117,6 +173,16 @@ def authenticate_user(email, password):
             st.session_state["id_token"] = data.get("idToken")
             st.session_state["refresh_token"] = data.get("refreshToken")
             st.session_state["user_uid"] = data.get("localId")
+            st.session_state["user_email"] = email
+            
+            # Save to cookies for persistence
+            cookie_manager = get_cookie_manager()
+            save_auth_cookie(cookie_manager, {
+                "id_token": data.get("idToken"),
+                "refresh_token": data.get("refreshToken"),
+                "user_uid": data.get("localId"),
+                "user_email": email
+            })
             
             # Get user details from Firebase Admin SDK
             try:
@@ -209,6 +275,16 @@ def refresh_user_token():
             data = response.json()
             st.session_state["id_token"] = data.get("id_token")
             st.session_state["refresh_token"] = data.get("refresh_token")
+            
+            # Update cookies with new tokens
+            cookie_manager = get_cookie_manager()
+            save_auth_cookie(cookie_manager, {
+                "id_token": data.get("id_token"),
+                "refresh_token": data.get("refresh_token") or st.session_state["refresh_token"],
+                "user_uid": st.session_state["user_uid"],
+                "user_email": st.session_state["user_email"]
+            })
+            
             return True
     except Exception as e:
         logger.error(f"Token refresh error: {e}")
@@ -217,7 +293,14 @@ def refresh_user_token():
 
 def is_authenticated():
     """Check if user is authenticated"""
-    # First check if we have authentication state
+    # First try to restore from cookies if session is empty
+    if not st.session_state.get("authenticated", False):
+        cookie_manager = get_cookie_manager()
+        if load_auth_cookie(cookie_manager):
+            # Successfully restored from cookies
+            return verify_session_token()
+    
+    # Check if we have authentication state
     if st.session_state.get("authenticated", False):
         # Verify the token is still valid
         if verify_session_token():
@@ -264,6 +347,10 @@ def login_required(func):
 
 def logout():
     """Logout the current user"""
+    # Clear cookies
+    cookie_manager = get_cookie_manager()
+    clear_auth_cookies(cookie_manager)
+    
     # Clear all authentication-related session state
     auth_keys = [
         "authenticated", "user_email", "user_uid", 
