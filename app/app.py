@@ -41,8 +41,8 @@ if not hasattr(st, '_page_config_set') or not st.session_state.get('page_config_
             print(f"Warning: set_page_config already called by an earlier script rerun: {e}")
         else:
             # Critical error at startup should stop the app from running further
-            st.error(f"❌ {error_msg}")
-        return None
+            st.error(f"A critical error occurred at startup (set_page_config): {e}")
+        st.stop()
 
 def display_enhanced_header():
     """Display the enhanced header with modern design"""
