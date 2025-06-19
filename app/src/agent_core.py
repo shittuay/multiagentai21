@@ -28,7 +28,7 @@ from src.data_analysis import DataAnalyzer
 from src.api.firestore import FirestoreClient
 from src.types import AgentType, AgentResponse
 from src.agents.content_creator import ContentCreatorAgent
-from src.agents.enhanced_content_creator import EnhancedContentCreatorAgent
+# # Enhanced import removed  # Fixed circular import
 
 # Configure logging with more detailed format
 logging.basicConfig(
