@@ -1111,58 +1111,54 @@ def display_chat_interface():
             st.session_state.show_file_upload = False
         
         # Main input container
-        input_container = st.container()
-        
-        with input_container:
-            # Create the main input row
-            input_col1, input_col2 = st.columns([10, 1])
+        with st.container():
+            # Input row with text area and buttons
+            col1, col2, col3 = st.columns([8, 1, 1.5])
             
-            with input_col1:
+            with col1:
                 user_input = st.text_area(
                     "Message",
                     placeholder="Type your message here... (Press Ctrl+Enter to send)",
-                    height=80,
+                    height=60,
                     key="chat_input",
                     label_visibility="collapsed"
                 )
             
-            with input_col2:
+            with col2:
                 # Attach files button
-                if st.button("📎", key="attach_btn", help="Attach files", use_container_width=True):
+                if st.button("📎", key="attach_btn", help="Attach files"):
                     st.session_state.show_file_upload = not st.session_state.show_file_upload
                     st.rerun()
             
+            with col3:
+                # Send button
+                send_clicked = st.button("Send 📤", key="send_button", type="primary")
+            
             # File upload area (shown/hidden based on state)
             if st.session_state.show_file_upload:
-                with st.container():
-                    uploaded_files = st.file_uploader(
-                        "Drag and drop files here",
-                        accept_multiple_files=True,
-                        key="chat_file_upload",
-                        type=['txt', 'pdf', 'csv', 'xlsx', 'json', 'py', 'js', 'html', 'css', 'md', 
-                              'jpg', 'jpeg', 'png', 'gif', 'doc', 'docx', 'xml', 'yaml', 'yml', 'htm'],
-                        label_visibility="visible"
-                    )
-                    
-                    # Display uploaded files
-                    if uploaded_files:
-                        st.markdown("**Attached files:**")
-                        for idx, file in enumerate(uploaded_files):
-                            file_size = f"{file.size / 1024:.1f} KB" if file.size < 1024*1024 else f"{file.size / (1024*1024):.1f} MB"
-                            st.caption(f"📄 {file.name} ({file_size})")
+                uploaded_files = st.file_uploader(
+                    "📎 Attach files",
+                    accept_multiple_files=True,
+                    key="chat_file_upload",
+                    type=['txt', 'pdf', 'csv', 'xlsx', 'json', 'py', 'js', 'html', 'css', 'md', 
+                          'jpg', 'jpeg', 'png', 'gif', 'doc', 'docx', 'xml', 'yaml', 'yml', 'htm'],
+                    label_visibility="visible"
+                )
+                
+                # Display uploaded files inline
+                if uploaded_files:
+                    files_info = []
+                    for file in uploaded_files:
+                        file_size = f"{file.size / 1024:.1f} KB" if file.size < 1024*1024 else f"{file.size / (1024*1024):.1f} MB"
+                        files_info.append(f"📄 {file.name} ({file_size})")
+                    st.caption(" • ".join(files_info))
             else:
                 uploaded_files = []
                 if "chat_file_upload" in st.session_state and st.session_state.chat_file_upload:
                     uploaded_files = st.session_state.chat_file_upload
-            
-            # Show attached files count if files are uploaded but upload area is hidden
-            if uploaded_files and not st.session_state.show_file_upload:
-                st.caption(f"📎 {len(uploaded_files)} file(s) attached")
-            
-            # Send button row
-            _, _, send_col = st.columns([8, 1, 1])
-            with send_col:
-                send_clicked = st.button("Send 📤", key="send_button", type="primary", use_container_width=True)
+                    # Show attached files count
+                    if uploaded_files:
+                        st.caption(f"📎 {len(uploaded_files)} file(s) attached")
             
             # Process message when send is clicked
             if send_clicked and (user_input or uploaded_files):
