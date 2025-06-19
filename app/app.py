@@ -34,7 +34,530 @@ if not hasattr(st, '_page_config_set') or not st.session_state.get('page_config_
             print(f"Warning: set_page_config already called by an earlier script rerun: {e}")
         else:
             # Critical error at startup should stop the app from running further
-            st.error(f"A critical error occurred at startup (set_page_config): {e}")
+            st.error(f"❌ {error_msg}")
+        return None
+
+def display_enhanced_header():
+    """Display the enhanced header with modern design"""
+    st.markdown(
+        """
+    <div class="main-header">
+        <div class="logo-container">
+            <div class="logo-icon">🚀</div>
+            <h1>MultiAgentAI21</h1>
+        </div>
+        <p>Advanced Multi-Agent AI System for Complex Problem Solving</p>
+    </div>
+    """,
+        unsafe_allow_html=True,
+    )
+
+def display_chat_history_sidebar():
+    """Display chat history navigation in the sidebar."""
+    
+    # Navigation dropdown
+    page = st.sidebar.selectbox(
+        "💬 Select Page", 
+        ["Current Chat", "Chat History", "Agent Chat", "Data Analysis", "Analytics Dashboard", "Examples"]
+    )
+    
+    # Store the selected page in session state
+    st.session_state.current_page = page
+    
+    # Keep your existing clear cache button
+    if st.sidebar.button("🔄 Clear Cache & Reload", key="clear_cache_btn"):
+        st.cache_resource.clear()
+        st.session_state.agent = None
+        # Clear session state related to user info and auth
+        if "user_info" in st.session_state:
+            del st.session_state.user_info
+        st.success("Cache cleared! Please refresh the page.")
+        st.rerun()
+
+    # New Chat button
+    if st.sidebar.button("✨ New Chat", key="new_chat_btn"):
+        st.session_state.current_chat_id = f"chat_{int(time.time())}"
+        st.session_state.chat_history = []
+        st.session_state.agent_locked = False
+        st.session_state.selected_agent = None
+        st.success("New chat started!")
+        st.rerun()
+
+def display_chat_history_page():
+    """Display the chat history page content."""
+    st.markdown('<div class="page-content-container">', unsafe_allow_html=True)
+    st.header("💬 Chat History")
+    
+    # Check authentication first
+    if not is_authenticated():
+        st.info("🔒 Please log in to see chat history")
+        st.markdown('</div>', unsafe_allow_html=True)
+        return
+    
+    # Get available chats using your existing function
+    available_chats = get_available_chats()
+    
+    if not available_chats:
+        st.write("No chat history found.")
+        st.markdown('</div>', unsafe_allow_html=True)
+        return
+    
+    # Display each chat session
+    for chat in available_chats:
+        col1, col2, col3 = st.columns([3, 1, 1])
+        
+        with col1:
+            if st.button(f"🗨️ {chat['preview']}", key=f"chat_{chat['id']}"):
+                # Load and display this specific chat
+                messages = load_chat_history(chat['id'])
+                st.session_state.selected_chat_messages = messages
+                st.session_state.show_selected_chat = True
+        
+        with col2:
+            st.write(f"Messages: {chat['message_count']}")
+        
+        with col3:
+            # Format the date better
+            try:
+                if isinstance(chat['last_updated'], str):
+                    formatted_date = chat['last_updated'][:10]
+                else:
+                    formatted_date = str(chat['last_updated'])[:10]
+                st.write(f"Updated: {formatted_date}")
+            except:
+                st.write("Updated: N/A")
+    
+    # Display selected chat messages
+    if st.session_state.get('show_selected_chat', False):
+        st.subheader("Chat Messages")
+        for message in st.session_state.get('selected_chat_messages', []):
+            with st.chat_message(message.get('role', 'user')):
+                st.write(message.get('content', ''))
+    
+    st.markdown('</div>', unsafe_allow_html=True)
+
+def display_agent_selection():
+    """Display agent selection interface."""
+    if not st.session_state.agent_locked:
+        st.subheader("🤖 Select an Agent")
+        agent_type = st.radio(
+            "Choose an agent type:",
+            [agent.value for agent in AgentType],
+            format_func=lambda x: x.replace("_", " ").title(),
+            key="agent_selection",
+        )
+
+        if st.button("🚀 Start Chat", key="start_chat_btn"):
+            st.session_state.selected_agent = agent_type
+            st.session_state.agent_locked = True
+            st.success(f"Connected to {agent_type.replace('_', ' ').title()} Agent!")
+            st.rerun()
+    else:
+        st.success(f"🤖 Chatting with {st.session_state.selected_agent.replace('_', ' ').title()} Agent")
+        if st.button("🔄 Change Agent", key="change_agent_btn"):
+            st.session_state.agent_locked = False
+            st.session_state.selected_agent = None
+            st.rerun()
+
+def display_chat_messages():
+    """Display chat messages in the main area."""
+    # Add the warning as an assistant message to chat history when it's empty
+    if not st.session_state.chat_history:
+        st.session_state.chat_history.append({
+            "role": "assistant", 
+            "content": "MultiAgentAI21 can make mistakes. Always verify important information."
+        })
+
+    # Display chat messages (no explicit header for conversation count)
+    # The messages will fill the available space dynamically
+    for i, message in enumerate(st.session_state.chat_history):
+        with st.chat_message(message["role"]):
+            st.write(message["content"])
+            
+            # Add metadata for assistant messages
+            if message["role"] == "assistant":
+                metadata = []
+                if "execution_time" in message:
+                    metadata.append(f"⏱️ {message['execution_time']:.2f}s")
+                if "agent_type" in message:
+                    metadata.append(f"🤖 {message['agent_type'].replace('_', ' ').title()}")
+                if "timestamp" in message:
+                    timestamp = datetime.fromisoformat(message["timestamp"]).strftime("%H:%M:%S")
+                    metadata.append(f"🕐 {timestamp}")
+                
+                if metadata:
+                    st.caption(" | ".join(metadata))
+
+def process_and_display_user_message(user_input):
+    """Process user message and update chat history."""
+    if not st.session_state.agent:
+        st.error("❌ Agent system not initialized")
+        return
+
+    if not st.session_state.selected_agent:
+        st.error("❌ Please select an agent first")
+        return
+
+    # Add user message to chat history
+    user_message = {"role": "user", "content": user_input, "timestamp": datetime.now().isoformat()}
+    st.session_state.chat_history.append(user_message)
+
+    try:
+        # Convert string to AgentType enum
+        agent_type = AgentType(st.session_state.selected_agent)
+        
+        # Process the request
+        with st.spinner("🤖 Processing your request..."):
+            response = st.session_state.agent.route_request(
+                user_input,
+                agent_type,
+                {"chat_history": st.session_state.chat_history}
+            )
+
+        if response and response.content:
+            # Add assistant response to chat history
+            assistant_message = {
+                "role": "assistant", 
+                "content": response.content,
+                "timestamp": datetime.now().isoformat(),
+                "execution_time": getattr(response, 'execution_time', 0),
+                "agent_type": st.session_state.selected_agent
+            }
+            st.session_state.chat_history.append(assistant_message)
+            
+            # Save chat history to Firestore
+            save_chat_history(st.session_state.current_chat_id, st.session_state.chat_history)
+            
+            st.success(f"✅ Response from {agent_type.value.replace('_', ' ').title()} Agent")
+        else:
+            error_message = {
+                "role": "assistant",
+                "content": "Sorry, I couldn't process your request. Please try again.",
+                "timestamp": datetime.now().isoformat()
+            }
+            st.session_state.chat_history.append(error_message)
+            st.error("❌ Failed to get response from agent")
+
+    except Exception as e:
+        logger.error(f"Error processing message: {e}", exc_info=True)
+        error_message = {
+            "role": "assistant",
+            "content": f"Error: {str(e)}",
+            "timestamp": datetime.now().isoformat()
+        }
+        st.session_state.chat_history.append(error_message)
+        st.error(f"❌ Error: {str(e)}")
+
+    # Save updated chat history (redundant but safe after adding to history)
+    # save_chat_history(st.session_state.current_chat_id, st.session_state.chat_history)
+    st.rerun()
+
+def display_chat_interface():
+    """Display the main chat interface"""
+    st.markdown('<div class="page-content-container">', unsafe_allow_html=True)
+    st.header("💬 Chat with MultiAgentAI21")
+
+    # Agent selection (at the top of the chat area)
+    display_agent_selection()
+
+    # Display chat messages (includes system warning if history is empty)
+    display_chat_messages()
+
+    # Chat input at the bottom of the main chat area
+    # This is the single, primary chat input for the page
+    user_input = st.chat_input("Type your message here...")
+    if user_input:
+        process_and_display_user_message(user_input)
+
+    # The sidebar chat history is handled in main() as it's a global element
+    # No more redundant containers or headers here
+    st.markdown('</div>', unsafe_allow_html=True) # Close the page-content-container
+
+def show_agent_examples():
+    """Show examples based on selected agent"""
+    st.markdown('<div class="page-content-container">', unsafe_allow_html=True)
+    st.header("📚 Agent Examples")
+    if not st.session_state.selected_agent:
+        st.info("Please select an agent in the 'Agent Chat' section to see examples.")
+        st.markdown('</div>', unsafe_allow_html=True) # Close page-content-container
+        return
+
+    examples = {
+        AgentType.AUTOMATION: [
+            "Automate our customer onboarding process",
+            "Create a workflow for invoice processing",
+            "Set up automated email responses",
+        ],
+        AgentType.DATA_ANALYSIS: [
+            "Analyze sales trends for the last quarter",
+            "Create a customer satisfaction dashboard",
+            "Generate insights from marketing data",
+        ],
+        AgentType.CUSTOMER_SERVICE: [
+            "Handle an angry customer complaint about a defective product",
+            "Resolve a technical support issue",
+            "Explain our return policy",
+        ],
+        AgentType.CONTENT_CREATION: [
+            "Write a blog post about AI trends",
+            "Create social media content",
+            "Draft a professional email newsletter",
+        ],
+    }
+
+    agent_examples = examples.get(st.session_state.selected_agent, [])
+
+    st.info("💡 Try these examples:")
+    for example in agent_examples:
+        if st.button(f"▶️ {example}", key=f"example_{example}"):
+            # You would call a function here to send the example to the agent
+            # For now, let's just add it to chat history for demonstration
+            # process_user_request(example)
+            st.session_state.chat_history.append({"role": "user", "content": example, "timestamp": datetime.now().isoformat()})
+            st.warning("Example functionality not fully implemented. Add your agent call here!")
+            st.rerun()
+
+def cleanup_analysis_files():
+    """Clean up temporary analysis files."""
+    if st.session_state.analysis_temp_files:
+        for file_path in st.session_state.analysis_temp_files:
+            try:
+                if os.path.exists(file_path):
+                    os.remove(file_path)
+                    logger.info(f"Removed temporary file: {file_path}")
+            except Exception as e:
+                logger.error(f"Error removing temporary file {file_path}: {e}")
+        st.session_state.analysis_temp_files = []
+
+def display_data_analysis_section():
+    """Display the data analysis section of the app"""
+    st.markdown('<div class="page-content-container">', unsafe_allow_html=True)
+    st.header("📊 Data Analysis Dashboard")
+    
+    # Analysis type selection
+    st.subheader("Select Analysis Types")
+    analysis_options = {
+        "Summary": "summary",
+        "Insights": "insights",
+        "Visualizations": "visualizations",
+        "Department Analysis": "department_analysis",
+        "Education Analysis": "education_analysis",
+        "Recommendations": "recommendations"
+    }
+    selected_analysis_keys = st.multiselect(
+        "Choose the types of analysis to perform:",
+        options=list(analysis_options.keys()),
+        default=list(analysis_options.keys()), # Select all by default
+        key="analysis_type_selection"
+    )
+    selected_analysis_types = [analysis_options[key] for key in selected_analysis_keys]
+
+    # File upload section
+    uploaded_file = st.file_uploader(
+        "Upload your data file (CSV format)",
+        type=["csv"],
+        help="Upload a CSV file for analysis",
+    )
+    
+    if uploaded_file is not None:
+        try:
+            # Clean up any existing temporary files
+            cleanup_analysis_files()
+            
+            # Create a BytesIO object from the uploaded file buffer
+            uploaded_file_buffer = io.BytesIO(uploaded_file.getvalue())
+
+            st.success(f"File '{uploaded_file.name}' uploaded successfully!")
+            logger.info(f"Uploaded file name: {uploaded_file.name}")
+
+            # Instantiate DataAnalyzer
+            data_analyzer = DataAnalyzer()
+
+            # Perform analysis
+            with st.spinner("Analyzing data... This may take a moment."):
+                # Pass the BytesIO object directly to the analyzer
+                results = data_analyzer.analyze_data(uploaded_file_buffer, selected_analysis_types)
+                st.session_state.last_analysis_results = results # Store results for display
+
+            if st.session_state.last_analysis_results:
+                st.subheader("Analysis Results:")
+                for analysis_type, content in st.session_state.last_analysis_results.items():
+                    if content:
+                        if analysis_type == "visualizations" and isinstance(content, dict):
+                            st.markdown(f"**{analysis_type.replace('_', ' ').title()}**")
+                            # Handle plotly figures from data_analysis.py
+                            for plot_name, fig_json in content.items():
+                                try:
+                                    fig = go.Figure(json.loads(fig_json))
+                                    st.plotly_chart(fig, use_container_width=True)
+                                except json.JSONDecodeError:
+                                    st.warning(f"Could not load plot '{plot_name}'. Invalid JSON.")
+                                    st.json(fig_json) # Show raw JSON for debugging
+                        else:
+                            # Check if the content contains our special Plotly JSON tag
+                            if isinstance(content, str) and "{PLOT_JSON::" in content:
+                                parts = content.split("{PLOT_JSON::")
+                                st.markdown(parts[0], unsafe_allow_html=True) # Display text before plot
+                                for part in parts[1:]:
+                                    if "}" in part:
+                                        plot_json_str = part.split("}")[0]
+                                        try:
+                                            fig = go.Figure(json.loads(plot_json_str))
+                                            st.plotly_chart(fig, use_container_width=True)
+                                        except json.JSONDecodeError:
+                                            st.warning(f"Could not load embedded plot. Invalid JSON.")
+                                            st.text(plot_json_str) # Show raw JSON
+                                        st.markdown(part.split("}", 1)[1], unsafe_allow_html=True) # Display text after plot
+                                    else:
+                                        st.markdown(part, unsafe_allow_html=True) # In case of malformed tag
+                            else:
+                                st.markdown(f"**{analysis_type.replace('_', ' ').title()}**")
+                                st.write(content)
+                    else:
+                        st.info(f"No {analysis_type.replace('_', ' ')} results to display.")
+            else:
+                st.warning("No analysis results were generated.")
+
+        except Exception as e:
+            st.error(f"Error during data analysis: {e}")
+            logger.error(f"Error during data analysis: {e}", exc_info=True)
+            if "Authentication" in str(e) or "credentials" in str(e):
+                st.warning("It looks like there might be a Google Cloud authentication issue. Please ensure your `google_application_credentials_key.json` is correct and properly mounted.")
+
+    st.markdown('</div>', unsafe_allow_html=True) # Close page-content-container
+
+def display_analytics_dashboard():
+    """Display an analytics dashboard."""
+    st.markdown('<div class="page-content-container">', unsafe_allow_html=True)
+    st.header("📈 Analytics Dashboard")
+    st.write("Visualize your data with interactive charts.")
+    st.info("Integrate Plotly or Matplotlib for dynamic dashboards.")
+
+    # Mock data for demonstration
+    data = {
+        'Category': ['A', 'B', 'C', 'D', 'E'],
+        'Value1': [10, 20, 15, 25, 30],
+        'Value2': [12, 18, 22, 10, 28]
+    }
+    df = pd.DataFrame(data)
+
+    st.subheader("Sample Bar Chart")
+    fig = px.bar(df, x='Category', y='Value1', title='Category vs Value1')
+    st.plotly_chart(fig)
+
+    st.subheader("Sample Scatter Plot")
+    fig2 = px.scatter(df, x='Value1', y='Value2', color='Category', title='Value1 vs Value2 by Category')
+    st.plotly_chart(fig2)
+    st.markdown('</div>', unsafe_allow_html=True)
+
+def display_footer():
+    """Display the global footer."""
+    st.markdown("---")
+    st.markdown("<p style='text-align: center; font-size: small;'>Powered by Gemini | MultiAgentAI21 can make mistakes. Always verify important information.</p>", unsafe_allow_html=True)
+
+def user_profile_sidebar():
+    """Display user profile in sidebar"""
+    # Ensure is_authenticated is checked before trying to get user data
+    if is_authenticated():
+        user = get_current_user()
+        with st.sidebar:
+            st.markdown("---")
+            st.markdown("### User Profile")
+            st.write(f"**Name:** {user.get('display_name', 'N/A')}")
+            st.write(f"**Email:** {user.get('email', 'N/A')}")
+            
+            if user.get('provider'):
+                st.write(f"**Provider:** {user.get('provider').title()}")
+            
+            if st.button("Logout", key="sidebar_logout"):
+                logout()
+
+# Main application logic
+@login_required # Ensure this decorator works after import
+def main_app():
+    try:
+        # Display header
+        logger.info("Displaying header...")
+        display_enhanced_header()
+
+        # Initialize the agent system (ensure this runs only once)
+        if st.session_state.agent is None:
+            logger.info("Agent system not yet initialized in session state. Attempting to get it.")
+            st.session_state.agent = get_agent_system()
+            if st.session_state.agent:
+                logger.info("Agent system successfully initialized and assigned to session state.")
+            else:
+                logger.error("Failed to get agent system. Further agent operations will fail.")
+                st.error("Failed to initialize the agent system. Please check logs and environment variables.")
+                return # Stop if agent system couldn't be initialized
+
+        # Create sidebar navigation
+        logger.info("Setting up navigation...")
+        st.sidebar.title("Navigation")
+        
+        # Display user profile and chat history in sidebar (if logged in)
+        user_profile_sidebar()
+        display_chat_history_sidebar()
+
+        # Check if we have a page selection from the sidebar dropdown
+        current_page = st.session_state.get('current_page', 'Current Chat')
+
+        logger.info(f"Selected page: {current_page}")
+
+        if current_page == "Current Chat" or current_page == "Agent Chat":
+            display_chat_interface()
+        elif current_page == "Chat History":
+            display_chat_history_page()
+        elif current_page == "Data Analysis":
+            display_data_analysis_section()
+        elif current_page == "Analytics Dashboard":
+            display_analytics_dashboard()
+        elif current_page == "Examples":
+            show_agent_examples()
+
+        # Keep the old radio buttons as backup/alternative navigation
+        st.sidebar.markdown("---")
+        st.sidebar.markdown("**Alternative Navigation:**")
+        page = st.sidebar.radio(
+            "Select a page",
+            ["🤖 Agent Chat", "📊 Data Analysis", "📈 Analytics Dashboard", "📚 Examples"],
+        )
+
+        # Handle radio button navigation (fallback)
+        if page == "🤖 Agent Chat" and current_page not in ["Current Chat", "Agent Chat"]:
+            display_chat_interface()
+        elif page == "📊 Data Analysis" and current_page != "Data Analysis":
+            display_data_analysis_section()
+        elif page == "📈 Analytics Dashboard" and current_page != "Analytics Dashboard":
+            display_analytics_dashboard()
+        elif page == "📚 Examples" and current_page != "Examples":
+            show_agent_examples()
+        
+        logger.info("Main application completed successfully")
+
+        # Clean up temporary files when the app is closed
+        atexit.register(cleanup_analysis_files)
+
+        # Display the global footer
+        display_footer()
+
+    except Exception as e:
+        logger.error(f"Error in main application: {e}", exc_info=True)
+        st.error(f"An error occurred: {str(e)}")
+        st.error("Please check the logs for more details")
+
+if __name__ == "__main__":
+    try:
+        logger.info("Entering main execution block.")
+        # The st.set_page_config is now handled at the very top of the script globally.
+        # Check authentication state and run main app or login page.
+        if not is_authenticated():
+            login_page()
+        else:
+            main_app()
+    except Exception as e:
+        logger.critical(f"Critical error in main application execution: {e}", exc_info=True)
+        st.error(f"A critical error prevented the application from running: {str(e)}")f"A critical error occurred at startup (set_page_config): {e}")
             st.stop()
 else:
     # If the flag is already set, it means set_page_config was called in a previous rerun
@@ -699,6 +1222,8 @@ if "analysis_temp_files" not in st.session_state:
     st.session_state.analysis_temp_files = []
 if "user_info" not in st.session_state:
     st.session_state.user_info = None
+if "current_page" not in st.session_state:
+    st.session_state.current_page = "Current Chat"
 
 @st.cache_resource
 def get_agent_system():
@@ -727,477 +1252,5 @@ def get_agent_system():
     except Exception as e:
         error_msg = f"Failed to initialize agent system: {str(e)}"
         logger.error(error_msg, exc_info=True)
-        st.error(f"❌ {error_msg}")
+        st.error(f"❌ An error occurred while initializing the agent system: {error_msg}")
         return None
-
-def display_enhanced_header():
-    """Display the enhanced header with modern design"""
-    st.markdown(
-        """
-    <div class="main-header">
-        <div class="logo-container">
-            <div class="logo-icon">🚀</div>
-            <h1>MultiAgentAI21</h1>
-        </div>
-        <p>Advanced Multi-Agent AI System for Complex Problem Solving</p>
-    </div>
-    """,
-        unsafe_allow_html=True,
-    )
-
-def display_chat_history_sidebar():
-    """Display chat history in the sidebar."""
-    st.sidebar.title("💬 Chat History")
-
-    if st.sidebar.button("🔄 Clear Cache & Reload", key="clear_cache_btn"):
-        st.cache_resource.clear()
-        st.session_state.agent = None
-        # Clear session state related to user info and auth
-        if "user_info" in st.session_state:
-            del st.session_state.user_info
-        st.success("Cache cleared! Please refresh the page.")
-        st.rerun()
-
-    # New Chat button
-    if st.sidebar.button("✨ New Chat", key="new_chat_btn"):
-        st.session_state.current_chat_id = f"chat_{int(time.time())}"
-        st.session_state.chat_history = []
-        st.session_state.agent_locked = False
-        st.session_state.selected_agent = None
-        st.success("New chat started!")
-        st.rerun()
-
-    # ADD THIS CHECK - Only load chat history if user is authenticated
-    if not is_authenticated():
-        st.sidebar.info("🔒 Please log in to see chat history")
-        return
-
-    # Display available chats
-    # Re-fetch available chats to reflect latest from Firestore
-    # Only try to get available chats if db is successfully initialized
-    if db is not None:
-        st.session_state.available_chats = get_available_chats() 
-    else:
-        st.session_state.available_chats = [] # Ensure it's always a list
-        st.sidebar.warning("Firestore client not available. Cannot load chat history.")
-
-    # ... rest of your existing chat history code remains the same
-    # ... rest of your existing chat history code ...
-
-
-def display_agent_selection():
-    """Display agent selection interface."""
-    if not st.session_state.agent_locked:
-        st.subheader("🤖 Select an Agent")
-        agent_type = st.radio(
-            "Choose an agent type:",
-            [agent.value for agent in AgentType],
-            format_func=lambda x: x.replace("_", " ").title(),
-            key="agent_selection",
-        )
-
-        if st.button("🚀 Start Chat", key="start_chat_btn"):
-            st.session_state.selected_agent = agent_type
-            st.session_state.agent_locked = True
-            st.success(f"Connected to {agent_type.replace('_', ' ').title()} Agent!")
-            st.rerun()
-    else:
-        st.success(f"🤖 Chatting with {st.session_state.selected_agent.replace('_', ' ').title()} Agent")
-        if st.button("🔄 Change Agent", key="change_agent_btn"):
-            st.session_state.agent_locked = False
-            st.session_state.selected_agent = None
-            st.rerun()
-
-
-def display_chat_messages():
-    """Display chat messages in the main area."""
-    # Add the warning as an assistant message to chat history when it's empty
-    if not st.session_state.chat_history:
-        st.session_state.chat_history.append({
-            "role": "assistant", 
-            "content": "MultiAgentAI21 can make mistakes. Always verify important information."
-        })
-
-    # Display chat messages (no explicit header for conversation count)
-    # The messages will fill the available space dynamically
-    for i, message in enumerate(st.session_state.chat_history):
-        with st.chat_message(message["role"]):
-            st.write(message["content"])
-            
-            # Add metadata for assistant messages
-            if message["role"] == "assistant":
-                metadata = []
-                if "execution_time" in message:
-                    metadata.append(f"⏱️ {message['execution_time']:.2f}s")
-                if "agent_type" in message:
-                    metadata.append(f"🤖 {message['agent_type'].replace('_', ' ').title()}")
-                if "timestamp" in message:
-                    timestamp = datetime.fromisoformat(message["timestamp"]).strftime("%H:%M:%S")
-                    metadata.append(f"🕐 {timestamp}")
-                
-                if metadata:
-                    st.caption(" | ".join(metadata))
-
-
-def process_and_display_user_message(user_input):
-    """Process user message and update chat history."""
-    if not st.session_state.agent:
-        st.error("❌ Agent system not initialized")
-        return
-
-    if not st.session_state.selected_agent:
-        st.error("❌ Please select an agent first")
-        return
-
-    # Add user message to chat history
-    user_message = {"role": "user", "content": user_input, "timestamp": datetime.now().isoformat()}
-    st.session_state.chat_history.append(user_message)
-
-    try:
-        # Convert string to AgentType enum
-        agent_type = AgentType(st.session_state.selected_agent)
-        
-        # Process the request
-        with st.spinner("🤖 Processing your request..."):
-            response = st.session_state.agent.route_request(
-                user_input,
-                agent_type,
-                {"chat_history": st.session_state.chat_history}
-            )
-
-        if response and response.content:
-            # Add assistant response to chat history
-            assistant_message = {
-                "role": "assistant", 
-                "content": response.content,
-                "timestamp": datetime.now().isoformat(),
-                "execution_time": getattr(response, 'execution_time', 0),
-                "agent_type": st.session_state.selected_agent
-            }
-            st.session_state.chat_history.append(assistant_message)
-            
-            # Save chat history to Firestore
-            save_chat_history(st.session_state.current_chat_id, st.session_state.chat_history)
-            
-            st.success(f"✅ Response from {agent_type.value.replace('_', ' ').title()} Agent")
-        else:
-            error_message = {
-                "role": "assistant",
-                "content": "Sorry, I couldn't process your request. Please try again.",
-                "timestamp": datetime.now().isoformat()
-            }
-            st.session_state.chat_history.append(error_message)
-            st.error("❌ Failed to get response from agent")
-
-    except Exception as e:
-        logger.error(f"Error processing message: {e}", exc_info=True)
-        error_message = {
-            "role": "assistant",
-            "content": f"Error: {str(e)}",
-            "timestamp": datetime.now().isoformat()
-        }
-        st.session_state.chat_history.append(error_message)
-        st.error(f"❌ Error: {str(e)}")
-
-    # Save updated chat history (redundant but safe after adding to history)
-    # save_chat_history(st.session_state.current_chat_id, st.session_state.chat_history)
-    st.rerun()
-
-
-def display_chat_interface():
-    """Display the main chat interface"""
-    st.markdown('<div class="page-content-container">', unsafe_allow_html=True)
-    st.header("💬 Chat with MultiAgentAI21")
-
-    # Agent selection (at the top of the chat area)
-    display_agent_selection()
-
-    # Display chat messages (includes system warning if history is empty)
-    display_chat_messages()
-
-    # Chat input at the bottom of the main chat area
-    # This is the single, primary chat input for the page
-    user_input = st.chat_input("Type your message here...")
-    if user_input:
-        process_and_display_user_message(user_input)
-
-    # The sidebar chat history is handled in main() as it's a global element
-    # No more redundant containers or headers here
-    st.markdown('</div>', unsafe_allow_html=True) # Close the page-content-container
-
-
-def show_agent_examples():
-    """Show examples based on selected agent"""
-    st.markdown('<div class="page-content-container">', unsafe_allow_html=True)
-    st.header("📚 Agent Examples")
-    if not st.session_state.selected_agent:
-        st.info("Please select an agent in the 'Agent Chat' section to see examples.")
-        st.markdown('</div>', unsafe_allow_html=True) # Close page-content-container
-        return
-
-    examples = {
-        AgentType.AUTOMATION: [
-            "Automate our customer onboarding process",
-            "Create a workflow for invoice processing",
-            "Set up automated email responses",
-        ],
-        AgentType.DATA_ANALYSIS: [
-            "Analyze sales trends for the last quarter",
-            "Create a customer satisfaction dashboard",
-            "Generate insights from marketing data",
-        ],
-        AgentType.CUSTOMER_SERVICE: [
-            "Handle an angry customer complaint about a defective product",
-            "Resolve a technical support issue",
-            "Explain our return policy",
-        ],
-        AgentType.CONTENT_CREATION: [
-            "Write a blog post about AI trends",
-            "Create social media content",
-            "Draft a professional email newsletter",
-        ],
-    }
-
-    agent_examples = examples.get(st.session_state.selected_agent, [])
-
-    st.info("💡 Try these examples:")
-    for example in agent_examples:
-        if st.button(f"▶️ {example}", key=f"example_{example}"):
-            # You would call a function here to send the example to the agent
-            # For now, let's just add it to chat history for demonstration
-            # process_user_request(example)
-            st.session_state.chat_history.append({"role": "user", "content": example, "timestamp": datetime.now().isoformat()})
-            st.warning("Example functionality not fully implemented. Add your agent call here!")
-            st.rerun()
-
-
-def cleanup_analysis_files():
-    """Clean up temporary analysis files."""
-    if st.session_state.analysis_temp_files:
-        for file_path in st.session_state.analysis_temp_files:
-            try:
-                if os.path.exists(file_path):
-                    os.remove(file_path)
-                    logger.info(f"Removed temporary file: {file_path}")
-            except Exception as e:
-                logger.error(f"Error removing temporary file {file_path}: {e}")
-        st.session_state.analysis_temp_files = []
-
-
-def display_data_analysis_section():
-    """Display the data analysis section of the app"""
-    st.markdown('<div class="page-content-container">', unsafe_allow_html=True)
-    st.header("📊 Data Analysis Dashboard")
-    
-    # Analysis type selection
-    st.subheader("Select Analysis Types")
-    analysis_options = {
-        "Summary": "summary",
-        "Insights": "insights",
-        "Visualizations": "visualizations",
-        "Department Analysis": "department_analysis",
-        "Education Analysis": "education_analysis",
-        "Recommendations": "recommendations"
-    }
-    selected_analysis_keys = st.multiselect(
-        "Choose the types of analysis to perform:",
-        options=list(analysis_options.keys()),
-        default=list(analysis_options.keys()), # Select all by default
-        key="analysis_type_selection"
-    )
-    selected_analysis_types = [analysis_options[key] for key in selected_analysis_keys]
-
-    # File upload section
-    uploaded_file = st.file_uploader(
-        "Upload your data file (CSV format)",
-        type=["csv"],
-        help="Upload a CSV file for analysis",
-    )
-    
-    if uploaded_file is not None:
-        try:
-            # Clean up any existing temporary files
-            cleanup_analysis_files()
-            
-            # Create a BytesIO object from the uploaded file buffer
-            uploaded_file_buffer = io.BytesIO(uploaded_file.getvalue())
-
-            st.success(f"File '{uploaded_file.name}' uploaded successfully!")
-            logger.info(f"Uploaded file name: {uploaded_file.name}")
-
-            # Instantiate DataAnalyzer
-            data_analyzer = DataAnalyzer()
-
-            # Perform analysis
-            with st.spinner("Analyzing data... This may take a moment."):
-                # Pass the BytesIO object directly to the analyzer
-                results = data_analyzer.analyze_data(uploaded_file_buffer, selected_analysis_types)
-                st.session_state.last_analysis_results = results # Store results for display
-
-            if st.session_state.last_analysis_results:
-                st.subheader("Analysis Results:")
-                for analysis_type, content in st.session_state.last_analysis_results.items():
-                    if content:
-                        if analysis_type == "visualizations" and isinstance(content, dict):
-                            st.markdown(f"**{analysis_type.replace('_', ' ').title()}**")
-                            # Handle plotly figures from data_analysis.py
-                            for plot_name, fig_json in content.items():
-                                try:
-                                    fig = go.Figure(json.loads(fig_json))
-                                    st.plotly_chart(fig, use_container_width=True)
-                                except json.JSONDecodeError:
-                                    st.warning(f"Could not load plot '{plot_name}'. Invalid JSON.")
-                                    st.json(fig_json) # Show raw JSON for debugging
-                        else:
-                            # Check if the content contains our special Plotly JSON tag
-                            if isinstance(content, str) and "{PLOT_JSON::" in content:
-                                parts = content.split("{PLOT_JSON::")
-                                st.markdown(parts[0], unsafe_allow_html=True) # Display text before plot
-                                for part in parts[1:]:
-                                    if "}" in part:
-                                        plot_json_str = part.split("}")[0]
-                                        try:
-                                            fig = go.Figure(json.loads(plot_json_str))
-                                            st.plotly_chart(fig, use_container_width=True)
-                                        except json.JSONDecodeError:
-                                            st.warning(f"Could not load embedded plot. Invalid JSON.")
-                                            st.text(plot_json_str) # Show raw JSON
-                                        st.markdown(part.split("}", 1)[1], unsafe_allow_html=True) # Display text after plot
-                                    else:
-                                        st.markdown(part, unsafe_allow_html=True) # In case of malformed tag
-                            else:
-                                st.markdown(f"**{analysis_type.replace('_', ' ').title()}**")
-                                st.write(content)
-                    else:
-                        st.info(f"No {analysis_type.replace('_', ' ')} results to display.")
-            else:
-                st.warning("No analysis results were generated.")
-
-        except Exception as e:
-            st.error(f"Error during data analysis: {e}")
-            logger.error(f"Error during data analysis: {e}", exc_info=True)
-            if "Authentication" in str(e) or "credentials" in str(e):
-                st.warning("It looks like there might be a Google Cloud authentication issue. Please ensure your `google_application_credentials_key.json` is correct and properly mounted.")
-
-    st.markdown('</div>', unsafe_allow_html=True) # Close page-content-container
-
-
-def display_analytics_dashboard():
-    """Display an analytics dashboard."""
-    st.markdown('<div class="page-content-container">', unsafe_allow_html=True)
-    st.header("📈 Analytics Dashboard")
-    st.write("Visualize your data with interactive charts.")
-    st.info("Integrate Plotly or Matplotlib for dynamic dashboards.")
-
-    # Mock data for demonstration
-    data = {
-        'Category': ['A', 'B', 'C', 'D', 'E'],
-        'Value1': [10, 20, 15, 25, 30],
-        'Value2': [12, 18, 22, 10, 28]
-    }
-    df = pd.DataFrame(data)
-
-    st.subheader("Sample Bar Chart")
-    fig = px.bar(df, x='Category', y='Value1', title='Category vs Value1')
-    st.plotly_chart(fig)
-
-    st.subheader("Sample Scatter Plot")
-    fig2 = px.scatter(df, x='Value1', y='Value2', color='Category', title='Value1 vs Value2 by Category')
-    st.plotly_chart(fig2)
-    st.markdown('</div>', unsafe_allow_html=True)
-
-
-def display_footer():
-    """Display the global footer."""
-    st.markdown("---")
-    st.markdown("<p style='text-align: center; font-size: small;'>Powered by Gemini | MultiAgentAI21 can make mistakes. Always verify important information.</p>", unsafe_allow_html=True)
-
-
-def user_profile_sidebar():
-    """Display user profile in sidebar"""
-    # Ensure is_authenticated is checked before trying to get user data
-    if is_authenticated():
-        user = get_current_user()
-        with st.sidebar:
-            st.markdown("---")
-            st.markdown("### User Profile")
-            st.write(f"**Name:** {user.get('display_name', 'N/A')}")
-            st.write(f"**Email:** {user.get('email', 'N/A')}")
-            
-            if user.get('provider'):
-                st.write(f"**Provider:** {user.get('provider').title()}")
-            
-            if st.button("Logout", key="sidebar_logout"):
-                logout()
-
-
-# Main application logic
-@login_required # Ensure this decorator works after import
-def main_app():
-    try:
-        # Display header
-        logger.info("Displaying header...")
-        display_enhanced_header()
-
-        # Initialize the agent system (ensure this runs only once)
-        if st.session_state.agent is None:
-            logger.info("Agent system not yet initialized in session state. Attempting to get it.")
-            st.session_state.agent = get_agent_system()
-            if st.session_state.agent:
-                logger.info("Agent system successfully initialized and assigned to session state.")
-            else:
-                logger.error("Failed to get agent system. Further agent operations will fail.")
-                st.error("Failed to initialize the agent system. Please check logs and environment variables.")
-                return # Stop if agent system couldn't be initialized
-
-
-        # Create sidebar navigation
-        logger.info("Setting up navigation...")
-        st.sidebar.title("Navigation")
-        
-        # Display user profile and chat history in sidebar (if logged in)
-        user_profile_sidebar()
-        display_chat_history_sidebar() # Moved from main_app to a separate function
-
-        page = st.sidebar.radio(
-            "Select a page",
-            ["🤖 Agent Chat", "📊 Data Analysis", "📈 Analytics Dashboard", "📚 Examples"],
-        )
-
-        logger.info(f"Selected page: {page}")
-
-        if page == "🤖 Agent Chat":
-            display_chat_interface()
-        elif page == "📊 Data Analysis":
-            display_data_analysis_section()
-        elif page == "📈 Analytics Dashboard":
-            display_analytics_dashboard()
-        elif page == "📚 Examples":
-            show_agent_examples() # Changed to show_agent_examples
-        
-        logger.info("Main application completed successfully")
-
-        # Clean up temporary files when the app is closed
-        atexit.register(cleanup_analysis_files)
-
-        # Display the global footer
-        display_footer()
-
-    except Exception as e:
-        logger.error(f"Error in main application: {e}", exc_info=True)
-        st.error(f"An error occurred: {str(e)}")
-        st.error("Please check the logs for more details")
-
-
-if __name__ == "__main__":
-    try:
-        logger.info("Entering main execution block.")
-        # The st.set_page_config is now handled at the very top of the script globally.
-        # Check authentication state and run main app or login page.
-        if not is_authenticated():
-            login_page()
-        else:
-            main_app()
-    except Exception as e:
-        logger.critical(f"Critical error in main application execution: {e}", exc_info=True)
-        st.error(f"A critical error prevented the application from running: {str(e)}")
