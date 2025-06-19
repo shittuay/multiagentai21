@@ -253,6 +253,77 @@ st.markdown(
         color: white;
     }
 
+    /* Integrated chat container */
+    .integrated-chat-container {
+        background: rgba(255, 255, 255, 0.98);
+        border-radius: 20px;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+        overflow: hidden;
+        margin-top: 1rem;
+        display: flex;
+        flex-direction: column;
+        min-height: 500px;
+        max-height: 70vh;
+    }
+
+    /* Chat messages area */
+    .stChatMessageContainer {
+        flex: 1;
+        overflow-y: auto;
+        padding: 1.5rem;
+    }
+
+    /* Integrated input area */
+    .integrated-input-area {
+        background: rgba(248, 250, 252, 0.95);
+        border-top: 1px solid rgba(0, 0, 0, 0.08);
+        padding: 1.5rem;
+        backdrop-filter: blur(10px);
+    }
+
+    /* Text area styling */
+    .integrated-input-area .stTextArea > div > div > textarea {
+        background: white;
+        border: 2px solid rgba(226, 232, 240, 0.8);
+        border-radius: 16px;
+        padding: 1rem;
+        font-size: 1rem;
+        transition: all 0.3s ease;
+        resize: none;
+    }
+
+    .integrated-input-area .stTextArea > div > div > textarea:focus {
+        border-color: #3b82f6;
+        box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+        outline: none;
+    }
+
+    /* File upload styling */
+    .integrated-input-area .stFileUploader {
+        margin-top: 0.5rem;
+    }
+
+    .integrated-input-area .stFileUploader > div {
+        background: white;
+        border: 2px dashed rgba(59, 130, 246, 0.3);
+        border-radius: 12px;
+        padding: 1rem;
+        transition: all 0.3s ease;
+    }
+
+    .integrated-input-area .stFileUploader > div:hover {
+        border-color: #3b82f6;
+        background: rgba(59, 130, 246, 0.02);
+    }
+
+    /* Expander styling for file upload */
+    .integrated-input-area .streamlit-expanderHeader {
+        background: rgba(59, 130, 246, 0.05);
+        border-radius: 12px;
+        padding: 0.5rem 1rem;
+        font-weight: 500;
+    }
+
     .agent-selection-container {
         background: rgba(255, 255, 255, 0.95);
         backdrop-filter: blur(20px);
@@ -433,14 +504,23 @@ st.markdown(
         background: linear-gradient(135deg, #2563eb, #1e40af);
     }
 
-    .stButton[data-baseweb="button"][kind="primary"] > button {
-        background: linear-gradient(135deg, #22c55e, #16a34a);
-        box-shadow: 0 8px 25px rgba(34, 197, 94, 0.3);
+    /* Attach button styling */
+    button[key="attach_btn"] {
+        background: white !important;
+        border: 2px solid rgba(226, 232, 240, 0.8) !important;
+        color: #64748b !important;
+        font-size: 1.2rem !important;
+        padding: 0.5rem !important;
+        width: 40px !important;
+        height: 40px !important;
+        border-radius: 12px !important;
+        transition: all 0.3s ease !important;
     }
 
-    .stButton[data-baseweb="button"][kind="primary"] > button:hover {
-        background: linear-gradient(135deg, #16a34a, #15803d);
-        box_shadow: 0 8px 25px rgba(34, 197, 94, 0.4);
+    button[key="attach_btn"]:hover {
+        border-color: #3b82f6 !important;
+        color: #3b82f6 !important;
+        background: rgba(59, 130, 246, 0.05) !important;
     }
 
     .stSelectbox > div > div {
@@ -448,48 +528,6 @@ st.markdown(
         border: 1px solid rgba(0, 0, 0, 0.2);
         border-radius: 8px;
         color: #1a202c;
-    }
-
-    .stTextArea > div > div > textarea {
-        background: rgba(255, 255, 255, 0.9);
-        border: 1px solid rgba(0, 0, 0, 0.2);
-        border-radius: 12px;
-        color: #1a202c;
-    }
-
-    .stTextArea > div > div > textarea::placeholder {
-        color: #9ca3af;
-    }
-
-    /* Enhanced text input styling */
-    .stTextInput > div > div > input {
-        background: rgba(255, 255, 255, 0.95);
-        border: 2px solid rgba(59, 130, 246, 0.2);
-        border-radius: 12px;
-        color: #1a202c;
-        padding: 0.75rem 1rem;
-        font-size: 1rem;
-        transition: all 0.3s ease;
-    }
-
-    .stTextInput > div > div > input:focus {
-        border-color: #3b82f6;
-        box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
-        outline: none;
-    }
-
-    /* File uploader styling */
-    .stFileUploader > div {
-        background: rgba(255, 255, 255, 0.95);
-        border: 2px dashed rgba(59, 130, 246, 0.3);
-        border-radius: 12px;
-        padding: 1rem;
-        transition: all 0.3s ease;
-    }
-
-    .stFileUploader > div:hover {
-        border-color: #3b82f6;
-        background: rgba(59, 130, 246, 0.05);
     }
 
     .no-agent-selected {
@@ -568,22 +606,27 @@ st.markdown(
 
     /* Custom footer styling */
     .custom-footer {
-        position: relative;
-        margin-top: 2rem;
-        padding: 1rem 0;
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        background: rgba(255, 255, 255, 0.95);
+        backdrop-filter: blur(10px);
+        padding: 0.5rem 0;
         border-top: 1px solid rgba(0, 0, 0, 0.1);
+        z-index: 10;
+        text-align: center;
     }
 
-    /* Chat input area styling */
-    .chat-input-container {
-        position: sticky;
-        bottom: 0;
-        background: rgba(255, 255, 255, 0.98);
-        backdrop-filter: blur(20px);
-        padding: 1rem;
-        border-radius: 20px 20px 0 0;
-        box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.08);
-        z-index: 100;
+    .custom-footer p {
+        margin: 0;
+        font-size: 0.875rem;
+        color: #6b7280;
+    }
+
+    /* Ensure content doesn't go under footer */
+    .main {
+        padding-bottom: 60px;
     }
 </style>
 """,
@@ -955,31 +998,34 @@ def display_agent_selection():
 
 def display_chat_messages():
     """Display chat messages in the main area."""
-    # Add the warning as an assistant message to chat history when it's empty
+    # Show welcome message if chat is empty
     if not st.session_state.chat_history:
-        st.session_state.chat_history.append({
-            "role": "assistant", 
-            "content": "MultiAgentAI21 can make mistakes. Always verify important information."
-        })
-
-    # Display chat messages
-    for i, message in enumerate(st.session_state.chat_history):
-        with st.chat_message(message["role"]):
-            st.write(message["content"])
-            
-            # Add metadata for assistant messages
-            if message["role"] == "assistant":
-                metadata = []
-                if "execution_time" in message:
-                    metadata.append(f"⏱️ {message['execution_time']:.2f}s")
-                if "agent_type" in message:
-                    metadata.append(f"🤖 {message['agent_type'].replace('_', ' ').title()}")
-                if "timestamp" in message:
-                    timestamp = datetime.fromisoformat(message["timestamp"]).strftime("%H:%M:%S")
-                    metadata.append(f"🕐 {timestamp}")
+        st.markdown("""
+        <div style="text-align: center; padding: 3rem; color: #6b7280;">
+            <h3 style="color: #4b5563; margin-bottom: 1rem;">Welcome to MultiAgentAI21! 👋</h3>
+            <p>Select an agent above and start chatting. You can also attach files to your messages.</p>
+            <p style="font-size: 0.9rem; margin-top: 0.5rem;">💡 Tip: Use the 📎 button to attach files</p>
+        </div>
+        """, unsafe_allow_html=True)
+    else:
+        # Display chat messages
+        for i, message in enumerate(st.session_state.chat_history):
+            with st.chat_message(message["role"]):
+                st.write(message["content"])
                 
-                if metadata:
-                    st.caption(" | ".join(metadata))
+                # Add metadata for assistant messages
+                if message["role"] == "assistant":
+                    metadata = []
+                    if "execution_time" in message:
+                        metadata.append(f"⏱️ {message['execution_time']:.2f}s")
+                    if "agent_type" in message:
+                        metadata.append(f"🤖 {message['agent_type'].replace('_', ' ').title()}")
+                    if "timestamp" in message:
+                        timestamp = datetime.fromisoformat(message["timestamp"]).strftime("%H:%M:%S")
+                        metadata.append(f"🕐 {timestamp}")
+                    
+                    if metadata:
+                        st.caption(" | ".join(metadata))
 
 def process_and_display_user_message(user_input):
     """Process user message and update chat history."""
@@ -1051,99 +1097,127 @@ def display_chat_interface():
     # Agent selection (at the top of the chat area)
     display_agent_selection()
 
+    # Chat messages container with integrated input
+    st.markdown('<div class="integrated-chat-container">', unsafe_allow_html=True)
+    
     # Display chat messages
     display_chat_messages()
-
-    # Advanced chat input area
-    st.markdown('<div class="chat-input-container">', unsafe_allow_html=True)
     
-    # Create columns for better layout
-    col1, col2, col3 = st.columns([5, 2, 1])
+    # Integrated chat input area at the bottom of chat container
+    st.markdown('<div class="integrated-input-area">', unsafe_allow_html=True)
     
-    with col1:
-        # Text input with placeholder
-        user_input = st.text_area(
-            "Message",
-            placeholder="Type your message here... (Press Ctrl+Enter to send)",
-            height=70,
-            key="chat_input",
-            label_visibility="collapsed"
-        )
+    # File upload state management
+    if "show_file_upload" not in st.session_state:
+        st.session_state.show_file_upload = False
     
-    with col2:
-        # File upload section
-        uploaded_files = st.file_uploader(
-            "📎 Attach files",
-            accept_multiple_files=True,
-            key="chat_file_upload",
-            type=['txt', 'pdf', 'csv', 'xlsx', 'json', 'py', 'js', 'html', 'css', 'md', 
-                  'jpg', 'jpeg', 'png', 'gif', 'doc', 'docx', 'xml', 'yaml', 'yml'],
-            help="Upload files to include with your message"
-        )
+    # Main input container
+    input_container = st.container()
     
-    with col3:
+    with input_container:
+        # Create the main input row
+        input_col1, input_col2 = st.columns([10, 1])
+        
+        with input_col1:
+            user_input = st.text_area(
+                "Message",
+                placeholder="Type your message here... (Press Ctrl+Enter to send)",
+                height=100,
+                key="chat_input",
+                label_visibility="collapsed"
+            )
+        
+        with input_col2:
+            # Attach files button
+            if st.button("📎", key="attach_btn", help="Attach files", use_container_width=True):
+                st.session_state.show_file_upload = not st.session_state.show_file_upload
+                st.rerun()
+        
+        # File upload area (shown/hidden based on state)
+        if st.session_state.show_file_upload:
+            with st.expander("📎 Attach files", expanded=True):
+                uploaded_files = st.file_uploader(
+                    "Drag and drop files here",
+                    accept_multiple_files=True,
+                    key="chat_file_upload",
+                    type=['txt', 'pdf', 'csv', 'xlsx', 'json', 'py', 'js', 'html', 'css', 'md', 
+                          'jpg', 'jpeg', 'png', 'gif', 'doc', 'docx', 'xml', 'yaml', 'yml', 'htm'],
+                    label_visibility="collapsed"
+                )
+                
+                # Display uploaded files
+                if uploaded_files:
+                    st.markdown("**Attached files:**")
+                    for idx, file in enumerate(uploaded_files):
+                        file_size = f"{file.size / 1024:.1f} KB" if file.size < 1024*1024 else f"{file.size / (1024*1024):.1f} MB"
+                        col1, col2 = st.columns([10, 1])
+                        with col1:
+                            st.caption(f"📄 {file.name} ({file_size})")
+                        with col2:
+                            # Individual file remove buttons could be added here if needed
+                            pass
+        else:
+            uploaded_files = st.session_state.get('chat_file_upload', [])
+        
+        # Show attached files count if files are uploaded but upload area is hidden
+        if uploaded_files and not st.session_state.show_file_upload:
+            st.caption(f"📎 {len(uploaded_files)} file(s) attached")
+        
         # Send button
-        send_clicked = st.button("Send 📤", key="send_button", type="primary", use_container_width=True)
-    
-    # Display uploaded files info
-    if uploaded_files:
-        st.markdown("**Attached files:**")
-        for file in uploaded_files:
-            file_size = f"{file.size / 1024:.1f} KB" if file.size < 1024*1024 else f"{file.size / (1024*1024):.1f} MB"
-            st.caption(f"📄 {file.name} ({file_size})")
-    
-    # Process message when send is clicked or Enter is pressed
-    if send_clicked and (user_input or uploaded_files):
-        # Prepare the message with file information
-        message_parts = []
+        send_col1, send_col2, send_col3 = st.columns([4, 4, 2])
+        with send_col3:
+            send_clicked = st.button("Send 📤", key="send_button", type="primary", use_container_width=True)
         
-        if user_input:
-            message_parts.append(user_input)
-        
-        if uploaded_files:
-            file_info = []
-            for uploaded_file in uploaded_files:
-                # Store file temporarily if needed for processing
-                temp_dir = tempfile.mkdtemp()
-                file_path = os.path.join(temp_dir, uploaded_file.name)
-                
-                with open(file_path, "wb") as f:
-                    f.write(uploaded_file.getbuffer())
-                
-                # Add to temp files for cleanup
-                if "temp_files" not in st.session_state:
-                    st.session_state.temp_files = []
-                st.session_state.temp_files.append(file_path)
-                
-                file_info.append({
-                    "name": uploaded_file.name,
-                    "type": uploaded_file.type,
-                    "size": uploaded_file.size,
-                    "path": file_path
-                })
+        # Process message when send is clicked
+        if send_clicked and (user_input or uploaded_files):
+            # Prepare the message with file information
+            message_parts = []
             
-            # Add file information to message
-            files_text = "\n\n📎 **Attached files:**\n"
-            for f in file_info:
-                files_text += f"- {f['name']} ({f['type']}, {f['size']} bytes)\n"
+            if user_input:
+                message_parts.append(user_input)
             
-            message_parts.append(files_text)
-        
-        # Combine all parts into final message
-        full_message = "\n".join(message_parts)
-        
-        # Process the message
-        process_and_display_user_message(full_message)
-        
-        # Clear the inputs after sending
-        st.session_state.chat_input = ""
-        st.rerun()
+            if uploaded_files:
+                file_info = []
+                for uploaded_file in uploaded_files:
+                    # Store file temporarily if needed for processing
+                    temp_dir = tempfile.mkdtemp()
+                    file_path = os.path.join(temp_dir, uploaded_file.name)
+                    
+                    with open(file_path, "wb") as f:
+                        f.write(uploaded_file.getbuffer())
+                    
+                    # Add to temp files for cleanup
+                    if "temp_files" not in st.session_state:
+                        st.session_state.temp_files = []
+                    st.session_state.temp_files.append(file_path)
+                    
+                    file_info.append({
+                        "name": uploaded_file.name,
+                        "type": uploaded_file.type,
+                        "size": uploaded_file.size,
+                        "path": file_path
+                    })
+                
+                # Add file information to message
+                files_text = "\n\n📎 **Attached files:**\n"
+                for f in file_info:
+                    files_text += f"- {f['name']} ({f['type']}, {f['size']} bytes)\n"
+                
+                message_parts.append(files_text)
+            
+            # Combine all parts into final message
+            full_message = "\n".join(message_parts)
+            
+            # Process the message
+            process_and_display_user_message(full_message)
+            
+            # Clear the inputs and hide file upload area after sending
+            st.session_state.chat_input = ""
+            st.session_state.show_file_upload = False
+            st.rerun()
     
-    # Keyboard shortcut hint
-    st.caption("💡 Tip: Press Ctrl+Enter to send your message quickly")
-    
-    st.markdown('</div>', unsafe_allow_html=True)
-    st.markdown('</div>', unsafe_allow_html=True)
+    st.markdown('</div>', unsafe_allow_html=True)  # Close integrated-input-area
+    st.markdown('</div>', unsafe_allow_html=True)  # Close integrated-chat-container
+    st.markdown('</div>', unsafe_allow_html=True)  # Close page-content-container
 
 def show_agent_examples():
     """Show examples based on selected agent"""
@@ -1339,10 +1413,12 @@ def display_analytics_dashboard():
     st.markdown('</div>', unsafe_allow_html=True)
 
 def display_footer():
-    """Display the global footer."""
-    st.markdown('<div class="custom-footer">', unsafe_allow_html=True)
-    st.markdown("<p style='text-align: center; font-size: small; color: #6b7280; margin: 0;'>Powered by Gemini | MultiAgentAI21 can make mistakes. Always verify important information.</p>", unsafe_allow_html=True)
-    st.markdown('</div>', unsafe_allow_html=True)
+    """Display the global footer with warning message."""
+    st.markdown("""
+    <div class="custom-footer">
+        <p>Powered by Gemini | MultiAgentAI21 can make mistakes. Always verify important information.</p>
+    </div>
+    """, unsafe_allow_html=True)
 
 def user_profile_sidebar():
     """Display user profile in sidebar"""
@@ -1469,6 +1545,9 @@ def main_app():
         # Clean up temporary files when the app is closed
         atexit.register(cleanup_analysis_files)
         atexit.register(cleanup_temp_files)
+
+        # Display the global footer
+        display_footer()
 
     except Exception as e:
         logger.error(f"Error in main application: {e}", exc_info=True)
