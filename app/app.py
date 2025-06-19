@@ -564,8 +564,8 @@ if __name__ == "__main__":
             main_app()
     except Exception as e:
         logger.critical(f"Critical error in main application execution: {e}", exc_info=True)
-        st.error(f"A critical error prevented the application from running: {str(e)}")f"A critical error occurred at startup (set_page_config): {e}")
-            st.stop()
+        st.error(f"A critical error occurred at startup (set_page_config): {e}")
+        st.stop()
 else:
     # If the flag is already set, it means set_page_config was called in a previous rerun
     # This block is for logging purposes and will not re-call set_page_config
