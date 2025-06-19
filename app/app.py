@@ -2,6 +2,13 @@ import sys
 import os
 from pathlib import Path
 import logging
+
+# Configure logging (must be before any logger usage)
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+logger.info("Setting up page configuration and logging...")
+logger.info("Page configuration set successfully")
+
 import streamlit as st
 import atexit
 import pandas as pd
