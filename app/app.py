@@ -1110,58 +1110,64 @@ def display_chat_interface():
         if "show_file_upload" not in st.session_state:
             st.session_state.show_file_upload = False
         
-        # Main input container
-        with st.container():
-            # Input row with text area and buttons
-            col1, col2, col3 = st.columns([8, 1, 1.5])
+        # Input row with text area and buttons
+        col1, col2, col3 = st.columns([8, 1, 1.5])
+        
+        with col1:
+            user_input = st.text_area(
+                "Message",
+                placeholder="Type your message here... (Press Ctrl+Enter to send)",
+                height=70,
+                key="chat_input",
+                label_visibility="collapsed"
+            )
+        
+        with col2:
+            # Attach files button
+            if st.button("📎", key="attach_btn", help="Attach files"):
+                st.session_state.show_file_upload = not st.session_state.show_file_upload
+                st.rerun()
+        
+        with col3:
+            # Send button
+            send_clicked = st.button("Send 📤", key="send_button", type="primary")
+        
+        # File upload area (shown/hidden based on state) - outside columns
+        if st.session_state.show_file_upload:
+            # Use session state to persist files
+            if "uploaded_files_list" not in st.session_state:
+                st.session_state.uploaded_files_list = []
             
-            with col1:
-                user_input = st.text_area(
-                    "Message",
-                    placeholder="Type your message here... (Press Ctrl+Enter to send)",
-                    height=70,
-                    key="chat_input",
-                    label_visibility="collapsed"
-                )
+            uploaded_files = st.file_uploader(
+                "📎 Attach files",
+                accept_multiple_files=True,
+                key="chat_file_upload",
+                type=['txt', 'pdf', 'csv', 'xlsx', 'json', 'py', 'js', 'html', 'css', 'md', 
+                      'jpg', 'jpeg', 'png', 'gif', 'doc', 'docx', 'xml', 'yaml', 'yml', 'htm'],
+                label_visibility="visible"
+            )
             
-            with col2:
-                # Attach files button
-                if st.button("📎", key="attach_btn", help="Attach files"):
-                    st.session_state.show_file_upload = not st.session_state.show_file_upload
-                    st.rerun()
+            # Update session state with uploaded files
+            if uploaded_files:
+                st.session_state.uploaded_files_list = uploaded_files
             
-            with col3:
-                # Send button
-                send_clicked = st.button("Send 📤", key="send_button", type="primary")
+            # Display uploaded files inline
+            if st.session_state.uploaded_files_list:
+                files_info = []
+                for file in st.session_state.uploaded_files_list:
+                    file_size = f"{file.size / 1024:.1f} KB" if file.size < 1024*1024 else f"{file.size / (1024*1024):.1f} MB"
+                    files_info.append(f"📄 {file.name} ({file_size})")
+                st.caption(" • ".join(files_info))
+        else:
+            # Show attached files count if files exist
+            if "uploaded_files_list" in st.session_state and st.session_state.uploaded_files_list:
+                st.caption(f"📎 {len(st.session_state.uploaded_files_list)} file(s) attached")
+        
+        # Process message when send is clicked
+        if send_clicked:
+            uploaded_files = st.session_state.get("uploaded_files_list", [])
             
-            # File upload area (shown/hidden based on state)
-            if st.session_state.show_file_upload:
-                uploaded_files = st.file_uploader(
-                    "📎 Attach files",
-                    accept_multiple_files=True,
-                    key="chat_file_upload",
-                    type=['txt', 'pdf', 'csv', 'xlsx', 'json', 'py', 'js', 'html', 'css', 'md', 
-                          'jpg', 'jpeg', 'png', 'gif', 'doc', 'docx', 'xml', 'yaml', 'yml', 'htm'],
-                    label_visibility="visible"
-                )
-                
-                # Display uploaded files inline
-                if uploaded_files:
-                    files_info = []
-                    for file in uploaded_files:
-                        file_size = f"{file.size / 1024:.1f} KB" if file.size < 1024*1024 else f"{file.size / (1024*1024):.1f} MB"
-                        files_info.append(f"📄 {file.name} ({file_size})")
-                    st.caption(" • ".join(files_info))
-            else:
-                uploaded_files = []
-                if "chat_file_upload" in st.session_state and st.session_state.chat_file_upload:
-                    uploaded_files = st.session_state.chat_file_upload
-                    # Show attached files count
-                    if uploaded_files:
-                        st.caption(f"📎 {len(uploaded_files)} file(s) attached")
-            
-            # Process message when send is clicked
-            if send_clicked and (user_input or uploaded_files):
+            if user_input or uploaded_files:
                 # Prepare the message with file information
                 message_parts = []
                 
@@ -1203,9 +1209,10 @@ def display_chat_interface():
                 # Process the message
                 process_and_display_user_message(full_message)
                 
-                # Clear the inputs and hide file upload area after sending
+                # Clear the inputs and files after sending
                 st.session_state.chat_input = ""
                 st.session_state.show_file_upload = False
+                st.session_state.uploaded_files_list = []
                 st.rerun()
         
         st.markdown('</div>', unsafe_allow_html=True)  # Close integrated-input-area
