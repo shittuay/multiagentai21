@@ -1119,7 +1119,7 @@ def display_chat_interface():
                 user_input = st.text_area(
                     "Message",
                     placeholder="Type your message here... (Press Ctrl+Enter to send)",
-                    height=60,
+                    height=70,
                     key="chat_input",
                     label_visibility="collapsed"
                 )
