@@ -563,13 +563,29 @@ def save_chat_history(chat_id: str, messages: list):
     try:
         chat_ref = chat_collection.document(chat_id)
         
-        chat_data = {
-            "chat_id": chat_id,
-            "created_at": firestore.SERVER_TIMESTAMP,
-            "last_updated": firestore.SERVER_TIMESTAMP,
-            "message_count": len(messages),
-            "messages": messages
-        }
+        # Get current timestamp
+        from google.cloud.firestore_v1 import SERVER_TIMESTAMP
+        
+        # Check if document exists to determine if this is first save
+        doc = chat_ref.get()
+        
+        if doc.exists:
+            # Update existing document
+            chat_data = {
+                "chat_id": chat_id,
+                "last_updated": SERVER_TIMESTAMP,
+                "message_count": len(messages),
+                "messages": messages
+            }
+        else:
+            # Create new document
+            chat_data = {
+                "chat_id": chat_id,
+                "created_at": SERVER_TIMESTAMP,
+                "last_updated": SERVER_TIMESTAMP,
+                "message_count": len(messages),
+                "messages": messages
+            }
         
         chat_ref.set(chat_data, merge=True)
         logger.info(f"Chat history saved to Firestore: {chat_id} ({len(messages)} messages)")
@@ -624,15 +640,19 @@ def get_available_chats() -> list:
     try:
         chats = []
         
-        # Debug: Check collection path
-        logger.info(f"Querying collection path: {chat_collection.path}")
+        # Debug: Log collection info (without using .path which doesn't exist)
+        logger.info(f"Querying collection for user: {user_uid}")
         
         # Get all documents first to see what's there
         all_docs = list(chat_collection.stream())
         logger.info(f"Total documents in collection: {len(all_docs)}")
         
         # Now query with ordering
-        chat_docs = chat_collection.order_by("last_updated", direction=firestore.Query.DESCENDING).stream()
+        try:
+            chat_docs = chat_collection.order_by("last_updated", direction=firestore.Query.DESCENDING).stream()
+        except Exception as e:
+            logger.warning(f"Could not order by last_updated, falling back to unordered: {e}")
+            chat_docs = chat_collection.stream()
         
         for doc in chat_docs:
             try:
@@ -1203,8 +1223,7 @@ def debug_firestore_structure():
         st.write(f"User document exists: {user_doc.exists}")
         
         # Check chat histories collection
-        chat_collection_path = f"users/{user_uid}/{CHAT_HISTORY_COLLECTION_NAME}"
-        st.write(f"Chat collection path: {chat_collection_path}")
+        st.write(f"Chat collection path: users/{user_uid}/{CHAT_HISTORY_COLLECTION_NAME}")
         
         # List all chats
         chats = db.collection("users").document(user_uid).collection(CHAT_HISTORY_COLLECTION_NAME).stream()
