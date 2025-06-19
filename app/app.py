@@ -262,8 +262,7 @@ st.markdown(
         margin-top: 1rem;
         display: flex;
         flex-direction: column;
-        min-height: 500px;
-        max-height: 70vh;
+        height: auto;
     }
 
     /* Chat messages area */
@@ -1001,9 +1000,8 @@ def display_chat_messages():
     # Show welcome message if chat is empty
     if not st.session_state.chat_history:
         st.markdown("""
-        <div style="text-align: center; padding: 3rem; color: #6b7280;">
-            <h3 style="color: #4b5563; margin-bottom: 1rem;">Welcome to MultiAgentAI21! 👋</h3>
-            <p>Select an agent above and start chatting. You can also attach files to your messages.</p>
+        <div style="text-align: center; padding: 2rem; color: #6b7280;">
+            <p style="font-size: 1rem;">Select an agent above and start chatting. You can also attach files to your messages.</p>
             <p style="font-size: 0.9rem; margin-top: 0.5rem;">💡 Tip: Use the 📎 button to attach files</p>
         </div>
         """, unsafe_allow_html=True)
@@ -1097,126 +1095,126 @@ def display_chat_interface():
     # Agent selection (at the top of the chat area)
     display_agent_selection()
 
-    # Chat messages container with integrated input
-    st.markdown('<div class="integrated-chat-container">', unsafe_allow_html=True)
-    
-    # Display chat messages
-    display_chat_messages()
-    
-    # Integrated chat input area at the bottom of chat container
-    st.markdown('<div class="integrated-input-area">', unsafe_allow_html=True)
-    
-    # File upload state management
-    if "show_file_upload" not in st.session_state:
-        st.session_state.show_file_upload = False
-    
-    # Main input container
-    input_container = st.container()
-    
-    with input_container:
-        # Create the main input row
-        input_col1, input_col2 = st.columns([10, 1])
+    # Only show chat container if agent is selected
+    if st.session_state.agent_locked and st.session_state.selected_agent:
+        # Chat messages container with integrated input
+        st.markdown('<div class="integrated-chat-container">', unsafe_allow_html=True)
         
-        with input_col1:
-            user_input = st.text_area(
-                "Message",
-                placeholder="Type your message here... (Press Ctrl+Enter to send)",
-                height=100,
-                key="chat_input",
-                label_visibility="collapsed"
-            )
+        # Display chat messages
+        display_chat_messages()
         
-        with input_col2:
-            # Attach files button
-            if st.button("📎", key="attach_btn", help="Attach files", use_container_width=True):
-                st.session_state.show_file_upload = not st.session_state.show_file_upload
-                st.rerun()
+        # Integrated chat input area at the bottom of chat container
+        st.markdown('<div class="integrated-input-area">', unsafe_allow_html=True)
         
-        # File upload area (shown/hidden based on state)
-        if st.session_state.show_file_upload:
-            with st.expander("📎 Attach files", expanded=True):
-                uploaded_files = st.file_uploader(
-                    "Drag and drop files here",
-                    accept_multiple_files=True,
-                    key="chat_file_upload",
-                    type=['txt', 'pdf', 'csv', 'xlsx', 'json', 'py', 'js', 'html', 'css', 'md', 
-                          'jpg', 'jpeg', 'png', 'gif', 'doc', 'docx', 'xml', 'yaml', 'yml', 'htm'],
+        # File upload state management
+        if "show_file_upload" not in st.session_state:
+            st.session_state.show_file_upload = False
+        
+        # Main input container
+        input_container = st.container()
+        
+        with input_container:
+            # Create the main input row
+            input_col1, input_col2 = st.columns([10, 1])
+            
+            with input_col1:
+                user_input = st.text_area(
+                    "Message",
+                    placeholder="Type your message here... (Press Ctrl+Enter to send)",
+                    height=80,
+                    key="chat_input",
                     label_visibility="collapsed"
                 )
-                
-                # Display uploaded files
-                if uploaded_files:
-                    st.markdown("**Attached files:**")
-                    for idx, file in enumerate(uploaded_files):
-                        file_size = f"{file.size / 1024:.1f} KB" if file.size < 1024*1024 else f"{file.size / (1024*1024):.1f} MB"
-                        col1, col2 = st.columns([10, 1])
-                        with col1:
+            
+            with input_col2:
+                # Attach files button
+                if st.button("📎", key="attach_btn", help="Attach files", use_container_width=True):
+                    st.session_state.show_file_upload = not st.session_state.show_file_upload
+                    st.rerun()
+            
+            # File upload area (shown/hidden based on state)
+            if st.session_state.show_file_upload:
+                with st.container():
+                    uploaded_files = st.file_uploader(
+                        "Drag and drop files here",
+                        accept_multiple_files=True,
+                        key="chat_file_upload",
+                        type=['txt', 'pdf', 'csv', 'xlsx', 'json', 'py', 'js', 'html', 'css', 'md', 
+                              'jpg', 'jpeg', 'png', 'gif', 'doc', 'docx', 'xml', 'yaml', 'yml', 'htm'],
+                        label_visibility="visible"
+                    )
+                    
+                    # Display uploaded files
+                    if uploaded_files:
+                        st.markdown("**Attached files:**")
+                        for idx, file in enumerate(uploaded_files):
+                            file_size = f"{file.size / 1024:.1f} KB" if file.size < 1024*1024 else f"{file.size / (1024*1024):.1f} MB"
                             st.caption(f"📄 {file.name} ({file_size})")
-                        with col2:
-                            # Individual file remove buttons could be added here if needed
-                            pass
-        else:
-            uploaded_files = st.session_state.get('chat_file_upload', [])
-        
-        # Show attached files count if files are uploaded but upload area is hidden
-        if uploaded_files and not st.session_state.show_file_upload:
-            st.caption(f"📎 {len(uploaded_files)} file(s) attached")
-        
-        # Send button
-        send_col1, send_col2, send_col3 = st.columns([4, 4, 2])
-        with send_col3:
-            send_clicked = st.button("Send 📤", key="send_button", type="primary", use_container_width=True)
-        
-        # Process message when send is clicked
-        if send_clicked and (user_input or uploaded_files):
-            # Prepare the message with file information
-            message_parts = []
+            else:
+                uploaded_files = []
+                if "chat_file_upload" in st.session_state and st.session_state.chat_file_upload:
+                    uploaded_files = st.session_state.chat_file_upload
             
-            if user_input:
-                message_parts.append(user_input)
+            # Show attached files count if files are uploaded but upload area is hidden
+            if uploaded_files and not st.session_state.show_file_upload:
+                st.caption(f"📎 {len(uploaded_files)} file(s) attached")
             
-            if uploaded_files:
-                file_info = []
-                for uploaded_file in uploaded_files:
-                    # Store file temporarily if needed for processing
-                    temp_dir = tempfile.mkdtemp()
-                    file_path = os.path.join(temp_dir, uploaded_file.name)
-                    
-                    with open(file_path, "wb") as f:
-                        f.write(uploaded_file.getbuffer())
-                    
-                    # Add to temp files for cleanup
-                    if "temp_files" not in st.session_state:
-                        st.session_state.temp_files = []
-                    st.session_state.temp_files.append(file_path)
-                    
-                    file_info.append({
-                        "name": uploaded_file.name,
-                        "type": uploaded_file.type,
-                        "size": uploaded_file.size,
-                        "path": file_path
-                    })
+            # Send button row
+            _, _, send_col = st.columns([8, 1, 1])
+            with send_col:
+                send_clicked = st.button("Send 📤", key="send_button", type="primary", use_container_width=True)
+            
+            # Process message when send is clicked
+            if send_clicked and (user_input or uploaded_files):
+                # Prepare the message with file information
+                message_parts = []
                 
-                # Add file information to message
-                files_text = "\n\n📎 **Attached files:**\n"
-                for f in file_info:
-                    files_text += f"- {f['name']} ({f['type']}, {f['size']} bytes)\n"
+                if user_input:
+                    message_parts.append(user_input)
                 
-                message_parts.append(files_text)
-            
-            # Combine all parts into final message
-            full_message = "\n".join(message_parts)
-            
-            # Process the message
-            process_and_display_user_message(full_message)
-            
-            # Clear the inputs and hide file upload area after sending
-            st.session_state.chat_input = ""
-            st.session_state.show_file_upload = False
-            st.rerun()
+                if uploaded_files:
+                    file_info = []
+                    for uploaded_file in uploaded_files:
+                        # Store file temporarily if needed for processing
+                        temp_dir = tempfile.mkdtemp()
+                        file_path = os.path.join(temp_dir, uploaded_file.name)
+                        
+                        with open(file_path, "wb") as f:
+                            f.write(uploaded_file.getbuffer())
+                        
+                        # Add to temp files for cleanup
+                        if "temp_files" not in st.session_state:
+                            st.session_state.temp_files = []
+                        st.session_state.temp_files.append(file_path)
+                        
+                        file_info.append({
+                            "name": uploaded_file.name,
+                            "type": uploaded_file.type,
+                            "size": uploaded_file.size,
+                            "path": file_path
+                        })
+                    
+                    # Add file information to message
+                    files_text = "\n\n📎 **Attached files:**\n"
+                    for f in file_info:
+                        files_text += f"- {f['name']} ({f['type']}, {f['size']} bytes)\n"
+                    
+                    message_parts.append(files_text)
+                
+                # Combine all parts into final message
+                full_message = "\n".join(message_parts)
+                
+                # Process the message
+                process_and_display_user_message(full_message)
+                
+                # Clear the inputs and hide file upload area after sending
+                st.session_state.chat_input = ""
+                st.session_state.show_file_upload = False
+                st.rerun()
+        
+        st.markdown('</div>', unsafe_allow_html=True)  # Close integrated-input-area
+        st.markdown('</div>', unsafe_allow_html=True)  # Close integrated-chat-container
     
-    st.markdown('</div>', unsafe_allow_html=True)  # Close integrated-input-area
-    st.markdown('</div>', unsafe_allow_html=True)  # Close integrated-chat-container
     st.markdown('</div>', unsafe_allow_html=True)  # Close page-content-container
 
 def show_agent_examples():
