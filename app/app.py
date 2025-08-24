@@ -172,104 +172,415 @@ def get_agent_system():
         st.error(f"❌ Failed to initialize agent system: {e}")
         return None
 
-# Enhanced CSS styling
+# Claude AI Inspired Professional UI
 st.markdown("""
 <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
 
+    /* Reset and Base Styles */
+    * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+    }
+
+    /* Claude AI Inspired Global App Styling */
     .stApp {
+        background: #ffffff;
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+        color: #1a1a1a;
+        min-height: 100vh;
+    }
+
+    /* Claude AI Header */
+    .claude-header {
         background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
-        font-family: 'Inter', sans-serif;
-        color: #1a202c;
-    }
-
-    .main-header {
-        background: rgba(255, 255, 255, 0.95);
-        backdrop-filter: blur(20px);
-        border-radius: 20px;
-        padding: 3rem 2rem;
-        margin-bottom: 2rem;
-        border: 1px solid rgba(0, 0, 0, 0.1);
+        border-bottom: 1px solid #e2e8f0;
+        padding: 1.5rem 2rem;
         text-align: center;
-        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+        position: relative;
     }
 
-    .logo-container {
+    .claude-logo {
+        width: 48px;
+        height: 48px;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        border-radius: 12px;
         display: flex;
         align-items: center;
         justify-content: center;
-        gap: 1rem;
-        margin-bottom: 1rem;
+        font-size: 24px;
+        margin: 0 auto 1rem auto;
+        box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
     }
 
-    .logo-icon {
-        width: 60px;
-        height: 60px;
-        background: linear-gradient(45deg, #3b82f6, #8b5cf6);
+    .claude-header h1 {
+        font-size: 2.25rem;
+        font-weight: 800;
+        margin: 0 0 0.5rem 0;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+        letter-spacing: -0.025em;
+    }
+
+    .claude-header p {
+        color: #64748b;
+        font-size: 1.125rem;
+        margin: 0 0 1.5rem 0;
+        font-weight: 400;
+        line-height: 1.6;
+    }
+
+    .claude-badges {
+        display: flex;
+        justify-content: center;
+        gap: 0.75rem;
+        flex-wrap: wrap;
+    }
+
+    .claude-badge {
+        background: rgba(102, 126, 234, 0.1);
+        color: #667eea;
+        padding: 0.5rem 1rem;
+        border-radius: 20px;
+        font-size: 0.875rem;
+        font-weight: 500;
+        border: 1px solid rgba(102, 126, 234, 0.2);
+    }
+
+    /* Claude AI Cards */
+    .claude-card {
+        background: #ffffff;
+        border: 1px solid #e2e8f0;
         border-radius: 16px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 30px;
-        box-shadow: 0 10px 30px rgba(59, 130, 246, 0.3);
-        color: white;
+        padding: 2rem;
+        margin-bottom: 1.5rem;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        transition: all 0.2s ease;
     }
 
-    .page-content-container {
-        background: rgba(255, 255, 255, 0.95);
-        backdrop-filter: blur(20px);
-        border-radius: 20px;
-        padding: 2.5rem;
-        margin-bottom: 2rem;
-        border: 1px solid rgba(0, 0, 0, 0.1);
-        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+    .claude-card:hover {
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        transform: translateY(-1px);
     }
 
-    .integrated-chat-container {
-        background: rgba(255, 255, 255, 0.98);
-        border-radius: 20px;
-        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+    /* Claude AI Chat Interface */
+    .claude-chat-container {
+        background: #ffffff;
+        border: 1px solid #e2e8f0;
+        border-radius: 16px;
         overflow: hidden;
         margin-top: 1rem;
         display: flex;
         flex-direction: column;
-        min-height: 400px;
+        min-height: 300px;
+        max-height: 400px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
     }
 
-    .integrated-input-area {
-        background: rgba(248, 250, 252, 0.95);
-        border-top: 1px solid rgba(0, 0, 0, 0.08);
-        padding: 1.5rem;
-        backdrop-filter: blur(10px);
+    .claude-chat-header {
+        background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+        color: #1a1a1a;
+        padding: 1.25rem 2rem;
+        font-weight: 600;
+        font-size: 1.125rem;
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        border-bottom: 1px solid #e2e8f0;
     }
 
+    .claude-chat-messages {
+        flex: 1;
+        padding: 0.5rem;
+        overflow-y: auto;
+        background: #fafafa;
+        max-height: 200px;
+    }
+
+    .claude-input-area {
+        background: #ffffff;
+        border-top: 1px solid #e2e8f0;
+        padding: 0.75rem 1rem;
+    }
+
+    /* Claude AI Buttons */
     .stButton > button {
-        background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         border: none;
         border-radius: 12px;
         color: white;
         font-weight: 600;
-        padding: 0.75rem 2rem;
-        transition: all 0.3s ease;
-        box-shadow: 0 4px 15px rgba(59, 130, 246, 0.3);
+        padding: 0.875rem 2rem;
+        transition: all 0.2s ease;
+        box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+        font-family: 'Inter', sans-serif;
+        font-size: 0.95rem;
     }
 
     .stButton > button:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 8px 25px rgba(59, 130, 246, 0.4);
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+    }
+
+    .stButton > button:active {
+        transform: translateY(0);
+    }
+
+    /* Claude AI Typography */
+    h1, h2, h3, h4, h5, h6 {
+        color: #1a1a1a !important;
+        font-weight: 600;
+        margin: 0 0 1rem 0 !important;
     }
 
     h1 {
-        color: #1a202c !important;
-        font-size: 3rem !important;
+        font-size: 2rem !important;
         font-weight: 800 !important;
+    }
+
+    h2 {
+        font-size: 1.5rem !important;
+        font-weight: 700 !important;
+    }
+
+    h3 {
+        font-size: 1.25rem !important;
+        font-weight: 600 !important;
+    }
+
+    /* Claude AI Sidebar */
+    .css-1d391kg {
+        background: #f8fafc;
+        border-right: 1px solid #e2e8f0;
+    }
+
+    /* Claude AI Status Badge */
+    .claude-status {
+        background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+        color: white;
+        padding: 0.75rem 1.5rem;
+        border-radius: 12px;
+        font-weight: 600;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3);
+        margin: 1rem 0;
+    }
+
+    /* Claude AI Input Fields */
+    .stTextArea > div > div > textarea {
+        background: #ffffff !important;
+        border: 2px solid #e2e8f0 !important;
+        border-radius: 12px;
+        padding: 1rem;
+        font-family: 'Inter', sans-serif;
+        font-size: 0.95rem;
+        color: #1a1a1a !important;
+        transition: all 0.2s ease;
+        resize: none;
+    }
+
+    .stTextArea > div > div > textarea:focus {
+        border-color: #667eea !important;
+        box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1) !important;
+        outline: none;
+    }
+
+    .stTextArea > div > div > textarea::placeholder {
+        color: #94a3b8 !important;
+    }
+
+    /* Claude AI File Upload */
+    .stFileUploader > div {
+        background: #ffffff !important;
+        border: 2px dashed #cbd5e1 !important;
+        border-radius: 12px;
+        transition: all 0.2s ease;
+    }
+
+    .stFileUploader > div:hover {
+        border-color: #667eea !important;
+        background: rgba(102, 126, 234, 0.02) !important;
+    }
+
+    /* Claude AI Chat Messages */
+    .claude-message {
+        background: #ffffff;
+        border: 1px solid #e2e8f0;
+        border-radius: 12px;
+        padding: 1.5rem;
+        margin-bottom: 1rem;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    }
+
+    .claude-message.user {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        margin-left: 2rem;
+        border: none;
+    }
+
+    .claude-message.assistant {
+        background: #ffffff;
+        margin-right: 2rem;
+        border-left: 4px solid #667eea;
+    }
+
+    /* Claude AI Radio Buttons */
+    .stRadio > div > label {
+        color: #1a1a1a !important;
+        font-weight: 500;
+    }
+
+    /* Claude AI Expander */
+    .streamlit-expanderHeader {
+        background: #f8fafc !important;
+        color: #1a1a1a !important;
+        border: 1px solid #e2e8f0 !important;
+        border-radius: 8px !important;
+    }
+
+    /* Claude AI Agent Selection Cards */
+    .claude-agent-card {
+        background: #ffffff;
+        border: 1px solid #e2e8f0;
+        border-radius: 12px;
+        padding: 1.5rem;
+        margin-bottom: 1rem;
+        transition: all 0.2s ease;
+        cursor: pointer;
+    }
+
+    .claude-agent-card:hover {
+        background: rgba(102, 126, 234, 0.02);
+        border-color: #667eea;
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(102, 126, 234, 0.15);
+    }
+
+    .claude-agent-icon {
+        font-size: 2rem;
+        margin-bottom: 0.75rem;
+    }
+
+    .claude-agent-title {
+        color: #667eea;
+        font-weight: 700;
+        margin-bottom: 0.5rem;
+        font-size: 1.125rem;
+    }
+
+    .claude-agent-description {
+        color: #64748b;
+        font-size: 0.875rem;
+        line-height: 1.5;
+    }
+
+    /* Claude AI Success/Info Messages */
+    .stSuccess {
+        background: rgba(16, 185, 129, 0.1) !important;
+        border: 1px solid rgba(16, 185, 129, 0.2) !important;
+        color: #059669 !important;
+        border-radius: 8px !important;
+        padding: 1rem !important;
+    }
+
+    .stInfo {
+        background: rgba(102, 126, 234, 0.1) !important;
+        border: 1px solid rgba(102, 126, 234, 0.2) !important;
+        color: #667eea !important;
+        border-radius: 8px !important;
+        padding: 1rem !important;
+    }
+
+    .stWarning {
+        background: rgba(245, 158, 11, 0.1) !important;
+        border: 1px solid rgba(245, 158, 11, 0.2) !important;
+        color: #d97706 !important;
+        border-radius: 8px !important;
+        padding: 1rem !important;
+    }
+
+    .stError {
+        background: rgba(239, 68, 68, 0.1) !important;
+        border: 1px solid rgba(239, 68, 68, 0.2) !important;
+        color: #dc2626 !important;
+        border-radius: 8px !important;
+        padding: 1rem !important;
+    }
+
+    /* Remove default Streamlit spacing */
+    .block-container {
+        padding: 1rem 2rem !important;
+        max-width: 1200px !important;
+    }
+
+    /* Claude AI Sidebar Styling */
+    .css-1d391kg .css-1d391kg {
+        padding: 1rem !important;
         margin: 0 !important;
     }
 
-    .main-header p {
-        color: #4a5568 !important;
-        font-size: 1.2rem !important;
-        margin: 0 !important;
+    /* Claude AI Scrollbar */
+    ::-webkit-scrollbar {
+        width: 8px;
+    }
+
+    ::-webkit-scrollbar-track {
+        background: #f1f5f9;
+        border-radius: 4px;
+    }
+
+    ::-webkit-scrollbar-thumb {
+        background: #cbd5e1;
+        border-radius: 4px;
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+        background: #94a3b8;
+    }
+
+    /* Claude AI Responsive Design */
+    @media (max-width: 768px) {
+        .claude-header {
+            padding: 1rem;
+        }
+        
+        .claude-header h1 {
+            font-size: 1.75rem !important;
+        }
+        
+        .claude-card {
+            padding: 1.5rem;
+        }
+        
+        .claude-badges {
+            flex-direction: column;
+            align-items: center;
+        }
+        
+        .block-container {
+            padding: 0.5rem 1rem !important;
+        }
+    }
+
+    /* Claude AI Loading Animation */
+    .claude-loading {
+        display: inline-block;
+        width: 20px;
+        height: 20px;
+        border: 2px solid #e2e8f0;
+        border-radius: 50%;
+        border-top-color: #667eea;
+        animation: claude-spin 1s ease-in-out infinite;
+    }
+
+    @keyframes claude-spin {
+        to { transform: rotate(360deg); }
     }
 </style>
 """, unsafe_allow_html=True)
@@ -309,9 +620,8 @@ def get_firestore_chat_collection():
     user_uid = user_info.get("uid") if user_info else None
 
     if not user_uid:
-        if "anonymous_user_id" not in st.session_state:
-            st.session_state.anonymous_user_id = f"anon_{os.urandom(16).hex()}"
-        user_uid = st.session_state.anonymous_user_id
+        st.error("❌ User not authenticated")
+        return None
     
     return db.collection("users").document(user_uid).collection(CHAT_HISTORY_COLLECTION_NAME)
 
@@ -319,6 +629,7 @@ def save_chat_history(chat_id: str, messages: list):
     """Save chat history to Firestore"""
     chat_collection = get_firestore_chat_collection()
     if not chat_collection:
+        st.error("❌ Cannot save chat history - user not authenticated")
         return
 
     try:
@@ -348,6 +659,7 @@ def load_chat_history(chat_id: str) -> list:
     """Load chat history from Firestore"""
     chat_collection = get_firestore_chat_collection()
     if not chat_collection:
+        st.error("❌ Cannot load chat history - user not authenticated")
         return []
 
     try:
@@ -362,9 +674,6 @@ def load_chat_history(chat_id: str) -> list:
 
 def get_available_chats() -> list:
     """Get available chat sessions"""
-    if not is_authenticated():
-        return []
-    
     chat_collection = get_firestore_chat_collection()
     if not chat_collection:
         return []
@@ -403,67 +712,119 @@ def get_available_chats() -> list:
         return []
 
 # UI Components
-def display_enhanced_header():
-    """Display the enhanced header"""
+def display_claude_header():
+    """Display the Claude AI inspired header"""
     st.markdown("""
-    <div class="main-header">
-        <div class="logo-container">
-            <div class="logo-icon">🚀</div>
-            <h1>MultiAgentAI21</h1>
+    <div class="claude-header">
+        <div class="claude-logo">🤖</div>
+        <h1>MultiAgentAI21</h1>
+        <p>Next-Generation Multi-Agent AI System for Enterprise Solutions</p>
+        <div class="claude-badges">
+            <span class="claude-badge">🚀 AI-Powered</span>
+            <span class="claude-badge">⚡ Real-time</span>
+            <span class="claude-badge">🔒 Secure</span>
+            <span class="claude-badge">🎯 Enterprise</span>
         </div>
-        <p>Advanced Multi-Agent AI System for Complex Problem Solving</p>
     </div>
     """, unsafe_allow_html=True)
 
-def display_agent_selection():
-    """Display agent selection interface"""
+def display_claude_agent_selection():
+    """Display Claude AI inspired agent selection interface"""
     if not st.session_state.agent_locked:
-        st.subheader("🤖 Select an Agent")
+        st.subheader("🤖 Choose Your AI Agent")
         
-        agent_descriptions = {
-            AgentType.DATA_ANALYSIS.value: "📊 Analyzes data files, performs calculations, generates insights",
-            AgentType.AUTOMATION.value: "🤖 Processes files, creates scripts, automates workflows", 
-            AgentType.CONTENT_CREATION.value: "📝 Creates blog posts, social media content, marketing copy",
-            AgentType.CUSTOMER_SERVICE.value: "💬 Provides support, answers questions, offers guidance"
+        agent_options = {
+            AgentType.DATA_ANALYSIS.value: {
+                "icon": "📊",
+                "title": "Data Analysis Expert",
+                "description": "Advanced analytics, insights, and data visualization",
+                "color": "#667eea"
+            },
+            AgentType.AUTOMATION.value: {
+                "icon": "⚙️", 
+                "title": "Automation Specialist",
+                "description": "Process automation and workflow optimization",
+                "color": "#10b981"
+            },
+            AgentType.CONTENT_CREATION.value: {
+                "icon": "✍️",
+                "title": "Content Creator",
+                "description": "Professional content and marketing materials",
+                "color": "#f59e0b"
+            },
+            AgentType.CUSTOMER_SERVICE.value: {
+                "icon": "🎯",
+                "title": "Customer Success",
+                "description": "Support and engagement solutions",
+                "color": "#764ba2"
+            }
         }
         
-        # Display agent options with descriptions
-        for agent_type in AgentType:
-            description = agent_descriptions.get(agent_type.value, "")
-            if st.button(f"{description}", key=f"select_{agent_type.value}"):
-                st.session_state.selected_agent = agent_type.value
-                st.session_state.agent_locked = True
-                st.success(f"✅ Connected to {agent_type.value.replace('_', ' ').title()} Agent!")
-                st.rerun()
+        # Create a 2x2 grid for agent selection
+        cols = st.columns(2)
+        for i, (agent_type, info) in enumerate(agent_options.items()):
+            with cols[i % 2]:
+                st.markdown(f"""
+                <div class="claude-agent-card" style="border-color: {info['color']}20;">
+                    <div class="claude-agent-icon">{info['icon']}</div>
+                    <div class="claude-agent-title">{info['title']}</div>
+                    <div class="claude-agent-description">{info['description']}</div>
+                </div>
+                """, unsafe_allow_html=True)
+                
+                if st.button(f"Select {info['title']}", key=f"select_{agent_type}", use_container_width=True):
+                    st.session_state.selected_agent = agent_type
+                    st.session_state.agent_locked = True
+                    # Auto-start new chat for new agent
+                    st.session_state.current_chat_id = f"chat_{int(time.time())}"
+                    st.session_state.chat_history = []
+                    st.success(f"✅ Connected to {info['title']}! New chat started automatically.")
+                    st.rerun()
     else:
-        st.success(f"🤖 Active: {st.session_state.selected_agent.replace('_', ' ').title()} Agent")
-        if st.button("🔄 Change Agent", key="change_agent_btn"):
+        agent_info = {
+            "data_analysis_and_insights": {"icon": "📊", "title": "Data Analysis Expert", "color": "#667eea"},
+            "automation_of_complex_processes": {"icon": "⚙️", "title": "Automation Specialist", "color": "#10b981"},
+            "content_creation_and_generation": {"icon": "✍️", "title": "Content Creator", "color": "#f59e0b"},
+            "customer_service_and_engagement": {"icon": "🎯", "title": "Customer Success", "color": "#764ba2"}
+        }
+        
+        info = agent_info.get(st.session_state.selected_agent, {"icon": "🤖", "title": "AI Agent", "color": "#667eea"})
+        
+        st.markdown(f"""
+        <div class="claude-status" style="background: linear-gradient(135deg, {info['color']} 0%, {info['color']}dd 100%);">
+            {info['icon']} Active: {info['title']}
+        </div>
+        """, unsafe_allow_html=True)
+        
+        if st.button("🔄 Change Agent", key="change_agent_btn", help="Switch to a different AI agent"):
             st.session_state.agent_locked = False
             st.session_state.selected_agent = None
+            # Clear current chat when changing agents
+            st.session_state.chat_history = []
             st.rerun()
 
-def display_chat_messages():
-    """Display chat messages with enhanced formatting"""
+def display_professional_chat_messages():
+    """Display professional chat messages with enhanced formatting and feedback collection"""
     if not st.session_state.chat_history:
         # Show welcome message with examples
         if st.session_state.selected_agent:
             agent_examples = {
-                "data_analysis": [
+                "data_analysis_and_insights": [
                     "Analyze this CSV file and show insights",
                     "Calculate the average of 125000, 135000, 145000",
                     "Show me the first 5 rows and data types"
                 ],
-                "automation": [
+                "automation_of_complex_processes": [
                     "Process this file and clean the data",
                     "Generate a Python script to organize files",
                     "Create a workflow for data processing"
                 ],
-                "content_creation": [
+                "content_creation_and_generation": [
                     "Write a blog post about AI trends",
                     "Create LinkedIn content about data science",
                     "Generate marketing copy for an AI product"
                 ],
-                "customer_service": [
+                "customer_service_and_engagement": [
                     "How do I use the data analysis features?",
                     "What can the automation agent do?",
                     "Help me choose the right agent"
@@ -472,21 +833,110 @@ def display_chat_messages():
             
             examples = agent_examples.get(st.session_state.selected_agent, [])
             
+            # Create a compact welcome message with Claude AI styling
             st.markdown(f"""
-            <div style="text-align: center; padding: 2rem; color: #6b7280;">
-                <h4 style="color: #374151;">👋 Ready to help with {st.session_state.selected_agent.replace('_', ' ').title()}!</h4>
-                <p>Try one of these examples:</p>
-            </div>
+            <div style="
+                text-align: center; 
+                padding: 1rem; 
+                background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+                border-radius: 12px;
+                margin: 0.5rem 0;
+                border: 1px solid #e2e8f0;
+            ">
+                <div style="
+                    width: 48px;
+                    height: 48px;
+                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                    border-radius: 12px;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    font-size: 24px;
+                    margin: 0 auto 1rem auto;
+                    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+                ">
+                    🤖
+                </div>
+                <h4 style="
+                    color: #1a1a1a; 
+                    font-size: 1.25rem; 
+                    font-weight: 700; 
+                    margin-bottom: 0.5rem;
+                ">
+                    Welcome to {st.session_state.selected_agent.replace('_', ' ').title()}!
+                </h4>
+                <p style="
+                    color: #64748b; 
+                    font-size: 0.9rem; 
+                    margin-bottom: 1rem;
+                    line-height: 1.5;
+                ">
+                    I'm ready to help you with your tasks. Here are some examples to get started:
+                </p>
+                <div style="
+                    display: flex;
+                    flex-direction: column;
+                    gap: 0.5rem;
+                    max-width: 400px;
+                    margin: 0 auto;
+                ">
             """, unsafe_allow_html=True)
             
             for i, example in enumerate(examples):
-                if st.button(f"💡 {example}", key=f"example_{i}"):
+                st.markdown(f"""
+                <div style="
+                    background: #ffffff;
+                    border: 1px solid #e2e8f0;
+                    border-radius: 8px;
+                    padding: 0.75rem;
+                    text-align: left;
+                    transition: all 0.2s ease;
+                    cursor: pointer;
+                " onmouseover="this.style.transform='translateY(-1px)'; this.style.boxShadow='0 2px 8px rgba(102, 126, 234, 0.1)';" onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='none';">
+                    <div style="color: #667eea; font-weight: 600; margin-bottom: 0.25rem; font-size: 0.8rem;">💡 Example {i+1}</div>
+                    <div style="color: #1a1a1a; font-size: 0.85rem;">{example}</div>
+                </div>
+                """, unsafe_allow_html=True)
+                
+                if st.button(f"Try this example", key=f"example_{i}", use_container_width=True):
                     process_and_display_user_message(example)
+            
+            st.markdown("</div></div>", unsafe_allow_html=True)
         else:
-            st.info("Select an agent above to start chatting.")
+            st.markdown("""
+            <div style="
+                text-align: center; 
+                padding: 3rem 2rem; 
+                background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+                border-radius: 16px;
+                margin: 2rem 0;
+                border: 1px solid #e2e8f0;
+            ">
+                <div style="
+                    width: 64px;
+                    height: 64px;
+                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                    border-radius: 16px;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    font-size: 32px;
+                    margin: 0 auto 1.5rem auto;
+                    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+                ">
+                    🚀
+                </div>
+                <h3 style="color: #1a1a1a; font-size: 1.5rem; font-weight: 700; margin-bottom: 0.5rem;">
+                    Welcome to MultiAgentAI21
+                </h3>
+                <p style="color: #64748b; font-size: 1rem; margin-bottom: 1rem;">
+                    Please select an AI agent above to start chatting and get professional assistance.
+                </p>
+            </div>
+            """, unsafe_allow_html=True)
     else:
-        # Display actual chat messages
-        for message in st.session_state.chat_history:
+        # Display actual chat messages with professional styling and feedback
+        for i, message in enumerate(st.session_state.chat_history):
             with st.chat_message(message["role"]):
                 if message["role"] == "assistant" and not message.get("success", True):
                     st.error(message["content"])
@@ -509,6 +959,61 @@ def display_chat_messages():
                     
                     if metadata:
                         st.caption(" | ".join(metadata))
+                    
+                    # Add feedback collection for assistant messages
+                    if st.session_state.agent and message.get("agent_type"):
+                        st.markdown("---")
+                        st.markdown("**Rate this response:**")
+                        
+                        col1, col2, col3, col4, col5 = st.columns(5)
+                        
+                        feedback_key = f"feedback_{i}"
+                        if feedback_key not in st.session_state:
+                            st.session_state[feedback_key] = None
+                        
+                        with col1:
+                            if st.button("😞", key=f"rate_1_{i}", help="Very Dissatisfied"):
+                                st.session_state[feedback_key] = 1
+                                st.success("Feedback recorded!")
+                        
+                        with col2:
+                            if st.button("😐", key=f"rate_2_{i}", help="Dissatisfied"):
+                                st.session_state[feedback_key] = 2
+                                st.success("Feedback recorded!")
+                        
+                        with col3:
+                            if st.button("😊", key=f"rate_3_{i}", help="Neutral"):
+                                st.session_state[feedback_key] = 3
+                                st.success("Feedback recorded!")
+                        
+                        with col4:
+                            if st.button("😄", key=f"rate_4_{i}", help="Satisfied"):
+                                st.session_state[feedback_key] = 4
+                                st.success("Feedback recorded!")
+                        
+                        with col5:
+                            if st.button("🤩", key=f"rate_5_{i}", help="Very Satisfied"):
+                                st.session_state[feedback_key] = 5
+                                st.success("Feedback recorded!")
+                        
+                        # If feedback was given, add it to the agent system
+                        if st.session_state[feedback_key] is not None:
+                            try:
+                                # Get the specific agent instance for feedback
+                                agent_type_enum = AgentType(message["agent_type"])
+                                if agent_type_enum in st.session_state.agent.agents:
+                                    st.session_state.agent.agents[agent_type_enum].add_user_feedback(
+                                        st.session_state[feedback_key],
+                                        f"Response feedback for message {i+1}"
+                                    )
+                                # Also record system-wide feedback
+                                st.session_state.agent.add_user_feedback(
+                                    message["agent_type"],
+                                    st.session_state[feedback_key],
+                                    f"Response feedback for message {i+1}"
+                                )
+                            except Exception as e:
+                                st.error(f"Error recording feedback: {e}")
 
 def process_and_display_user_message(user_input, uploaded_files=None):
     """Process user message with enhanced file support"""
@@ -586,77 +1091,105 @@ def process_and_display_user_message(user_input, uploaded_files=None):
 
     st.rerun()
 
-def display_chat_interface():
-    """Display the main chat interface"""
-    st.markdown('<div class="page-content-container">', unsafe_allow_html=True)
-    st.header("💬 Chat with MultiAgentAI21")
-
+def display_claude_chat_interface():
+    """Display the Claude AI inspired chat interface"""
+    # Initialize variables at function scope
+    uploaded_files = None
+    send_clicked = False
+    
+    # Initialize session state for input clearing
+    if "input_counter" not in st.session_state:
+        st.session_state.input_counter = 0
+    
+    st.markdown('<div class="claude-card">', unsafe_allow_html=True)
+    st.header("💬 AI Assistant")
+    
     # Agent selection
-    display_agent_selection()
+    display_claude_agent_selection()
 
-    # Chat interface (only if agent selected)
+    # Claude chat container
     if st.session_state.agent_locked and st.session_state.selected_agent:
-        # Show agent info
-        agent_capabilities = {
-            "data_analysis": "Analyzes data files, performs calculations, generates insights",
-            "automation": "Processes files, creates scripts, automates workflows",
-            "content_creation": "Creates blog posts, social media content, marketing copy",
-            "customer_service": "Provides support, answers questions, offers guidance"
+        st.markdown('<div class="claude-chat-container">', unsafe_allow_html=True)
+        
+        # Chat header
+        agent_info = {
+            "data_analysis_and_insights": "Data Analysis Expert",
+            "automation_of_complex_processes": "Automation Specialist", 
+            "content_creation_and_generation": "Content Creator",
+            "customer_service_and_engagement": "Customer Success"
         }
         
-        capability = agent_capabilities.get(st.session_state.selected_agent, "")
-        if capability:
-            st.info(f"🤖 **{st.session_state.selected_agent.replace('_', ' ').title()} Agent** - {capability}")
+        agent_title = agent_info.get(st.session_state.selected_agent, "AI Assistant")
         
-        # Chat container
-        st.markdown('<div class="integrated-chat-container">', unsafe_allow_html=True)
+        st.markdown(f"""
+        <div class="claude-chat-header">
+            💬 Chat with {agent_title}
+        </div>
+        """, unsafe_allow_html=True)
         
-        # Display messages
-        display_chat_messages()
+        # Chat messages area
+        st.markdown('<div class="claude-chat-messages">', unsafe_allow_html=True)
+        display_professional_chat_messages()
+        st.markdown('</div>', unsafe_allow_html=True)
         
-        # Input area
-        st.markdown('<div class="integrated-input-area">', unsafe_allow_html=True)
+        # Claude input area
+        st.markdown('<div class="claude-input-area">', unsafe_allow_html=True)
         
-        # Input controls
+        # Enhanced input area with better styling
+        st.markdown("""
+        <div style="
+            background: #ffffff;
+            border: 2px solid #e2e8f0;
+            border-radius: 12px;
+            padding: 1rem;
+            margin-bottom: 0.5rem;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+        ">
+        """, unsafe_allow_html=True)
+        
+        # Input controls with Claude styling
         col1, col2, col3 = st.columns([8, 1, 1.5])
         
         with col1:
             user_input = st.text_area(
-                "Message",
-                placeholder="Type your message here...",
-                height=70,
-                key="chat_input",
+                "Your message",
+                placeholder="Type your request here... (e.g., 'Analyze this data', 'Create a script', 'Write content')",
+                height=68,
+                key=f"chat_input_{st.session_state.input_counter}",
                 label_visibility="collapsed"
             )
         
         with col2:
-            if st.button("📎", key="attach_btn", help="Attach files"):
+            if st.button("📎", key="attach_btn", help="Attach files", use_container_width=True):
                 st.session_state.show_file_upload = not st.session_state.show_file_upload
                 st.rerun()
         
         with col3:
-            send_clicked = st.button("Send 📤", key="send_button", type="primary")
+            send_clicked = st.button("Send", key="send_button", type="primary", use_container_width=True)
         
-        # File upload area
-        uploaded_files = None
+        st.markdown("</div>", unsafe_allow_html=True)
+        
+        # File upload with Claude styling
         if st.session_state.show_file_upload:
             uploaded_files = st.file_uploader(
-                "📎 Attach files",
+                "📎 Attach Files",
                 accept_multiple_files=True,
                 key="chat_file_upload",
                 type=['csv', 'xlsx', 'xls', 'txt', 'pdf', 'json', 'py', 'js', 'html', 'css', 'md'],
-                help="Upload files for processing and analysis"
+                help="Upload files for analysis and processing"
             )
             
             if uploaded_files:
-                st.success(f"✅ {len(uploaded_files)} file(s) selected")
+                st.success(f"✅ {len(uploaded_files)} file(s) ready for processing")
                 for file in uploaded_files:
                     file_size = f"{file.size / 1024:.1f} KB" if file.size < 1024*1024 else f"{file.size / (1024*1024):.1f} MB"
                     st.caption(f"📄 {file.name} ({file_size})")
         
         # Process message
-        if send_clicked and (user_input.strip() or uploaded_files):
+        if send_clicked and (user_input.strip() or (uploaded_files and len(uploaded_files) > 0)):
             process_and_display_user_message(user_input, uploaded_files)
+            # Increment counter to force new input key (clears the input)
+            st.session_state.input_counter += 1
             st.session_state.show_file_upload = False
             st.rerun()
         elif send_clicked:
@@ -665,7 +1198,201 @@ def display_chat_interface():
         st.markdown('</div>', unsafe_allow_html=True)  # Close input area
         st.markdown('</div>', unsafe_allow_html=True)  # Close chat container
     
-    st.markdown('</div>', unsafe_allow_html=True)  # Close page container
+    st.markdown('</div>', unsafe_allow_html=True)  # Close Claude card
+
+def display_enhanced_analytics_dashboard():
+    """Display enhanced analytics dashboard with agent performance and learning insights"""
+    st.markdown('<div class="claude-card">', unsafe_allow_html=True)
+    st.header("📊 Enhanced Analytics Dashboard")
+    
+    # Check if agent system is available
+    if not st.session_state.agent:
+        st.warning("⚠️ Agent system not initialized. Please use the Agent Chat first.")
+        return
+    
+    # System Overview
+    st.subheader("🚀 System Overview")
+    
+    try:
+        system_report = st.session_state.agent.get_system_performance_report()
+        
+        if 'status' in system_report and system_report['status'] == 'No performance data available':
+            st.info("📈 No performance data available yet. Start using the agents to see analytics!")
+        else:
+            # Display system metrics
+            col1, col2, col3, col4 = st.columns(4)
+            
+            with col1:
+                st.metric("Total Requests", system_report['system_overview']['total_requests'])
+            
+            with col2:
+                st.metric("Success Rate", system_report['system_overview']['overall_success_rate'])
+            
+            with col3:
+                st.metric("Avg Response Time", system_report['system_overview']['average_response_time'])
+            
+            with col4:
+                st.metric("System Uptime", system_report['system_overview']['system_uptime'])
+            
+            # Agent Performance Details
+            st.subheader("🤖 Agent Performance")
+            
+            agent_performance = system_report.get('agent_performance', {})
+            if agent_performance:
+                for agent_type, metrics in agent_performance.items():
+                    with st.expander(f"📊 {agent_type.replace('_', ' ').title()}", expanded=False):
+                        col1, col2, col3 = st.columns(3)
+                        
+                        with col1:
+                            st.metric("Total Requests", metrics['total_requests'])
+                        
+                        with col2:
+                            st.metric("Success Rate", metrics['success_rate'])
+                        
+                        with col3:
+                            st.metric("Avg Response Time", metrics['average_response_time'])
+                        
+                        # Get detailed learning insights
+                        if st.button(f"🔍 Get Learning Insights", key=f"insights_{agent_type}"):
+                            insights = st.session_state.agent.get_agent_learning_insights(agent_type)
+                            if 'error' not in insights:
+                                st.json(insights)
+                            else:
+                                st.error(f"Error getting insights: {insights['error']}")
+            
+            # Recent Optimizations
+            if system_report.get('recent_optimizations'):
+                st.subheader("⚡ Recent System Optimizations")
+                for opt in system_report['recent_optimizations']:
+                    st.info(f"**{opt['action']}** - {opt['reason']} ({opt['timestamp']})")
+        
+    except Exception as e:
+        st.error(f"❌ Error getting system report: {e}")
+    
+    # Agent Learning Insights
+    st.subheader("🧠 Agent Learning Insights")
+    
+    # Agent selection for detailed insights
+    agent_options = [
+        "data_analysis_and_insights",
+        "automation_of_complex_processes", 
+        "content_creation_and_generation",
+        "customer_service_and_engagement"
+    ]
+    
+    selected_agent_for_insights = st.selectbox(
+        "Select Agent for Learning Analysis:",
+        agent_options,
+        format_func=lambda x: x.replace('_', ' ').title()
+    )
+    
+    if st.button("🔍 Analyze Learning Patterns", key="analyze_learning"):
+        try:
+            insights = st.session_state.agent.get_agent_learning_insights(selected_agent_for_insights)
+            
+            if 'error' not in insights:
+                # Display learning insights
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    st.subheader("📈 Performance Summary")
+                    performance = insights['performance_summary']
+                    st.metric("Total Requests", performance['total_requests'])
+                    st.metric("Success Rate", performance['success_rate'])
+                    st.metric("Avg Response Time", performance['average_response_time'])
+                    st.metric("Learning History Size", performance['learning_history_size'])
+                
+                with col2:
+                    st.subheader("📊 Learning Patterns")
+                    patterns = insights['learning_patterns']
+                    if 'status' not in patterns:
+                        st.metric("Response Time Trend", patterns['recent_response_time_trend'])
+                        st.metric("Success Rate Trend", patterns['success_rate_trend'])
+                        st.metric("Total Learning Interactions", patterns['total_learning_interactions'])
+                    else:
+                        st.info(patterns['status'])
+                
+                # Improvement Opportunities
+                st.subheader("🎯 Improvement Opportunities")
+                opportunities = insights['improvement_opportunities']
+                for opp in opportunities:
+                    st.warning(f"• {opp}")
+                
+                # Recommendations
+                st.subheader("💡 Recommendations")
+                recommendations = insights['recommendations']
+                for rec in recommendations:
+                    st.success(f"• {rec}")
+                    
+            else:
+                st.error(f"Error getting insights: {insights['error']}")
+                
+        except Exception as e:
+            st.error(f"❌ Error analyzing learning patterns: {e}")
+    
+    # System Optimization Controls
+    st.subheader("⚙️ System Optimization")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        if st.button("🚀 Optimize All Agents", key="optimize_all"):
+            try:
+                st.session_state.agent.optimize_all_agents()
+                st.success("✅ All agents optimized successfully!")
+                st.rerun()
+            except Exception as e:
+                st.error(f"❌ Error optimizing agents: {e}")
+    
+    with col2:
+        if st.button("📊 Refresh Metrics", key="refresh_metrics"):
+            st.rerun()
+    
+    # User Feedback Collection
+    st.subheader("💬 User Feedback")
+    
+    feedback_agent = st.selectbox(
+        "Select Agent for Feedback:",
+        agent_options,
+        format_func=lambda x: x.replace('_', ' ').title(),
+        key="feedback_agent"
+    )
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        satisfaction_score = st.slider(
+            "Rate your satisfaction (1-5):",
+            min_value=1,
+            max_value=5,
+            value=5,
+            key="satisfaction_slider"
+        )
+    
+    with col2:
+        feedback_text = st.text_area(
+            "Additional feedback (optional):",
+            placeholder="Tell us how we can improve...",
+            key="feedback_text",
+            height=100
+        )
+    
+    if st.button("📤 Submit Feedback", key="submit_feedback"):
+        try:
+            # Add feedback to the specific agent
+            agent_type_enum = AgentType(feedback_agent)
+            if agent_type_enum in st.session_state.agent.agents:
+                st.session_state.agent.agents[agent_type_enum].add_user_feedback(
+                    satisfaction_score,
+                    feedback_text
+                )
+            # Also record system-wide feedback
+            st.session_state.agent.add_user_feedback(feedback_agent, satisfaction_score, feedback_text)
+            st.success("✅ Thank you for your feedback! It will help us improve.")
+        except Exception as e:
+            st.error(f"❌ Error submitting feedback: {e}")
+    
+    st.markdown('</div>', unsafe_allow_html=True)
 
 def display_chat_history_sidebar():
     """Display chat history in sidebar"""
@@ -686,36 +1413,32 @@ def display_chat_history_sidebar():
         st.success("Cache cleared!")
         st.rerun()
 
-    # Show chats if authenticated
-    if is_authenticated():
-        chats = get_available_chats()
-        if chats:
-            st.sidebar.subheader("Recent Chats")
-            for chat in chats[:10]:  # Show last 10 chats
-                preview = chat["preview"][:25] + "..." if len(chat["preview"]) > 25 else chat["preview"]
-                if st.sidebar.button(f"💬 {preview}", key=f"chat_{chat['id']}"):
-                    st.session_state.current_chat_id = chat["id"]
-                    st.session_state.chat_history = load_chat_history(chat["id"])
-                    st.session_state.agent_locked = True
-                    st.success(f"Loaded chat: {preview}")
-                    st.rerun()
-        else:
-            st.sidebar.info("No previous chats found")
+    # Show chats (user must be authenticated to reach this point)
+    chats = get_available_chats()
+    if chats:
+        st.sidebar.subheader("Recent Chats")
+        for chat in chats[:10]:  # Show last 10 chats
+            preview = chat["preview"][:25] + "..." if len(chat["preview"]) > 25 else chat["preview"]
+            if st.sidebar.button(f"💬 {preview}", key=f"chat_{chat['id']}"):
+                st.session_state.current_chat_id = chat["id"]
+                st.session_state.chat_history = load_chat_history(chat["id"])
+                st.session_state.agent_locked = True
+                st.success(f"Loaded chat: {preview}")
+                st.rerun()
     else:
-        st.sidebar.info("🔒 Please log in to see chat history")
+        st.sidebar.info("No previous chats found")
 
 def user_profile_sidebar():
     """Display user profile in sidebar"""
-    if is_authenticated():
-        user = get_current_user()
-        with st.sidebar:
-            st.markdown("---")
-            st.markdown("### 👤 User Profile")
-            st.write(f"**Name:** {user.get('display_name', 'N/A')}")
-            st.write(f"**Email:** {user.get('email', 'N/A')}")
-            
-            if st.button("Logout", key="sidebar_logout"):
-                logout()
+    user = get_current_user()
+    with st.sidebar:
+        st.markdown("---")
+        st.markdown("### 👤 User Profile")
+        st.write(f"**Name:** {user.get('display_name', 'N/A')}")
+        st.write(f"**Email:** {user.get('email', 'N/A')}")
+        
+        if st.button("Logout", key="sidebar_logout"):
+            logout()
 
 def cleanup_temp_files():
     """Clean up temporary files"""
@@ -732,13 +1455,13 @@ def cleanup_temp_files():
 # Main application
 @login_required
 def main_app():
-    """Main application logic"""
+    """Main application logic with modern UI"""
     try:
         # Initialize session state
         initialize_session_state()
         
-        # Display header
-        display_enhanced_header()
+        # Display Claude AI header
+        display_claude_header()
 
         # Initialize agent system
         if st.session_state.agent is None:
@@ -747,82 +1470,48 @@ def main_app():
                 st.error("❌ Failed to initialize agent system")
                 return
 
-        # Sidebar navigation
-        st.sidebar.title("🧭 Navigation")
-        
-        # User profile and chat history
-        user_profile_sidebar()
-        display_chat_history_sidebar()
+        # Claude AI sidebar
+        with st.sidebar:
+            st.markdown("""
+            <div style="background: #f8fafc; padding: 1rem; border-radius: 8px; margin-bottom: 0.5rem; border: 1px solid #e2e8f0;">
+                <h3 style="margin: 0; color: #1a1a1a;">🧭 Navigation</h3>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            # User profile with Claude styling
+            user_profile_sidebar()
+            display_chat_history_sidebar()
 
-        # Page selection
-        page = st.sidebar.radio(
-            "Select a page",
-            ["🤖 Agent Chat", "📊 Data Analysis", "📚 Help & Examples"],
-            key="navigation_radio"
-        )
+            # Page selection with Claude styling
+            st.markdown("---")
+            st.markdown("### 📄 Pages")
+            page = st.radio(
+                "Select a page",
+                ["🤖 Agent Chat", "📊 Analytics", "📚 Documentation"],
+                key="navigation_radio"
+            )
 
-        # Display selected page
+        # Display selected page with Claude styling
         if page == "🤖 Agent Chat":
-            display_chat_interface()
-        elif page == "📊 Data Analysis":
-            st.markdown('<div class="page-content-container">', unsafe_allow_html=True)
-            st.header("📊 Data Analysis Dashboard")
-            st.info("💡 Use the Agent Chat with Data Analysis Agent for comprehensive data analysis")
-            st.markdown("Upload your CSV files in the chat interface and ask for analysis!")
-            st.markdown('</div>', unsafe_allow_html=True)
-        elif page == "📚 Help & Examples":
-            st.markdown('<div class="page-content-container">', unsafe_allow_html=True)
-            st.header("📚 Help & Examples")
+            display_claude_chat_interface()
+        elif page == "📊 Analytics":
+            display_enhanced_analytics_dashboard()
+        elif page == "📚 Documentation":
+            st.markdown('<div class="claude-card">', unsafe_allow_html=True)
+            st.header("📚 Documentation")
             
-            st.subheader("🤖 Agent Capabilities")
+            with st.expander("🚀 Getting Started", expanded=True):
+                st.write("**Welcome to MultiAgentAI21**")
+                st.write("• Select an AI agent based on your needs")
+                st.write("• Upload files for analysis and processing")
+                st.write("• Get professional results and insights")
             
-            with st.expander("📊 Data Analysis Agent", expanded=True):
-                st.write("**What it actually does:**")
-                st.write("• Analyzes uploaded CSV/Excel files with real data")
-                st.write("• Performs actual mathematical calculations")
-                st.write("• Generates statistical insights and summaries")
-                st.write("• Creates data visualizations")
-                
-                st.write("**Example requests:**")
-                st.code("Show me the first 5 rows, shape, and data types")
-                st.code("Calculate the average of 125000, 135000, 145000")
-                st.code("Analyze this sales data and provide insights")
-            
-            with st.expander("🤖 Automation Agent"):
-                st.write("**What it actually does:**")
-                st.write("• Processes uploaded files and performs operations")
-                st.write("• Generates working Python/Bash scripts")
-                st.write("• Creates detailed automation workflows")
-                st.write("• Organizes and converts files")
-                
-                st.write("**Example requests:**")
-                st.code("Process this CSV file and clean the data")
-                st.code("Generate a Python script to organize files")
-                st.code("Create a workflow for data processing")
-            
-            with st.expander("📝 Content Creation Agent"):
-                st.write("**What it actually does:**")
-                st.write("• Creates complete, ready-to-use content")
-                st.write("• Writes full blog posts and articles")
-                st.write("• Generates social media content with hashtags")
-                st.write("• Produces marketing copy and email content")
-                
-                st.write("**Example requests:**")
-                st.code("Write a blog post about AI trends in 2024")
-                st.code("Create LinkedIn content about data science")
-                st.code("Generate marketing copy for an AI product")
-            
-            with st.expander("💬 Customer Service Agent"):
-                st.write("**What it actually does:**")
-                st.write("• Provides helpful support and guidance")
-                st.write("• Answers questions about platform features")
-                st.write("• Helps choose the right agent for tasks")
-                st.write("• Offers troubleshooting assistance")
-                
-                st.write("**Example requests:**")
-                st.code("How do I analyze data with this platform?")
-                st.code("Which agent should I use for my project?")
-                st.code("Help me with file upload issues")
+            with st.expander("🤖 Agent Capabilities"):
+                st.write("**Next-Generation AI Solutions**")
+                st.write("• **Data Analysis**: Advanced analytics and insights")
+                st.write("• **Automation**: Workflow optimization and scripting")
+                st.write("• **Content Creation**: Professional content generation")
+                st.write("• **Customer Service**: Support and engagement solutions")
             
             st.markdown('</div>', unsafe_allow_html=True)
 

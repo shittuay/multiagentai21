@@ -50,12 +50,22 @@ class FileType(Enum):
 
 
 class BaseAgent(ABC):
-    """Base class for all agents."""
+    """Base class for all agents with self-learning capabilities."""
     
     def __init__(self, agent_type: AgentType):
         """Initialize the base agent."""
         self.agent_type = agent_type
         self.model = None
+        self.performance_metrics = {
+            'total_requests': 0,
+            'successful_requests': 0,
+            'average_response_time': 0.0,
+            'user_satisfaction_scores': [],
+            'common_failure_patterns': [],
+            'improvement_suggestions': []
+        }
+        self.learning_history = []
+        self.adaptive_prompts = {}
         self._initialize_model()
 
     def _initialize_model(self):
@@ -93,10 +103,15 @@ class BaseAgent(ABC):
             raise
 
     def _process_with_model(self, prompt: str, chat_history: Optional[List[Dict]] = None) -> str:
-        """Process prompt with the AI model, including chat history."""
+        """Process prompt with the AI model, including chat history and learning."""
+        start_time = time.time()
+        
         try:
             if not self.model:
                 raise ValueError("Model not initialized")
+            
+            # Apply adaptive prompt improvements
+            enhanced_prompt = self._apply_adaptive_improvements(prompt)
             
             # Build the chat history for the model
             contents = []
@@ -113,22 +128,192 @@ class BaseAgent(ABC):
                         contents.append({"role": "model", "parts": [message["content"]]})
             
             # Add the current prompt as the last user message
-            contents.append({"role": "user", "parts": [prompt]})
+            contents.append({"role": "user", "parts": [enhanced_prompt]})
             
             # Use generate_content with the entire 'contents' list
             response = self.model.generate_content(contents)
             
             if hasattr(response, 'text') and response.text:
-                return response.text.strip()
+                response_text = response.text.strip()
+                
+                # Record performance metrics
+                self._record_performance_metrics(True, time.time() - start_time)
+                
+                # Learn from this interaction
+                self._learn_from_interaction(prompt, response_text, True, time.time() - start_time)
+                
+                return response_text
             elif hasattr(response, 'parts') and response.parts:
-                return ''.join([part.text for part in response.parts if hasattr(part, 'text')])
+                response_text = ''.join([part.text for part in response.parts if hasattr(part, 'text')])
+                
+                # Record performance metrics
+                self._record_performance_metrics(True, time.time() - start_time)
+                
+                # Learn from this interaction
+                self._learn_from_interaction(prompt, response_text, True, time.time() - start_time)
+                
+                return response_text
             else:
                 logger.warning("No text content in model response")
+                self._record_performance_metrics(False, time.time() - start_time)
                 return "I received your request but couldn't generate a proper response."
                 
         except Exception as e:
             logger.error(f"Error processing with model: {e}")
+            self._record_performance_metrics(False, time.time() - start_time)
             return f"Error processing request: {str(e)}"
+
+    def _apply_adaptive_improvements(self, prompt: str) -> str:
+        """Apply learned improvements to prompts."""
+        if not self.adaptive_prompts:
+            return prompt
+        
+        improved_prompt = prompt
+        
+        # Apply context-specific improvements
+        for pattern, improvement in self.adaptive_prompts.items():
+            if pattern.lower() in prompt.lower():
+                improved_prompt = f"{improved_prompt}\n\n{improvement}"
+                break
+        
+        return improved_prompt
+
+    def _record_performance_metrics(self, success: bool, response_time: float):
+        """Record performance metrics for learning and improvement."""
+        self.performance_metrics['total_requests'] += 1
+        
+        if success:
+            self.performance_metrics['successful_requests'] += 1
+        
+        # Update average response time
+        current_avg = self.performance_metrics['average_response_time']
+        total_requests = self.performance_metrics['total_requests']
+        self.performance_metrics['average_response_time'] = (
+            (current_avg * (total_requests - 1) + response_time) / total_requests
+        )
+
+    def _learn_from_interaction(self, prompt: str, response: str, success: bool, response_time: float):
+        """Learn from each interaction to improve future responses."""
+        interaction_data = {
+            'timestamp': datetime.now().isoformat(),
+            'prompt': prompt,
+            'response': response,
+            'success': success,
+            'response_time': response_time,
+            'prompt_length': len(prompt),
+            'response_length': len(response)
+        }
+        
+        self.learning_history.append(interaction_data)
+        
+        # Keep only last 100 interactions to prevent memory bloat
+        if len(self.learning_history) > 100:
+            self.learning_history = self.learning_history[-100:]
+        
+        # Analyze patterns for improvement
+        self._analyze_learning_patterns()
+
+    def _analyze_learning_patterns(self):
+        """Analyze learning history to identify improvement opportunities."""
+        if len(self.learning_history) < 5:
+            return
+        
+        # Analyze response time patterns
+        recent_responses = self.learning_history[-10:]
+        slow_responses = [r for r in recent_responses if r['response_time'] > 5.0]
+        
+        if len(slow_responses) > len(recent_responses) * 0.3:  # More than 30% are slow
+            self.performance_metrics['improvement_suggestions'].append({
+                'type': 'performance',
+                'suggestion': 'Consider optimizing prompts for faster responses',
+                'timestamp': datetime.now().isoformat()
+            })
+        
+        # Analyze success patterns
+        recent_success_rate = sum(1 for r in recent_responses if r['success']) / len(recent_responses)
+        if recent_success_rate < 0.8:  # Less than 80% success rate
+            self.performance_metrics['improvement_suggestions'].append({
+                'type': 'reliability',
+                'suggestion': 'Review recent failures to improve prompt handling',
+                'timestamp': datetime.now().isoformat()
+            })
+
+    def get_performance_report(self) -> Dict[str, Any]:
+        """Get comprehensive performance report for the agent."""
+        success_rate = (
+            self.performance_metrics['successful_requests'] / 
+            self.performance_metrics['total_requests']
+            if self.performance_metrics['total_requests'] > 0 else 0.0
+        )
+        
+        return {
+            'agent_type': self.agent_type.value,
+            'total_requests': self.performance_metrics['total_requests'],
+            'success_rate': f"{success_rate:.2%}",
+            'average_response_time': f"{self.performance_metrics['average_response_time']:.2f}s",
+            'learning_history_size': len(self.learning_history),
+            'improvement_suggestions': self.performance_metrics['improvement_suggestions'][-5:],  # Last 5
+            'last_updated': datetime.now().isoformat()
+        }
+
+    def add_user_feedback(self, satisfaction_score: int, feedback_text: str = ""):
+        """Add user feedback for continuous improvement."""
+        if 1 <= satisfaction_score <= 5:
+            self.performance_metrics['user_satisfaction_scores'].append({
+                'score': satisfaction_score,
+                'feedback': feedback_text,
+                'timestamp': datetime.now().isoformat()
+            })
+            
+            # Keep only last 50 feedback entries
+            if len(self.performance_metrics['user_satisfaction_scores']) > 50:
+                self.performance_metrics['user_satisfaction_scores'] = \
+                    self.performance_metrics['user_satisfaction_scores'][-50:]
+            
+            # Learn from feedback
+            if satisfaction_score < 3:  # Low satisfaction
+                self.performance_metrics['improvement_suggestions'].append({
+                    'type': 'user_feedback',
+                    'suggestion': f'User feedback: {feedback_text}',
+                    'timestamp': datetime.now().isoformat()
+                })
+
+    def optimize_prompts(self):
+        """Optimize prompts based on learning history."""
+        if len(self.learning_history) < 10:
+            return
+        
+        # Analyze successful vs failed interactions
+        successful = [r for r in self.learning_history if r['success']]
+        failed = [r for r in self.learning_history if not r['success']]
+        
+        if successful and failed:
+            # Find common patterns in successful interactions
+            successful_patterns = self._extract_patterns([r['prompt'] for r in successful])
+            failed_patterns = self._extract_patterns([r['prompt'] for r in failed])
+            
+            # Create adaptive improvements
+            for pattern in successful_patterns:
+                if pattern not in self.adaptive_prompts:
+                    self.adaptive_prompts[pattern] = "Use clear, specific language and provide context."
+
+    def _extract_patterns(self, prompts: List[str]) -> List[str]:
+        """Extract common patterns from prompts."""
+        patterns = []
+        for prompt in prompts:
+            # Simple pattern extraction - look for common phrases
+            words = prompt.lower().split()
+            if len(words) >= 3:
+                # Look for 3-word phrases
+                for i in range(len(words) - 2):
+                    phrase = ' '.join(words[i:i+3])
+                    if len(phrase) > 10:  # Only meaningful phrases
+                        patterns.append(phrase)
+        
+        # Return most common patterns
+        from collections import Counter
+        pattern_counts = Counter(patterns)
+        return [pattern for pattern, count in pattern_counts.most_common(5)]
 
     @abstractmethod
     def process(self, input_data: str, chat_history: Optional[List[Dict]] = None, **kwargs) -> AgentResponse:
@@ -143,6 +328,28 @@ class AnalysisAgent(BaseAgent):
         """Initialize the analysis agent."""
         super().__init__(AgentType.DATA_ANALYSIS)
         self.analyzer = DataAnalyzer() if 'DataAnalyzer' in globals() else None
+    
+    def add_user_feedback(self, satisfaction_score: int, feedback_text: str = ""):
+        """Add user feedback for continuous improvement."""
+        if 1 <= satisfaction_score <= 5:
+            self.performance_metrics['user_satisfaction_scores'].append({
+                'score': satisfaction_score,
+                'feedback': feedback_text,
+                'timestamp': datetime.now().isoformat()
+            })
+            
+            # Keep only last 50 feedback entries
+            if len(self.performance_metrics['user_satisfaction_scores']) > 50:
+                self.performance_metrics['user_satisfaction_scores'] = \
+                    self.performance_metrics['user_satisfaction_scores'][-50:]
+            
+            # Learn from feedback
+            if satisfaction_score < 3:  # Low satisfaction
+                self.performance_metrics['improvement_suggestions'].append({
+                    'type': 'user_feedback',
+                    'suggestion': f'User feedback: {feedback_text}',
+                    'timestamp': datetime.now().isoformat()
+                })
 
     def process(self, input_data: str, chat_history: Optional[List[Dict]] = None, files: Optional[List] = None, **kwargs) -> AgentResponse:
         """Process analysis requests with actual data processing capabilities."""
@@ -1073,6 +1280,28 @@ class FileAgent(BaseAgent):
         """Initialize the file processing agent."""
         super().__init__(AgentType.AUTOMATION)
         self.temp_dir = tempfile.mkdtemp()
+    
+    def add_user_feedback(self, satisfaction_score: int, feedback_text: str = ""):
+        """Add user feedback for continuous improvement."""
+        if 1 <= satisfaction_score <= 5:
+            self.performance_metrics['user_satisfaction_scores'].append({
+                'score': satisfaction_score,
+                'feedback': feedback_text,
+                'timestamp': datetime.now().isoformat()
+            })
+            
+            # Keep only last 50 feedback entries
+            if len(self.performance_metrics['user_satisfaction_scores']) > 50:
+                self.performance_metrics['user_satisfaction_scores'] = \
+                    self.performance_metrics['user_satisfaction_scores'][-50:]
+            
+            # Learn from feedback
+            if satisfaction_score < 3:  # Low satisfaction
+                self.performance_metrics['improvement_suggestions'].append({
+                    'type': 'user_feedback',
+                    'suggestion': f'User feedback: {feedback_text}',
+                    'timestamp': datetime.now().isoformat()
+                })
 
     def process(self, input_data: str, chat_history: Optional[List[Dict]] = None, files: Optional[List] = None, **kwargs) -> AgentResponse:
         """Process automation and file processing requests."""
@@ -1548,6 +1777,28 @@ class ChatAgent(BaseAgent):
     def __init__(self):
         """Initialize the customer service agent."""
         super().__init__(AgentType.CUSTOMER_SERVICE)
+    
+    def add_user_feedback(self, satisfaction_score: int, feedback_text: str = ""):
+        """Add user feedback for continuous improvement."""
+        if 1 <= satisfaction_score <= 5:
+            self.performance_metrics['user_satisfaction_scores'].append({
+                'score': satisfaction_score,
+                'feedback': feedback_text,
+                'timestamp': datetime.now().isoformat()
+            })
+            
+            # Keep only last 50 feedback entries
+            if len(self.performance_metrics['user_satisfaction_scores']) > 50:
+                self.performance_metrics['user_satisfaction_scores'] = \
+                    self.performance_metrics['user_satisfaction_scores'][-50:]
+            
+            # Learn from feedback
+            if satisfaction_score < 3:  # Low satisfaction
+                self.performance_metrics['improvement_suggestions'].append({
+                    'type': 'user_feedback',
+                    'suggestion': f'User feedback: {feedback_text}',
+                    'timestamp': datetime.now().isoformat()
+                })
 
     def process(self, input_data: str, chat_history: Optional[List[Dict]] = None, **kwargs) -> AgentResponse:
         """Process customer service requests with conversation context."""
@@ -1640,6 +1891,28 @@ class ContentCreatorAgent(BaseAgent):
     def __init__(self):
         """Initialize the content creator agent."""
         super().__init__(AgentType.CONTENT_CREATION)
+    
+    def add_user_feedback(self, satisfaction_score: int, feedback_text: str = ""):
+        """Add user feedback for continuous improvement."""
+        if 1 <= satisfaction_score <= 5:
+            self.performance_metrics['user_satisfaction_scores'].append({
+                'score': satisfaction_score,
+                'feedback': feedback_text,
+                'timestamp': datetime.now().isoformat()
+            })
+            
+            # Keep only last 50 feedback entries
+            if len(self.performance_metrics['user_satisfaction_scores']) > 50:
+                self.performance_metrics['user_satisfaction_scores'] = \
+                    self.performance_metrics['user_satisfaction_scores'][-50:]
+            
+            # Learn from feedback
+            if satisfaction_score < 3:  # Low satisfaction
+                self.performance_metrics['improvement_suggestions'].append({
+                    'type': 'user_feedback',
+                    'suggestion': f'User feedback: {feedback_text}',
+                    'timestamp': datetime.now().isoformat()
+                })
 
     def process(self, input_data: str, chat_history: Optional[List[Dict]] = None, **kwargs) -> AgentResponse:
         """Process content creation requests and actually create content."""
@@ -1909,12 +2182,20 @@ def create_agent(agent_type: AgentType) -> BaseAgent:
 
 
 class MultiAgentCodingAI:
-    """Main orchestrator for the multi-agent system with enhanced functionality"""
+    """Main orchestrator for the multi-agent system with enhanced functionality and self-learning"""
 
     def __init__(self):
         """Initialize the multi-agent system."""
         self.agents = {}
         self.db = None
+        self.system_metrics = {
+            'total_sessions': 0,
+            'total_requests': 0,
+            'system_start_time': datetime.now().isoformat(),
+            'agent_performance_history': [],
+            'user_satisfaction_trends': [],
+            'system_optimization_log': []
+        }
         self._initialize_database()
         self._initialize_agents()
 
@@ -1961,7 +2242,7 @@ class MultiAgentCodingAI:
         session_id: Optional[str] = None,
         files: Optional[List] = None
     ) -> AgentResponse:
-        """Route request to appropriate agent with enhanced capabilities"""
+        """Route request to appropriate agent with enhanced capabilities and learning"""
         start_time = time.time()
         session_id = session_id or str(uuid.uuid4())
         
@@ -2004,7 +2285,14 @@ class MultiAgentCodingAI:
             response.agent_type = agent_type.value
             response.execution_time = time.time() - start_time
 
+            # Update system metrics
+            self._update_system_metrics(agent_type, response, time.time() - start_time)
+
+            # Save interaction for learning
             self._save_interaction(session_id, request, response, agent_type)
+
+            # Trigger agent optimization if needed
+            self._trigger_agent_optimization(agent_type)
 
             logger.info(f"Response generated successfully. Content length: {len(response.content) if response.content else 0}")
             return response
@@ -2021,6 +2309,313 @@ class MultiAgentCodingAI:
                 response.agent_type = agent_type.value
             self._save_interaction(session_id, request, response, agent_type)
             return response
+
+    def _update_system_metrics(self, agent_type: AgentType, response: AgentResponse, execution_time: float):
+        """Update system-wide performance metrics."""
+        self.system_metrics['total_requests'] += 1
+        
+        # Record agent performance
+        agent_performance = {
+            'agent_type': agent_type.value,
+            'timestamp': datetime.now().isoformat(),
+            'success': response.success,
+            'execution_time': execution_time,
+            'response_length': len(response.content) if response.content else 0,
+            'error_message': response.error_message or response.error or ""
+        }
+        
+        self.system_metrics['agent_performance_history'].append(agent_performance)
+        
+        # Keep only last 1000 performance records
+        if len(self.system_metrics['agent_performance_history']) > 1000:
+            self.system_metrics['agent_performance_history'] = \
+                self.system_metrics['agent_performance_history'][-1000:]
+
+    def _trigger_agent_optimization(self, agent_type: AgentType):
+        """Trigger agent optimization based on performance patterns."""
+        if agent_type not in self.agents:
+            return
+        
+        agent = self.agents[agent_type]
+        
+        # Get agent performance report
+        performance_report = agent.get_performance_report()
+        
+        # Check if optimization is needed
+        if performance_report['total_requests'] > 0:
+            success_rate = float(performance_report['success_rate'].rstrip('%')) / 100
+            
+            # If success rate is low, trigger optimization
+            if success_rate < 0.7:  # Less than 70% success rate
+                logger.info(f"Triggering optimization for {agent_type.value} agent (success rate: {success_rate:.2%})")
+                agent.optimize_prompts()
+                
+                # Log optimization action
+                self.system_metrics['system_optimization_log'].append({
+                    'timestamp': datetime.now().isoformat(),
+                    'agent_type': agent_type.value,
+                    'action': 'prompt_optimization',
+                    'reason': f'Low success rate: {success_rate:.2%}',
+                    'previous_success_rate': success_rate
+                })
+
+    def get_system_performance_report(self) -> Dict[str, Any]:
+        """Get comprehensive system performance report."""
+        if not self.system_metrics['agent_performance_history']:
+            return {
+                'status': 'No performance data available',
+                'timestamp': datetime.now().isoformat()
+            }
+        
+        # Calculate system-wide metrics
+        total_requests = self.system_metrics['total_requests']
+        successful_requests = sum(1 for p in self.system_metrics['agent_performance_history'] if p['success'])
+        overall_success_rate = successful_requests / total_requests if total_requests > 0 else 0
+        
+        # Calculate average response time
+        response_times = [p['execution_time'] for p in self.system_metrics['agent_performance_history']]
+        avg_response_time = sum(response_times) / len(response_times) if response_times else 0
+        
+        # Agent-specific performance
+        agent_performance = {}
+        for agent_type in self.agents.keys():
+            agent_data = [p for p in self.system_metrics['agent_performance_history'] 
+                         if p['agent_type'] == agent_type.value]
+            if agent_data:
+                agent_success_rate = sum(1 for p in agent_data if p['success']) / len(agent_data)
+                agent_avg_time = sum(p['execution_time'] for p in agent_data) / len(agent_data)
+                agent_performance[agent_type.value] = {
+                    'total_requests': len(agent_data),
+                    'success_rate': f"{agent_success_rate:.2%}",
+                    'average_response_time': f"{agent_avg_time:.2f}s"
+                }
+        
+        return {
+            'system_overview': {
+                'total_requests': total_requests,
+                'overall_success_rate': f"{overall_success_rate:.2%}",
+                'average_response_time': f"{avg_response_time:.2f}s",
+                'system_uptime': self._calculate_uptime(),
+                'active_agents': len(self.agents)
+            },
+            'agent_performance': agent_performance,
+            'recent_optimizations': self.system_metrics['system_optimization_log'][-5:],
+            'timestamp': datetime.now().isoformat()
+        }
+
+    def _calculate_uptime(self) -> str:
+        """Calculate system uptime."""
+        try:
+            start_time = datetime.fromisoformat(self.system_metrics['system_start_time'])
+            uptime = datetime.now() - start_time
+            days = uptime.days
+            hours, remainder = divmod(uptime.seconds, 3600)
+            minutes, _ = divmod(remainder, 60)
+            
+            if days > 0:
+                return f"{days}d {hours}h {minutes}m"
+            elif hours > 0:
+                return f"{hours}h {minutes}m"
+            else:
+                return f"{minutes}m"
+        except:
+            return "Unknown"
+
+    def add_user_feedback(self, agent_type: str, satisfaction_score: int, feedback_text: str = ""):
+        """Add user feedback for system-wide learning."""
+        if agent_type in self.agents:
+            self.agents[AgentType(agent_type)].add_user_feedback(satisfaction_score, feedback_text)
+        
+        # Record system-wide satisfaction trends
+        self.system_metrics['user_satisfaction_trends'].append({
+            'timestamp': datetime.now().isoformat(),
+            'agent_type': agent_type,
+            'satisfaction_score': satisfaction_score,
+            'feedback': feedback_text
+        })
+        
+        # Keep only last 200 feedback entries
+        if len(self.system_metrics['user_satisfaction_trends']) > 200:
+            self.system_metrics['user_satisfaction_trends'] = \
+                self.system_metrics['user_satisfaction_trends'][-200:]
+
+    def optimize_all_agents(self):
+        """Trigger optimization for all agents."""
+        logger.info("Starting system-wide agent optimization")
+        
+        for agent_type, agent in self.agents.items():
+            try:
+                agent.optimize_prompts()
+                logger.info(f"Optimized {agent_type.value} agent")
+            except Exception as e:
+                logger.error(f"Failed to optimize {agent_type.value} agent: {e}")
+        
+        # Log system optimization
+        self.system_metrics['system_optimization_log'].append({
+            'timestamp': datetime.now().isoformat(),
+            'action': 'system_wide_optimization',
+            'agents_optimized': len(self.agents),
+            'reason': 'Scheduled optimization'
+        })
+
+    def get_agent_learning_insights(self, agent_type: str) -> Dict[str, Any]:
+        """Get learning insights for a specific agent."""
+        if agent_type not in [at.value for at in self.agents.keys()]:
+            return {'error': 'Agent type not found'}
+        
+        # Find the agent
+        agent = None
+        for at, a in self.agents.items():
+            if at.value == agent_type:
+                agent = a
+                break
+        
+        if not agent:
+            return {'error': 'Agent not found'}
+        
+        performance_report = agent.get_performance_report()
+        
+        # Analyze learning patterns
+        learning_insights = {
+            'performance_summary': performance_report,
+            'learning_patterns': self._analyze_agent_learning_patterns(agent),
+            'improvement_opportunities': self._identify_improvement_opportunities(agent),
+            'recommendations': self._generate_agent_recommendations(agent)
+        }
+        
+        return learning_insights
+
+    def _analyze_agent_learning_patterns(self, agent) -> Dict[str, Any]:
+        """Analyze learning patterns for a specific agent."""
+        if not hasattr(agent, 'learning_history') or not agent.learning_history:
+            return {'status': 'No learning data available'}
+        
+        # Analyze response time trends
+        recent_interactions = agent.learning_history[-20:]  # Last 20 interactions
+        response_times = [r['response_time'] for r in recent_interactions]
+        
+        # Check if response times are improving
+        if len(response_times) >= 10:
+            first_half = response_times[:len(response_times)//2]
+            second_half = response_times[len(response_times)//2:]
+            avg_first = sum(first_half) / len(first_half)
+            avg_second = sum(second_half) / len(second_half)
+            
+            time_improvement = avg_first - avg_second
+            time_trend = "improving" if time_improvement > 0.5 else "stable" if abs(time_improvement) <= 0.5 else "degrading"
+        else:
+            time_trend = "insufficient data"
+        
+        return {
+            'total_learning_interactions': len(agent.learning_history),
+            'recent_response_time_trend': time_trend,
+            'average_response_time': sum(response_times) / len(response_times) if response_times else 0,
+            'success_rate_trend': self._calculate_success_rate_trend(agent.learning_history)
+        }
+
+    def _calculate_success_rate_trend(self, learning_history: List[Dict]) -> str:
+        """Calculate success rate trend over time."""
+        if len(learning_history) < 10:
+            return "insufficient data"
+        
+        # Split into two halves
+        first_half = learning_history[:len(learning_history)//2]
+        second_half = learning_history[len(learning_history)//2:]
+        
+        success_rate_first = sum(1 for r in first_half if r['success']) / len(first_half)
+        success_rate_second = sum(1 for r in second_half if r['success']) / len(second_half)
+        
+        improvement = success_rate_second - success_rate_first
+        
+        if improvement > 0.1:
+            return "improving"
+        elif improvement < -0.1:
+            return "degrading"
+        else:
+            return "stable"
+
+    def _identify_improvement_opportunities(self, agent) -> List[str]:
+        """Identify specific improvement opportunities for an agent."""
+        opportunities = []
+        
+        if not hasattr(agent, 'performance_metrics'):
+            return ["Performance metrics not available"]
+        
+        metrics = agent.performance_metrics
+        
+        # Check success rate
+        if metrics['total_requests'] > 0:
+            success_rate = metrics['successful_requests'] / metrics['total_requests']
+            if success_rate < 0.8:
+                opportunities.append(f"Low success rate ({success_rate:.1%}) - review failure patterns")
+        
+        # Check response time
+        if metrics['average_response_time'] > 3.0:
+            opportunities.append(f"Slow response time ({metrics['average_response_time']:.1f}s) - optimize prompts")
+        
+        # Check user satisfaction
+        if metrics['user_satisfaction_scores']:
+            recent_scores = [s['score'] for s in metrics['user_satisfaction_scores'][-10:]]
+            avg_satisfaction = sum(recent_scores) / len(recent_scores)
+            if avg_satisfaction < 4.0:
+                opportunities.append(f"Low user satisfaction ({avg_satisfaction:.1f}/5) - improve response quality")
+        
+        # Check improvement suggestions
+        if metrics['improvement_suggestions']:
+            opportunities.extend([s['suggestion'] for s in metrics['improvement_suggestions'][-3:]])
+        
+        return opportunities if opportunities else ["No specific improvement opportunities identified"]
+
+    def _generate_agent_recommendations(self, agent) -> List[str]:
+        """Generate actionable recommendations for agent improvement."""
+        recommendations = []
+        
+        if not hasattr(agent, 'learning_history') or len(agent.learning_history) < 5:
+            return ["Need more interaction data to generate recommendations"]
+        
+        # Analyze recent interactions
+        recent = agent.learning_history[-10:]
+        successful = [r for r in recent if r['success']]
+        failed = [r for r in recent if not r['success']]
+        
+        if failed:
+            # Analyze failure patterns
+            failed_prompts = [r['prompt'] for r in failed]
+            common_failure_words = self._extract_common_words(failed_prompts)
+            recommendations.append(f"Review failed requests containing: {', '.join(common_failure_words[:3])}")
+        
+        if successful:
+            # Analyze success patterns
+            successful_prompts = [r['prompt'] for r in successful]
+            common_success_words = self._extract_common_words(successful_prompts)
+            recommendations.append(f"Leverage successful patterns with: {', '.join(common_success_words[:3])}")
+        
+        # Performance recommendations
+        if hasattr(agent, 'performance_metrics'):
+            metrics = agent.performance_metrics
+            if metrics['total_requests'] > 20:
+                recommendations.append("Consider prompt optimization based on learning history")
+                recommendations.append("Implement user feedback collection for continuous improvement")
+        
+        return recommendations if recommendations else ["Continue monitoring and collecting interaction data"]
+
+    def _extract_common_words(self, prompts: List[str]) -> List[str]:
+        """Extract common words from prompts."""
+        from collections import Counter
+        import re
+        
+        all_words = []
+        for prompt in prompts:
+            # Clean and tokenize
+            words = re.findall(r'\b\w+\b', prompt.lower())
+            # Filter out common stop words
+            stop_words = {'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by'}
+            words = [w for w in words if w not in stop_words and len(w) > 2]
+            all_words.extend(words)
+        
+        # Count and return most common
+        word_counts = Counter(all_words)
+        return [word for word, count in word_counts.most_common(5)]
 
     def _detect_agent_type(self, request: str, files: Optional[List] = None) -> AgentType:
         """Enhanced agent type detection including file analysis"""

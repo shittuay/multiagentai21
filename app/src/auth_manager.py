@@ -55,10 +55,10 @@ def get_current_user():
     """Get current authenticated user information"""
     if is_authenticated():
         return {
-            "uid": st.session_state.get("user_uid", "demo_user"),
-            "email": st.session_state.get("user_email", "demo@multiagentai21.com"),
-            "display_name": st.session_state.get("user_name", "Demo User"),
-            "provider": "demo"
+            "uid": st.session_state.get("user_uid"),
+            "email": st.session_state.get("user_email"),
+            "display_name": st.session_state.get("user_name"),
+            "provider": "email"
         }
     return None
 
@@ -83,7 +83,7 @@ def logout():
     st.rerun()
 
 def login_page():
-    """Simple and effective login page"""
+    """Clean login page with sign in and sign up only"""
     st.markdown("""
     <div style="text-align: center; padding: 2rem;">
         <h1>🚀 MultiAgentAI21</h1>
@@ -97,7 +97,7 @@ def login_page():
     col1, col2, col3 = st.columns([1, 2, 1])
     
     with col2:
-        st.subheader("🎯 Ready to Test Enhanced Agents?")
+        st.subheader("🔐 Sign In to Access MultiAgentAI21")
         
         st.info("""
         **What's New:**
@@ -107,43 +107,34 @@ def login_page():
         • 💬 Customer Service - Helpful guidance and support
         """)
         
-        if st.button("🚀 Start Demo Session", use_container_width=True, type="primary"):
-            st.session_state["authenticated"] = True
-            st.session_state["user_email"] = "demo@multiagentai21.com"
-            st.session_state["user_uid"] = "demo_user_" + str(hash("demo"))
-            st.session_state["user_name"] = "Demo User"
-            st.success("✅ Demo session started! Your enhanced agents are ready!")
-            st.balloons()
-            st.rerun()
-        
         st.markdown("---")
         
-        with st.expander("🔐 Advanced Login (Optional)"):
-            email = st.text_input("Email", placeholder="your.email@example.com")
-            password = st.text_input("Password", type="password", placeholder="Your password")
-            
-            col_a, col_b = st.columns(2)
-            with col_a:
-                if st.button("Login", use_container_width=True):
-                    if email and password and len(password) >= 6:
-                        st.session_state["authenticated"] = True
-                        st.session_state["user_email"] = email
-                        st.session_state["user_uid"] = email.replace("@", "_").replace(".", "_")
-                        st.session_state["user_name"] = email.split("@")[0]
-                        st.success("✅ Logged in successfully!")
-                        st.rerun()
-                    else:
-                        st.error("Please enter valid credentials")
-            
-            with col_b:
-                if st.button("Quick Signup", use_container_width=True):
-                    if email and password and len(password) >= 6:
-                        st.session_state["authenticated"] = True
-                        st.session_state["user_email"] = email
-                        st.session_state["user_uid"] = email.replace("@", "_").replace(".", "_")
-                        st.session_state["user_name"] = email.split("@")[0]
-                        st.success("✅ Account created and logged in!")
-                        st.rerun()
-                    else:
-                        st.error("Please enter valid email and password (6+ chars)")
+        # Login/Signup Form
+        email = st.text_input("Email", placeholder="your.email@example.com")
+        password = st.text_input("Password", type="password", placeholder="Your password")
+        
+        col_a, col_b = st.columns(2)
+        with col_a:
+            if st.button("Sign In", use_container_width=True, type="primary"):
+                if email and password and len(password) >= 6:
+                    st.session_state["authenticated"] = True
+                    st.session_state["user_email"] = email
+                    st.session_state["user_uid"] = email.replace("@", "_").replace(".", "_")
+                    st.session_state["user_name"] = email.split("@")[0]
+                    st.success("✅ Signed in successfully!")
+                    st.rerun()
+                else:
+                    st.error("Please enter valid credentials")
+        
+        with col_b:
+            if st.button("Sign Up", use_container_width=True):
+                if email and password and len(password) >= 6:
+                    st.session_state["authenticated"] = True
+                    st.session_state["user_email"] = email
+                    st.session_state["user_uid"] = email.replace("@", "_").replace(".", "_")
+                    st.session_state["user_name"] = email.split("@")[0]
+                    st.success("✅ Account created and signed in!")
+                    st.rerun()
+                else:
+                    st.error("Please enter valid email and password (6+ chars)")
 
