@@ -22,7 +22,6 @@ except ImportError:
     COOKIE_MANAGER_AVAILABLE = False
     logger.warning("extra_streamlit-omponents not available - persistent authentication disabled")
 
-@st.cache_resource
 def get_cookie_manager():
     """"Get cookie manager for persistent authentication"""
     if COOKIE_MANAGER_AVAILABLE:

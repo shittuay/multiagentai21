@@ -11,15 +11,15 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements first for better caching
-# CORRECTED: Assume requirements.txt is at the root of the build context
-COPY requirements.txt .
+# CORRECTED: Copy requirements.txt from app directory
+COPY app/requirements.txt .
 
 # Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application code and src directory
-# CORRECTED: Copy everything from the root of the build context to /app
-COPY . .
+# CORRECTED: Copy everything from the app directory to /app
+COPY app/ .
 
 # *** EXTENSIVE DEBUGGING FOR CLOUD RUN ***
 # These commands are excellent for debugging and will now show the correct paths!
@@ -50,6 +50,20 @@ ENV STREAMLIT_SERVER_ADDRESS=0.0.0.0
 ENV STREAMLIT_SERVER_HEADLESS=true
 ENV STREAMLIT_SERVER_ENABLE_CORS=true
 ENV STREAMLIT_SERVER_ENABLE_XSRF_PROTECTION=false
+
+# Set default environment variables (override with -e when running)
+ENV GOOGLE_API_KEY=""
+ENV GOOGLE_PROJECT_ID="multiagentai21"
+ENV GOOGLE_APPLICATION_CREDENTIALS="multiagentai21-key.json"
+ENV FIREBASE_API_KEY=""
+ENV FIREBASE_AUTH_DOMAIN="multiagentai21.firebaseapp.com"
+ENV FIREBASE_PROJECT_ID="multiagentai21"
+ENV FIREBASE_STORAGE_BUCKET="multiagentai21.appspot.com"
+ENV FIREBASE_MESSAGING_SENDER_ID=""
+ENV FIREBASE_APP_ID=""
+ENV LOG_LEVEL="INFO"
+ENV SESSION_TIMEOUT="3600"
+ENV MAX_SESSION_LENGTH="50"
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
