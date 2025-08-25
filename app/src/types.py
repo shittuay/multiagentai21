@@ -9,6 +9,7 @@ class AgentType(str, Enum):
     DATA_ANALYSIS = "data_analysis_and_insights"
     CUSTOMER_SERVICE = "customer_service_and_engagement"
     CONTENT_CREATION = "content_creation_and_generation"
+    
 
 
 @dataclass

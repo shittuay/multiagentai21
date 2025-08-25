@@ -742,8 +742,8 @@ def display_claude_agent_selection():
             },
             AgentType.AUTOMATION.value: {
                 "icon": "⚙️", 
-                "title": "Automation Specialist",
-                "description": "Process automation and workflow optimization",
+                "title": "DevOps Automation Expert",
+                "description": "Infrastructure as Code, CI/CD pipelines, Kubernetes, monitoring, and security automation",
                 "color": "#10b981"
             },
             AgentType.CONTENT_CREATION.value: {
@@ -758,6 +758,7 @@ def display_claude_agent_selection():
                 "description": "Support and engagement solutions",
                 "color": "#764ba2"
             }
+            
         }
         
         # Create a 2x2 grid for agent selection
@@ -783,9 +784,10 @@ def display_claude_agent_selection():
     else:
         agent_info = {
             "data_analysis_and_insights": {"icon": "📊", "title": "Data Analysis Expert", "color": "#667eea"},
-            "automation_of_complex_processes": {"icon": "⚙️", "title": "Automation Specialist", "color": "#10b981"},
+            "automation_of_complex_processes": {"icon": "⚙️", "title": "DevOps Automation Expert", "color": "#10b981"},
             "content_creation_and_generation": {"icon": "✍️", "title": "Content Creator", "color": "#f59e0b"},
-            "customer_service_and_engagement": {"icon": "🎯", "title": "Customer Success", "color": "#764ba2"}
+            "customer_service_and_engagement": {"icon": "🎯", "title": "Customer Success", "color": "#764ba2"},
+            
         }
         
         info = agent_info.get(st.session_state.selected_agent, {"icon": "🤖", "title": "AI Agent", "color": "#667eea"})
@@ -815,9 +817,11 @@ def display_professional_chat_messages():
                     "Show me the first 5 rows and data types"
                 ],
                 "automation_of_complex_processes": [
-                    "Process this file and clean the data",
-                    "Generate a Python script to organize files",
-                    "Create a workflow for data processing"
+                    "Create a Terraform configuration for AWS infrastructure",
+                    "Design a Jenkins CI/CD pipeline for Python applications",
+                    "Set up Prometheus monitoring for microservices",
+                    "Automate Kubernetes deployment with Helm charts",
+                    "Implement security scanning and compliance automation"
                 ],
                 "content_creation_and_generation": [
                     "Write a blog post about AI trends",
@@ -829,6 +833,7 @@ def display_professional_chat_messages():
                     "What can the automation agent do?",
                     "Help me choose the right agent"
                 ]
+               
             }
             
             examples = agent_examples.get(st.session_state.selected_agent, [])
@@ -999,30 +1004,123 @@ def display_professional_chat_messages():
                         # If feedback was given, add it to the agent system
                         if st.session_state[feedback_key] is not None:
                             try:
-                                # Get the specific agent instance for feedback
-                                agent_type_enum = AgentType(message["agent_type"])
-                                if agent_type_enum in st.session_state.agent.agents:
-                                    st.session_state.agent.agents[agent_type_enum].add_user_feedback(
+                                # Handle acknowledgment responses differently
+                                if message["agent_type"] == "acknowledgment":
+                                    # For acknowledgments, just record general feedback
+                                    st.session_state.agent.add_user_feedback(
+                                        "general",
+                                        st.session_state[feedback_key],
+                                        f"Acknowledgment response feedback for message {i+1}"
+                                    )
+                                else:
+                                    # Get the specific agent instance for feedback
+                                    agent_type_enum = AgentType(message["agent_type"])
+                                    if agent_type_enum in st.session_state.agent.agents:
+                                        st.session_state.agent.agents[agent_type_enum].add_user_feedback(
+                                            st.session_state[feedback_key],
+                                            f"Response feedback for message {i+1}"
+                                        )
+                                    # Also record system-wide feedback
+                                    st.session_state.agent.add_user_feedback(
+                                        message["agent_type"],
                                         st.session_state[feedback_key],
                                         f"Response feedback for message {i+1}"
                                     )
-                                # Also record system-wide feedback
-                                st.session_state.agent.add_user_feedback(
-                                    message["agent_type"],
-                                    st.session_state[feedback_key],
-                                    f"Response feedback for message {i+1}"
-                                )
                             except Exception as e:
                                 st.error(f"Error recording feedback: {e}")
 
+def is_acknowledgment(message: str) -> bool:
+    """Check if the message is an acknowledgment like 'thank you', 'thanks', 'ok', etc."""
+    if not message or not isinstance(message, str):
+        return False
+    
+    # Convert to lowercase and remove punctuation for comparison
+    clean_message = message.lower().strip()
+    clean_message = ''.join(c for c in clean_message if c.isalnum() or c.isspace())
+    
+    # Common acknowledgment phrases
+    acknowledgment_phrases = [
+        'thank you', 'thanks', 'thankyou', 'thx', 'tx',
+        'ok', 'okay', 'k', 'got it', 'gotit',
+        'bye', 'goodbye', 'see you', 'seeya',
+        'perfect', 'great', 'awesome', 'excellent',
+        'good job', 'well done', 'nice work',
+        'appreciate it', 'appreciated', 'appreciate',
+        'cool', 'sweet', 'nice', 'good',
+        'understood', 'understand', 'got it',
+        'alright', 'all right', 'fine', 'good'
+    ]
+    
+    # Check if the message contains any acknowledgment phrases
+    for phrase in acknowledgment_phrases:
+        if phrase in clean_message:
+            return True
+    
+    # Check if it's just a very short acknowledgment
+    if len(clean_message.split()) <= 3 and any(word in clean_message for word in ['thank', 'ok', 'bye', 'got', 'good', 'nice', 'cool']):
+        return True
+    
+    return False
+
+def generate_acknowledgment_response() -> str:
+    """Generate an appropriate acknowledgment response."""
+    import random
+    
+    responses = [
+        "You're welcome! 😊 I'm glad I could help.",
+        "Happy to help! 🎉 Is there anything else you'd like me to assist you with?",
+        "You're very welcome! ✨ Feel free to ask if you need anything more.",
+        "My pleasure! 🚀 I'm here whenever you need assistance.",
+        "Anytime! 😄 Don't hesitate to reach out if you have more questions.",
+        "Glad I could be of help! 🌟 What else can I do for you today?",
+        "You're welcome! 🎯 Ready for your next request whenever you are.",
+        "Happy to assist! 💫 Let me know if you need anything else.",
+        "My pleasure! 🎊 I'm here to help with whatever you need.",
+        "Anytime! 🚀 Looking forward to helping you with your next task."
+    ]
+    
+    return random.choice(responses)
+
 def process_and_display_user_message(user_input, uploaded_files=None):
-    """Process user message with enhanced file support"""
+    """Process user message with enhanced file support and acknowledgment handling"""
     if not st.session_state.agent:
         st.error("❌ Agent system not initialized")
         return
 
     if not st.session_state.selected_agent:
         st.error("❌ Please select an agent first")
+        return
+
+    # Check if this is an acknowledgment message
+    if is_acknowledgment(user_input):
+        # Handle acknowledgment without calling the agent
+        acknowledgment_response = generate_acknowledgment_response()
+        
+        # Add user message to chat history
+        user_message = {
+            "role": "user", 
+            "content": user_input, 
+            "timestamp": datetime.now().isoformat()
+        }
+        st.session_state.chat_history.append(user_message)
+        
+        # Add acknowledgment response
+        assistant_message = {
+            "role": "assistant", 
+            "content": acknowledgment_response,
+            "timestamp": datetime.now().isoformat(),
+            "execution_time": 0.0,
+            "agent_type": "acknowledgment",
+            "success": True
+        }
+        st.session_state.chat_history.append(assistant_message)
+        
+        # Save to Firestore
+        save_chat_history(st.session_state.current_chat_id, st.session_state.chat_history)
+        
+        # Show acknowledgment message
+        st.success("💬 Acknowledgment received!")
+        st.rerun()
         return
 
     # Prepare message content
@@ -1114,9 +1212,10 @@ def display_claude_chat_interface():
         # Chat header
         agent_info = {
             "data_analysis_and_insights": "Data Analysis Expert",
-            "automation_of_complex_processes": "Automation Specialist", 
+            "automation_of_complex_processes": "DevOps Automation Expert", 
             "content_creation_and_generation": "Content Creator",
-            "customer_service_and_engagement": "Customer Success"
+            "customer_service_and_engagement": "Customer Success",
+            
         }
         
         agent_title = agent_info.get(st.session_state.selected_agent, "AI Assistant")
@@ -1187,6 +1286,10 @@ def display_claude_chat_interface():
         
         # Process message
         if send_clicked and (user_input.strip() or (uploaded_files and len(uploaded_files) > 0)):
+            # Check if this is an acknowledgment before processing
+            if is_acknowledgment(user_input.strip()):
+                st.info("💬 **Acknowledgment Detected** - Processing your polite response...")
+            
             process_and_display_user_message(user_input, uploaded_files)
             # Increment counter to force new input key (clears the input)
             st.session_state.input_counter += 1

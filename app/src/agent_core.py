@@ -28,6 +28,7 @@ from src.data_analysis import DataAnalyzer
 from src.api.firestore import FirestoreClient
 from src.types import AgentType, AgentResponse
 from src.agents.content_creator import ContentCreatorAgent
+from src.agents.devops_automation_agent import DevOpsAutomationAgent
 # # Enhanced import removed  # Fixed circular import
 
 # Configure logging with more detailed format
@@ -2173,7 +2174,8 @@ def create_agent(agent_type: AgentType) -> BaseAgent:
         elif agent_type == AgentType.CUSTOMER_SERVICE:
             return ChatAgent()
         elif agent_type == AgentType.AUTOMATION:
-            return FileAgent()
+            return DevOpsAutomationAgent()
+        
         else:
             raise ValueError(f"Unknown agent type: {agent_type}")
     except Exception as e:
@@ -2215,7 +2217,8 @@ class MultiAgentCodingAI:
                 AgentType.CONTENT_CREATION,
                 AgentType.DATA_ANALYSIS,
                 AgentType.CUSTOMER_SERVICE,
-                AgentType.AUTOMATION
+                AgentType.AUTOMATION,
+                
             ]
             
             for agent_type in agent_types:
@@ -2663,13 +2666,15 @@ class MultiAgentCodingAI:
             "email", "social media", "article", "content", "copy",
             "marketing", "product description", "newsletter", "post"
         ]
-
+        
+        
         # Count keyword matches with weights
         scores = {
             AgentType.DATA_ANALYSIS: sum(1 for word in analysis_keywords if word in request_lower),
             AgentType.CUSTOMER_SERVICE: sum(1 for word in chat_keywords if word in request_lower),
             AgentType.AUTOMATION: sum(1 for word in automation_keywords if word in request_lower),
             AgentType.CONTENT_CREATION: sum(1 for word in content_keywords if word in request_lower),
+            
         }
 
         # Return agent type with highest score
