@@ -42,8 +42,7 @@ fi
 
 echo ""
 echo "✅ MultiAgentAI21 deployed successfully!"
-echo "🌐 Access your app at: http://localhost:8080"
-echo "🌍 External access: http://$(curl -s ifconfig.me):8080"
+echo "🌐 Access your app at: https://multiagentai21.com"
 echo "📝 Check logs: docker logs multiagentai21-instance"
 echo "🛑 Stop with: docker stop multiagentai21-instance"
 echo ""
