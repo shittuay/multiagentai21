@@ -19,21 +19,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application code and src directory
 COPY . .
 
-# *** EXTENSIVE DEBUGGING FOR CLOUD RUN ***
-RUN echo "=== Current working directory ===" && pwd
-RUN echo "=== Listing /app contents ===" && ls -la /app
-RUN echo "=== Listing src/ contents ===" && ls -la /app/src/
-RUN echo "=== Checking __init__.py exists ===" && test -f /app/src/__init__.py && echo "EXISTS" || echo "MISSING"
-RUN echo "=== Content of __init__.py ===" && cat /app/src/__init__.py
-RUN echo "=== Checking auth_manager.py exists ===" && test -f /app/src/auth_manager.py && echo "EXISTS" || echo "MISSING"
-RUN echo "=== Python version ===" && python --version
-RUN echo "=== Python path ===" && python -c "import sys; print('\n'.join(sys.path))"
-RUN echo "=== Testing basic Python import ===" && python -c "print('Python working')"
-RUN echo "=== Testing src import ===" && python -c "import src; print('src import successful')" || echo "src import FAILED"
-RUN echo "=== Testing src.auth_manager import ===" && python -c "import src.auth_manager; print('src.auth_manager import successful')" || echo "src.auth_manager import FAILED"
-RUN echo "=== Checking for syntax errors in __init__.py ===" && python -m py_compile src/__init__.py && echo "NO SYNTAX ERRORS" || echo "SYNTAX ERRORS FOUND"
-RUN echo "=== Checking for syntax errors in auth_manager.py ===" && python -m py_compile src/auth_manager.py && echo "NO SYNTAX ERRORS" || echo "SYNTAX ERRORS FOUND"
-RUN echo "=== Firebase Admin SDK version ===" && python -c "import firebase_admin; print(f'Firebase Admin SDK version: {firebase_admin.__version__}')"
+# Basic validation
+RUN echo "=== Validating installation ===" && python --version
+RUN echo "=== Testing core imports ===" && python -c "import src.auth_manager; print('✅ Core imports successful')" || echo "❌ Import check failed"
 
 # Set PYTHONPATH
 ENV PYTHONPATH=/app
