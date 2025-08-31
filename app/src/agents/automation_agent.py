@@ -4,10 +4,10 @@ import google.generativeai as genai
 from typing import Any, Dict, Optional
 from abc import ABC, abstractmethod
 
-# Assuming BaseAgent and AgentResponse are defined in src.types or src.agent_core
-# If not, you might need to adjust these imports or define them here temporarily
+# Import types and base agent from correct modules
 try:
-    from src.types import AgentType, AgentResponse, BaseAgent # Assuming AgentType and AgentResponse are here
+    from src.types import AgentType, AgentResponse
+    from src.agents.base import BaseAgent
 except ImportError:
     # Fallback definitions if src.types cannot be imported directly (e.g., during testing or if structure differs)
     logging.warning("Could not import AgentType, AgentResponse, BaseAgent from src.types. Using fallback definitions.")

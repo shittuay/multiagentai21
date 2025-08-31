@@ -1,1066 +1,363 @@
 #!/usr/bin/env python3
 """
-Enhanced Authentication Manager with Email Verification
-Uses Firebase Authentication for secure user management
+Enhanced Authentication Manager with Database Persistence
+Uses Firestore for user data storage and session management
 """
 
 import streamlit as st
 import os
 import logging
+import hashlib
+import uuid
+import bcrypt
+import re
 import time
-import secrets
-from functools import wraps
 from datetime import datetime, timedelta
-import json
+from functools import wraps
 
 logger = logging.getLogger(__name__)
 
-try:
-    import extra_streamlit_components as stx
-    COOKIE_MANAGER_AVAILABLE = True
-except ImportError:
-    COOKIE_MANAGER_AVAILABLE = False
-    logger.warning("extra_streamlit-omponents not available - persistent authentication disabled")
-
-def get_cookie_manager():
-    """"Get cookie manager for persistent authentication"""
-    if COOKIE_MANAGER_AVAILABLE:
-        return stx.CookieManager()
-    return None
-
-# Firebase configuration
-FIREBASE_CONFIG = {
-    "apiKey": os.getenv("FIREBASE_API_KEY"),
-    "authDomain": os.getenv("FIREBASE_AUTH_DOMAIN"),
-    "projectId": os.getenv("FIREBASE_PROJECT_ID"),
-    "storageBucket": os.getenv("FIREBASE_STORAGE_BUCKET"),
-    "messagingSenderId": os.getenv("FIREBASE_MESSAGING_SENDER_ID"),
-    "appId": os.getenv("FIREBASE_APP_ID")
-}
-
-# Track when email verification was implemented
-EMAIL_VERIFICATION_IMPLEMENTED_DATE = "2024-12-01"  # Date when this feature was added
-
-def setup_google_application_credentials():
-    """Set up Google Application Credentials for Firebase Admin SDK"""
+# Initialize Firestore client for user storage
+def get_firestore_client():
+    """Get Firestore client for user data storage"""
     try:
-        possible_paths = [
-            "multiagentai21-9a8fc-firebase-adminsdk-fbsvc-72f0130c73.json",
-            "multiagentai21-key.json",
-            "google_application_credentials_key.json",
-            os.getenv("GOOGLE_APPLICATION_CREDENTIALS", "")
-        ]
-        
-        for path in possible_paths:
-            if path and os.path.exists(path):
-                os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = path
-                logger.info(f"Found credentials at: {path}")
-                return path
-                
-        logger.warning("No Google Application Credentials found")
-        return None
-                
+        from src.api.firestore import FirestoreClient
+        return FirestoreClient()
     except Exception as e:
-        logger.error(f"Error setting up credentials: {e}")
+        logger.error(f"Failed to initialize Firestore client: {e}")
         return None
 
-def initialize_firebase():
-    """Initialize Firebase Admin SDK"""
-    try:
-        import firebase_admin
-        from firebase_admin import credentials, auth
-        
-        try:
-            firebase_admin.get_app()
-            logger.info("Firebase already initialized")
-            return True
-        except ValueError:
-            pass
-        
-        cred_path = setup_google_application_credentials()
-        if cred_path and os.path.exists(cred_path):
-            cred = credentials.Certificate(cred_path)
-            firebase_admin.initialize_app(cred)
-            logger.info("Firebase Admin SDK initialized successfully")
-            return True
-        else:
-            logger.warning("Firebase credentials not found - email verification will be limited")
-            return False
-            
-    except Exception as e:
-        logger.error(f"Firebase initialization failed: {e}")
-        return False
+# Simple user storage (fallback when database is not available)
+USERS = {}
 
-def is_legacy_account(created_at):
-    """Check if an account was created before email verification was implemented."""
-    try:
-        # If no creation date is available, assume it's a legacy account
-        if not created_at:
-            logger.info("No creation date found, assuming legacy account")
-            return True
+def hash_password(password):
+    """Hash password using bcrypt with salt"""
+    salt = bcrypt.gensalt()
+    hashed = bcrypt.hashpw(password.encode('utf-8'), salt)
+    return hashed.decode('utf-8')
+
+def verify_password(password, hashed):
+    """Verify password against bcrypt hash"""
+    return bcrypt.checkpw(password.encode('utf-8'), hashed.encode('utf-8'))
+
+def validate_password_strength(password):
+    """Validate password strength"""
+    if len(password) < 8:
+        return False, "Password must be at least 8 characters long"
+    
+    if not re.search(r"[A-Z]", password):
+        return False, "Password must contain at least one uppercase letter"
+    
+    if not re.search(r"[a-z]", password):
+        return False, "Password must contain at least one lowercase letter"
+    
+    if not re.search(r"[0-9]", password):
+        return False, "Password must contain at least one number"
+    
+    if not re.search(r"[!@#$%^&*(),.?\":{}|<>]", password):
+        return False, "Password must contain at least one special character"
+    
+    return True, "Password is strong"
+
+def validate_email(email):
+    """Validate email format"""
+    pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+    if re.match(pattern, email):
+        return True, "Valid email"
+    return False, "Invalid email format"
+
+# Rate limiting class
+class LoginRateLimit:
+    _instance = None
+    
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super(LoginRateLimit, cls).__new__(cls)
+            cls._instance.attempts = {}  # {email: [timestamp1, timestamp2, ...]}
+            cls._instance.max_attempts = 5
+            cls._instance.window_minutes = 15
+        return cls._instance
+    
+    def is_rate_limited(self, email):
+        """Check if email is rate limited"""
+        now = time.time()
+        if email not in self.attempts:
+            self.attempts[email] = []
         
-        # Parse creation date
-        if isinstance(created_at, str):
-            account_date = datetime.fromisoformat(created_at.replace('Z', '+00:00'))
-        else:
-            account_date = created_at
+        # Remove old attempts outside window
+        cutoff = now - (self.window_minutes * 60)
+        self.attempts[email] = [t for t in self.attempts[email] if t > cutoff]
         
-        # Check if account was created before email verification implementation
-        implementation_date = datetime.fromisoformat(EMAIL_VERIFICATION_IMPLEMENTED_DATE)
+        if len(self.attempts[email]) >= self.max_attempts:
+            # Calculate remaining time
+            oldest_attempt = min(self.attempts[email])
+            remaining = int((oldest_attempt + (self.window_minutes * 60)) - now)
+            return True, remaining
         
-        is_legacy = account_date < implementation_date
-        logger.info(f"Account creation date: {account_date}, Implementation date: {implementation_date}, Is legacy: {is_legacy}")
-        
-        return is_legacy
-    except Exception as e:
-        logger.warning(f"Error checking if account is legacy: {e}")
+        return False, 0
+    
+    def record_attempt(self, email):
+        """Record a login attempt"""
+        if email not in self.attempts:
+            self.attempts[email] = []
+        self.attempts[email].append(time.time())
+
+# Global rate limiter instance
+rate_limiter = LoginRateLimit()
+
+def is_session_expired():
+    """Check if current session has expired"""
+    if 'session_created' not in st.session_state:
         return True
     
-    def save_auth_cookie(user_data):
-      "Save authentication data to cookies for persistence"""
     try:
-        if not COOKIE_MANAGER_AVAILABLE:
-            return False
-            
-        cookie_manager = get_cookie_manager()
-        if not cookie_manager:
-            return False
+        session_created = datetime.fromisoformat(st.session_state.session_created)
+        session_timeout = timedelta(hours=24)  # 24 hour timeout
         
-        # Save authentication data to cookies
-        cookie_manager.set(
-            "auth_token", 
-            user_data.get("auth_token", ""),
-            expires_at=datetime.now() + timedelta(days=7)
-        )
-        cookie_manager.set(
-            "user_email", 
-            user_data.get("user_email", ""),
-            expires_at=datetime.now() + timedelta(days=7)
-        )
-        cookie_manager.set(
-            "user_uid", 
-            user_data.get("user_uid", ""),
-            expires_at=datetime.now() + timedelta(days=7)
-        )
-        cookie_manager.set(
-            "email_verified", 
-            str(user_data.get("email_verified", False)),
-            expires_at=datetime.now() + timedelta(days=7)
-        )
-        cookie_manager.set(
-            "is_legacy_account", 
-            str(user_data.get("is_legacy_account", False)),
-            expires_at=datetime.now() + timedelta(days=7)
-        )
-        
-        logger.info("Authentication data saved to cookies")
+        return datetime.now() > session_created + session_timeout
+    except (ValueError, TypeError):
         return True
-        
-    except Exception as e:
-        logger.error(f"Error saving auth cookies: {e}")
-        return False
 
-def load_auth_cookie():
-    """Load authentication data from cookies"""
-    try:
-        if not COOKIE_MANAGER_AVAILABLE:
-            return False
-            
-        cookie_manager = get_cookie_manager()
-        if not cookie_manager:
-            return False
-        
-        # Load authentication data from cookies
-        auth_token = cookie_manager.get("auth_token")
-        user_email = cookie_manager.get("user_email")
-        user_uid = cookie_manager.get("user_uid")
-        email_verified = cookie_manager.get("email_verified")
-        is_legacy_account = cookie_manager.get("is_legacy_account")
-        
-        if auth_token and user_email and user_uid:
-            # Restore session state from cookies
-            st.session_state["authenticated"] = True
-            st.session_state["user_email"] = user_email
-            st.session_state["user_uid"] = user_uid
-            st.session_state["email_verified"] = email_verified == "True"
-            st.session_state["is_legacy_account"] = is_legacy_account == "True"
-            st.session_state["session_expiry"] = (datetime.now() + timedelta(hours=24)).timestamp()
-            
-            logger.info("Authentication restored from cookies")
-            return True
-            
-    except Exception as e:
-        logger.error(f"Error loading auth cookies: {e}")
-    
-    return False
-
-def clear_auth_cookies():
-    """Clear all authentication cookies"""
-    try:
-        if not COOKIE_MANAGER_AVAILABLE:
-            return
-            
-        cookie_manager = get_cookie_manager()
-        if not cookie_manager:
-            return
-        
-        # Clear authentication cookies
-        cookie_manager.delete("auth_token")
-        cookie_manager.delete("user_email")
-        cookie_manager.delete("user_uid")
-        cookie_manager.delete("email_verified")
-        cookie_manager.delete("is_legacy_account")
-        
-        logger.info("Authentication cookies cleared")
-        
-    except Exception as e:
-        logger.error(f"Error clearing auth cookies: {e}")
-        
-    except Exception as e:
-        logger.warning(f"Error checking legacy account status: {e}")
-        # On any error, assume it's a legacy account to ensure existing users can access
-        return True
+def refresh_session():
+    """Refresh session timestamp"""
+    st.session_state.session_created = datetime.now().isoformat()
 
 def is_authenticated():
-    """Check if user is authenticated and email is verified (or legacy account)"""
-    # First try to restore from cookies if session is empty
-    if not st.session_state.get("authenticated", False):
-        if load_auth_cookie():
-            # Successfully restored from cookies
-            logger.info("Authentication restored from cookies")
-    
-    if not st.session_state.get("authenticated", False):
+    """Check if user is authenticated and session is valid"""
+    if not st.session_state.get('authenticated', False):
         return False
     
-    # Check if email is verified OR if it's a legacy account
-    email_verified = st.session_state.get("email_verified", False)
-    is_legacy = st.session_state.get("is_legacy_account", False)
-    
-    if not email_verified and not is_legacy:
-        return False
-    
-    # Check if session is still valid
-    session_expiry = st.session_state.get("session_expiry")
-    if session_expiry and datetime.now().timestamp() > session_expiry:
+    # Check if session has expired
+    if is_session_expired():
         logout()
         return False
-    
+        
     return True
-def get_current_user():
-    """Get current authenticated user information"""
-    if is_authenticated():
-        return {
-            "uid": st.session_state.get("user_uid"),
-            "email": st.session_state.get("user_email"),
-            "display_name": st.session_state.get("user_name"),
-            "email_verified": st.session_state.get("email_verified", False),
-            "is_legacy_account": st.session_state.get("is_legacy_account", False),
-            "provider": "email",
-            "created_at": st.session_state.get("user_created_at")
-        }
-    return None
 
-def login_required(func):
-    """Decorator to require login and email verification (or legacy account)"""
-    @wraps(func)
-    def wrapper(*args, **kwargs):
-        if not is_authenticated():
-            login_page()
-            return None
-        return func(*args, **kwargs)
-    return wrapper
+def get_user_email():
+    """Get current user email"""
+    return st.session_state.get('user_email', None)
 
-def logout():
-    """Logout the current user and clear session"""
-    auth_keys = [
-        "authenticated", "user_email", "user_uid", "user_name", 
-        "email_verified", "is_legacy_account", "session_expiry", "user_created_at",
-        "verification_sent", "verification_code", "pending_signup"
-    ]
-    
-    for key in auth_keys:
-        if key in st.session_state:
-            del st.session_state[key]
-    
-    # Clear authentication cookies
-    clear_auth_cookies()
-    
-    st.success("✅ Logged out successfully!")
-    st.rerun()
+def get_user_name():
+    """Get current user name"""
+    return st.session_state.get('user_name', None)
 
-def create_verification_code():
-    """Create a secure verification code"""
-    return secrets.token_urlsafe(16)
+def get_user_uid():
+    """Get current user UID"""
+    return st.session_state.get('user_uid', None)
 
-def send_verification_email(email, verification_code):
-    """Send verification email (simulated for now, can be enhanced with real email service)"""
+def save_user_to_database(user_data):
+    """Save user data to Firestore database"""
     try:
-        # In a real implementation, you would use a service like SendGrid, Mailgun, or AWS SES
-        # For now, we'll simulate the email sending and store the code in session
-        
-        verification_link = f"https://yourdomain.com/verify?email={email}&code={verification_code}"
-        
-        # Store verification details in session (in production, this would be in a database)
-        st.session_state["verification_sent"] = True
-        st.session_state["verification_code"] = verification_code
-        st.session_state["verification_email"] = email
-        st.session_state["verification_expiry"] = (datetime.now() + timedelta(hours=24)).timestamp()
-        
-        logger.info(f"Verification email sent to {email} with code: {verification_code}")
-        
-        # In production, you would actually send the email here
-        # For demonstration, we'll show the verification code in the UI
-        return True, verification_code
-        
-    except Exception as e:
-        logger.error(f"Error sending verification email: {e}")
-        return False, str(e)
-
-def verify_email_code(email, code):
-    """Verify the email verification code"""
-    try:
-        stored_code = st.session_state.get("verification_code")
-        stored_email = st.session_state.get("verification_email")
-        expiry = st.session_state.get("verification_expiry")
-        
-        if not stored_code or not stored_email or not expiry:
-            return False, "Verification code expired or not found"
-        
-        if datetime.now().timestamp() > expiry:
-            return False, "Verification code has expired"
-        
-        if email != stored_email:
-            return False, "Email mismatch"
-        
-        if code != stored_code:
-            return False, "Invalid verification code"
-        
-        # Mark email as verified
-        st.session_state["email_verified"] = True
-        
-        # Clear verification data
-        del st.session_state["verification_sent"]
-        del st.session_state["verification_code"]
-        del st.session_state["verification_email"]
-        del st.session_state["verification_expiry"]
-        
-        return True, "Email verified successfully!"
-        
-    except Exception as e:
-        logger.error(f"Error verifying email code: {e}")
-        return False, f"Verification error: {str(e)}"
-
-def initiate_signup(email, password, display_name):
-    """Initiate the signup process by sending verification email first"""
-    try:
-        # Check if user already exists
-        try:
-            import firebase_admin
-            from firebase_admin import auth
-            
-            # Check Firebase for existing user
-            try:
-                user_record = auth.get_user_by_email(email)
-                return False, None, "User with this email already exists"
-            except auth.UserNotFoundError:
-                pass  # User doesn't exist, continue with signup
-                
-        except ImportError:
-            # Fallback to local storage check
-            local_users = st.session_state.get("local_users", {})
-            if email in local_users:
-                return False, None, "User with this email already exists"
-        
-        # Generate verification code
-        verification_code = create_verification_code()
-        
-        # Send verification email
-        verification_sent, sent_code = send_verification_email(email, verification_code)
-        
-        if verification_sent:
-            # Store pending signup information
-            st.session_state["pending_signup"] = {
-                "email": email,
-                "password": password,
-                "display_name": display_name,
-                "verification_code": sent_code
-            }
-            
-            logger.info(f"Signup initiated for {email}, verification email sent")
-            return True, sent_code, "Verification email sent! Please check your email and enter the verification code."
+        firestore_client = get_firestore_client()
+        if firestore_client and firestore_client.initialized:
+            # Save to users collection
+            user_ref = firestore_client.db.collection('users').document(user_data['uid'])
+            user_ref.set(user_data, merge=True)
+            logger.info(f"User saved to database: {user_data['email']}")
+            return True
         else:
-            return False, None, f"Failed to send verification email: {sent_code}"
-            
+            # Fallback to in-memory storage
+            USERS[user_data['email']] = user_data
+            logger.info(f"User saved to memory: {user_data['email']}")
+            return True
     except Exception as e:
-        logger.error(f"Error initiating signup: {e}")
-        return False, None, f"Signup initiation failed: {str(e)}"
+        logger.error(f"Error saving user to database: {e}")
+        # Fallback to in-memory storage
+        USERS[user_data['email']] = user_data
+        return True
 
-def complete_signup_after_verification():
-    """Complete the signup process after email verification"""
+def get_user_from_database(email):
+    """Get user data from Firestore database"""
     try:
-        pending_signup = st.session_state.get("pending_signup")
-        if not pending_signup:
-            return False, None, "No pending signup found"
-        
-        email = pending_signup["email"]
-        password = pending_signup["password"]
-        display_name = pending_signup["display_name"]
-        
-        # Try to use Firebase Admin SDK if available
-        try:
-            import firebase_admin
-            from firebase_admin import auth
+        firestore_client = get_firestore_client()
+        if firestore_client and firestore_client.initialized:
+            # Query users collection by email
+            users_query = firestore_client.db.collection('users').where('email', '==', email)
+            user_docs = users_query.stream()
             
-            # Create user in Firebase
-            user_record = auth.create_user(
-                email=email,
-                password=password,
-                display_name=display_name,
-                email_verified=True  # Already verified
-            )
+            for doc in user_docs:
+                user_data = doc.to_dict()
+                logger.info(f"User loaded from database: {email}")
+                return user_data
             
-            logger.info(f"Firebase user created: {user_record.uid}")
-            
-            # Clear pending signup data
-            del st.session_state["pending_signup"]
-            
-            return True, user_record.uid, "Account created successfully! You can now sign in."
-                
-        except ImportError:
-            # Fallback to local storage if Firebase is not available
-            logger.info("Firebase not available, using local storage")
-            
-            # Create local user
-            user_id = f"local_{int(time.time())}"
-            current_time = datetime.now()
-            local_users = st.session_state.get("local_users", {})
-            local_users[email] = {
-                "uid": user_id,
-                "email": email,
-                "display_name": display_name,
-                "password_hash": hash(password),  # In production, use proper hashing
-                "created_at": current_time.isoformat(),
-                "email_verified": True,  # Already verified
-                "requires_verification": False
-            }
-            st.session_state["local_users"] = local_users
-            
-            # Clear pending signup data
-            del st.session_state["pending_signup"]
-            
-            logger.info(f"Local user created: {user_id}")
-            return True, user_id, "Account created successfully! You can now sign in."
-                
+            # User not found in database
+            return None
+        else:
+            # Fallback to in-memory storage
+            return USERS.get(email)
     except Exception as e:
-        logger.error(f"Error completing signup: {e}")
-        return False, None, f"Account creation failed: {str(e)}"
-
-def create_user_account(email, password, display_name):
-    """Create a new user account with Firebase (if available) or local storage"""
-    try:
-        # Try to use Firebase Admin SDK if available
-        try:
-            import firebase_admin
-            from firebase_admin import auth
-            
-            # Create user in Firebase
-            user_record = auth.create_user(
-                email=email,
-                password=password,
-                display_name=display_name,
-                email_verified=False
-            )
-            
-            # Send verification email
-            verification_sent, verification_code = send_verification_email(email, verification_code)
-            
-            if verification_sent:
-                logger.info(f"Firebase user created: {user_record.uid}")
-                return True, user_record.uid, "Account created successfully! Please check your email for verification."
-            else:
-                # Delete the Firebase user if email sending failed
-                auth.delete_user(user_record.uid)
-                return False, None, f"Account creation failed: {verification_code}"
-                
-        except ImportError:
-            # Fallback to local storage if Firebase is not available
-            logger.info("Firebase not available, using local storage")
-            
-            # Check if user already exists
-            if email in st.session_state.get("local_users", {}):
-                return False, None, "User with this email already exists"
-            
-            # Create local user
-            user_id = f"local_{int(time.time())}"
-            current_time = datetime.now()
-            local_users = st.session_state.get("local_users", {})
-            local_users[email] = {
-                "uid": user_id,
-                "email": email,
-                "display_name": display_name,
-                "password_hash": hash(password),  # In production, use proper hashing
-                "created_at": current_time.isoformat(),
-                "email_verified": False,
-                "requires_verification": True  # New accounts require verification
-            }
-            st.session_state["local_users"] = local_users
-            
-            # Send verification email
-            verification_sent, verification_code = send_verification_email(email, verification_code)
-            
-            if verification_sent:
-                return True, user_id, "Account created successfully! Please check your email for verification."
-            else:
-                # Remove the local user if email sending failed
-                del local_users[email]
-                return False, None, f"Account creation failed: {verification_code}"
-                
-    except Exception as e:
-        logger.error(f"Error creating user account: {e}")
-        return False, None, f"Account creation failed: {str(e)}"
+        logger.error(f"Error loading user from database: {e}")
+        # Fallback to in-memory storage
+        return USERS.get(email)
 
 def authenticate_user(email, password):
-    """Authenticate user with Firebase (if available) or local storage"""
+    """Authenticate user with email and password"""
     try:
-        # Try to use Firebase Admin SDK if available
-        try:
-            import firebase_admin
-            from firebase_admin import auth
-            
-            # Get user by email
-            user_record = auth.get_user_by_email(email)
-            
-            # In production, you would verify the password here
-            # For now, we'll assume the password is correct if the user exists
-            
-            # Check if email is verified OR if it's a legacy account
-            if not user_record.email_verified:
-                # Check if this is a legacy account (created before email verification)
-                if hasattr(user_record, 'metadata') and user_record.metadata.creation_timestamp:
-                    creation_date = datetime.fromtimestamp(user_record.metadata.creation_timestamp / 1000)
-                    if is_legacy_account(creation_date):
-                        logger.info(f"Legacy account detected for {email}, allowing access")
-                        return True, user_record.uid, "Authentication successful (legacy account)"
-                else:
-                    # No creation timestamp available, assume legacy account
-                    logger.info(f"No creation timestamp for {email}, assuming legacy account")
-                    return True, user_record.uid, "Authentication successful (legacy account)"
-                
-                return False, None, "Please verify your email before signing in"
-            
-            return True, user_record.uid, "Authentication successful"
-            
-        except ImportError:
-            # Fallback to local storage
-            local_users = st.session_state.get("local_users", {})
-            user_data = local_users.get(email)
-            
-            if not user_data:
-                return False, None, "User not found"
-            
-            # Check password (in production, use proper password verification)
-            if hash(password) != user_data["password_hash"]:
-                return False, None, "Invalid password"
-            
-            # Check if email is verified OR if it's a legacy account
-            if not user_data.get("email_verified", False):
-                # Check if this is a legacy account
-                if is_legacy_account(user_data.get("created_at")):
-                    logger.info(f"Legacy account detected for {email}, allowing access")
-                    return True, user_data["uid"], "Authentication successful (legacy account)"
-                
-                return False, None, "Please verify your email before signing in"
-            
-            return True, user_data["uid"], "Authentication successful"
-            
-    except Exception as e:
-        logger.error(f"Error authenticating user: {e}")
-        return False, None, f"Authentication failed: {str(e)}"
-
-def resend_verification_email(email):
-    """Resend verification email"""
-    try:
-        # Check if user exists
-        try:
-            import firebase_admin
-            from firebase_admin import auth
-            user_record = auth.get_user_by_email(email)
-        except ImportError:
-            local_users = st.session_state.get("local_users", {})
-            if email not in local_users:
-                return False, "User not found"
+        # Check rate limiting
+        is_limited, remaining = rate_limiter.is_rate_limited(email)
+        if is_limited:
+            return False, f"Too many login attempts. Try again in {remaining} seconds."
         
-        # Send new verification email
-        verification_sent, verification_code = send_verification_email(email, verification_code)
+        # Record attempt
+        rate_limiter.record_attempt(email)
         
-        if verification_sent:
-            return True, "Verification email sent successfully!"
+        # Get user data from database or memory
+        user_data = get_user_from_database(email)
+        
+        if user_data:
+            stored_password = user_data['password']
+            if verify_password(password, stored_password):
+                # Set session state
+                st.session_state.authenticated = True
+                st.session_state.user_email = email
+                st.session_state.user_name = user_data.get('name', email.split('@')[0])
+                st.session_state.user_uid = user_data.get('uid', str(uuid.uuid4()))
+                st.session_state.user_created_at = user_data.get('created_at', datetime.now().isoformat())
+                
+                # Refresh session timestamp
+                refresh_session()
+                
+                # Update last login time
+                user_data['last_login'] = datetime.now().isoformat()
+                save_user_to_database(user_data)
+                
+                logger.info(f"User {email} authenticated successfully")
+                return True, "Authentication successful"
+            else:
+                return False, "Invalid password"
         else:
-            return False, f"Failed to send verification email: {verification_code}"
+            return False, "User not found"
+    except Exception as e:
+        logger.error(f"Authentication error: {e}")
+        return False, f"Authentication error: {str(e)}"
+
+def create_user_account(email, password, display_name):
+    """Create a new user account"""
+    try:
+        # Validate email
+        email_valid, email_msg = validate_email(email)
+        if not email_valid:
+            return False, email_msg
+        
+        # Validate password strength
+        password_valid, password_msg = validate_password_strength(password)
+        if not password_valid:
+            return False, password_msg
+        
+        # Check rate limiting
+        is_limited, remaining = rate_limiter.is_rate_limited(email)
+        if is_limited:
+            return False, f"Too many attempts. Try again in {remaining} seconds."
+        
+        # Check if user already exists
+        existing_user = get_user_from_database(email)
+        if existing_user:
+            return False, "User already exists"
+        
+        # Create new user data
+        user_data = {
+            "email": email,
+            "password": hash_password(password),
+            "name": display_name,
+            "uid": str(uuid.uuid4()),
+            "created_at": datetime.now().isoformat(),
+            "last_login": datetime.now().isoformat(),
+            "status": "active"
+        }
+        
+        # Save to database
+        if save_user_to_database(user_data):
+            logger.info(f"User account created for {email}")
+            return True, "Account created successfully"
+        else:
+            return False, "Failed to create account"
             
     except Exception as e:
-        logger.error(f"Error resending verification email: {e}")
-        return False, f"Error resending verification email: {str(e)}"
+        logger.error(f"Account creation error: {e}")
+        return False, f"Account creation error: {str(e)}"
 
-def handle_legacy_user_login(email, user_id, display_name):
-    """Handle login for legacy users (existing accounts before email verification)"""
-    try:
-        # Set session data for legacy user
-        st.session_state["authenticated"] = True
-        st.session_state["user_email"] = email
-        st.session_state["user_uid"] = user_id
-        st.session_state["user_name"] = display_name
-        st.session_state["email_verified"] = False  # Legacy accounts don't have verification
-        st.session_state["is_legacy_account"] = True  # Mark as legacy account
-        st.session_state["user_created_at"] = datetime.now().isoformat()  # Set current time as fallback
-        st.session_state["session_expiry"] = (datetime.now() + timedelta(hours=24)).timestamp()
-        
-        logger.info(f"Legacy user {email} logged in successfully")
-        return True
-        
-    except Exception as e:
-        logger.error(f"Error handling legacy user login: {e}")
-        return False
-
-def handle_existing_user_login(email, user_id, display_name):
-    """Handle login for existing users (treat as legacy accounts)"""
-    try:
-        # Set session data for existing user
-        st.session_state["authenticated"] = True
-        st.session_state["user_email"] = email
-        st.session_state["user_uid"] = user_id
-        st.session_state["user_name"] = display_name
-        st.session_state["email_verified"] = True  # Existing accounts are verified
-        st.session_state["is_legacy_account"] = True  # Mark as legacy account
-        st.session_state["user_created_at"] = datetime.now().isoformat()  # Set current time as fallback
-        st.session_state["session_expiry"] = (datetime.now() + timedelta(hours=24)).timestamp()
-        
-        # Save to cookies for persistence
-        save_auth_cookie({
-            "user_email": email,
-            "user_uid": user_id,
-            "email_verified": True,
-            "is_legacy_account": True,
-            "auth_token": "legacy_user"
-        })
-        
-        logger.info(f"Existing user {email} logged in successfully")
-        return True
-        
-    except Exception as e:
-        logger.error(f"Error handling existing user login: {e}")
-        return False
+def logout():
+    """Logout the current user"""
+    st.session_state.authenticated = False
+    st.session_state.user_email = None
+    st.session_state.user_name = None
+    st.session_state.user_uid = None
+    st.session_state.user_created_at = None
+    st.session_state.session_created = None
+    logger.info("User logged out")
 
 def login_page():
-    """Enhanced login page with email verification"""
+    """Display the login/signup page"""
     st.markdown("""
     <div style="text-align: center; padding: 2rem;">
-        <h1>🚀 MultiAgentAI21</h1>
-        <h2>Advanced Multi-Agent AI System</h2>
-        <p style="color: #666; font-size: 1.1rem;">Enhanced agents with actual functionality</p>
+        <h1>🔐 MultiAgentAI21</h1>
+        <p>Advanced Multi-Agent AI System</p>
     </div>
     """, unsafe_allow_html=True)
     
-    st.markdown("---")
-    
-    # Initialize Firebase
-    firebase_available = initialize_firebase()
-    
-    # Tab selection
-    tab1, tab2, tab3 = st.tabs(["🔐 Sign In", "📝 Sign Up", "✅ Email Verification"])
+    # Create tabs for login and signup
+    tab1, tab2 = st.tabs(["🔐 Sign In", "📝 Sign Up"])
     
     with tab1:
-        st.subheader("🔐 Sign In to Access MultiAgentAI21")
+        st.markdown("### Sign In to Access MultiAgentAI21")
         
-        if firebase_available:
-            st.success("✅ Firebase Authentication Available")
-        else:
-            st.warning("⚠️ Using Local Authentication (Limited Security)")
-        
-        st.info("""
-        **What's New:**
-        • 📊 Data Analysis Agent - Actually processes your CSV files
-        • 🤖 Automation Agent - Real file processing and script generation  
-        • 📝 Content Creator - Complete, ready-to-use content
-        • 💬 Customer Service - Helpful guidance and support
-        • 🌐 Web Research - Real-time information and fact-checking
-        """)
-        
-        st.markdown("---")
-        
-        # Login Form
         with st.form("login_form"):
-            email = st.text_input("Email", placeholder="your.email@example.com")
-            password = st.text_input("Password", type="password", placeholder="Your password")
+            email = st.text_input("Email", placeholder="Enter your email")
+            password = st.text_input("Password", type="password", placeholder="Enter your password")
+            submit_button = st.form_submit_button("Sign In", type="primary")
             
-            col_a, col_b = st.columns(2)
-            with col_a:
-                login_submitted = st.form_submit_button("Sign In", use_container_width=True, type="primary")
-            with col_b:
-                forgot_password = st.form_submit_button("Forgot Password?", use_container_width=True)
-            
-            if login_submitted:
-                if email and password and len(password) >= 6:
-                    success, user_id, message = authenticate_user(email, password)
-                    
+            if submit_button:
+                if email and password:
+                    success, message = authenticate_user(email, password)
                     if success:
-                        # Check if this is a legacy account
-                        if "legacy account" in message.lower():
-                            # Handle legacy user login
-                            if handle_legacy_user_login(email, user_id, email.split("@")[0]):
-                                st.success("✅ Signed in successfully! (Legacy account)")
-                                st.info("ℹ️ Your existing account has been automatically verified.")
-                                st.rerun()
-                            else:
-                                st.error("❌ Error processing legacy account login")
-                        else:
-                            # Regular verified user login
-                            st.session_state["authenticated"] = True
-                            st.session_state["user_email"] = email
-                            st.session_state["user_uid"] = user_id
-                            st.session_state["user_name"] = email.split("@")[0]
-                            st.session_state["email_verified"] = True
-                            st.session_state["is_legacy_account"] = False
-                            st.session_state["user_created_at"] = datetime.now().isoformat()
-                            st.session_state["session_expiry"] = (datetime.now() + timedelta(hours=24)).timestamp()
-                            # Save to cookies for persistence
-                            save_auth_cookie({
-                                "user_email": email,
-                                "user_uid": user_id,
-                                "email_verified": True,
-                                "is_legacy_account": False,
-                                "auth_token": "verified_user"
-                            })
-                            st.success("✅ Signed in successfully!")
-                            st.rerun()
+                        st.success("✅ Login successful!")
+                        st.rerun()
                     else:
-                        # Check if this might be an existing account that needs migration
-                        if "verify your email" in message.lower():
-                            st.error(f"❌ {message}")
-                            
-                            # Offer to migrate existing account to legacy status
-                            st.info("🔍 **Existing Account Detected**")
-                            st.info("This appears to be an existing account. Would you like to migrate it to allow access without email verification?")
-                            
-                            col1, col2 = st.columns(2)
-                            with col1:
-                                if st.button("🔄 Migrate Account", type="secondary"):
-                                    # Create legacy account entry
-                                    success, user_id, message = create_legacy_account_from_existing(email, password, email.split("@")[0])
-                                    if success:
-                                        st.success("✅ Account migrated successfully!")
-                                        st.info("You can now sign in with your existing credentials.")
-                                        st.rerun()
-                                    else:
-                                        st.error(f"❌ {message}")
-                            
-                            with col2:
-                                if st.button("📧 Verify Email Instead", type="secondary"):
-                                    st.info("Please use the Email Verification tab to verify your email address.")
-                        else:
-                            st.error(f"❌ {message}")
+                        st.error(f"❌ {message}")
                 else:
-                    st.error("Please enter valid email and password (6+ characters)")
-            
-            if forgot_password:
-                st.info("Password reset functionality will be implemented in the next version.")
+                    st.warning("Please enter both email and password")
+        
     
     with tab2:
-        st.subheader("📝 Create New Account")
-        st.info("Create an account to access all MultiAgentAI21 features. Email verification is required for new accounts.")
+        st.markdown("### Create New Account")
         
-        # Check if there's a pending signup
-        pending_signup = st.session_state.get("pending_signup")
-        
-        if pending_signup:
-            # Show pending signup status
-            st.info(f"""
-            📧 **Verification Email Sent!**
+        with st.form("signup_form"):
+            new_email = st.text_input("Email", key="signup_email", placeholder="Enter your email")
+            new_password = st.text_input("Password", type="password", key="signup_password", placeholder="Enter your password")
+            confirm_password = st.text_input("Confirm Password", type="password", placeholder="Confirm your password")
+            display_name = st.text_input("Display Name", placeholder="Enter your name")
+            signup_button = st.form_submit_button("Sign Up", type="primary")
             
-            We've sent a verification code to: **{pending_signup['email']}**
-            
-            Please check your email and enter the verification code in the **Email Verification** tab to complete your account creation.
-            """)
-            
-            # Show verification code for demonstration (in production, this would be hidden)
-            if st.session_state.get("verification_code"):
-                st.code(f"Verification Code: {st.session_state['verification_code']}")
-                st.warning("⚠️ In production, this code would be sent via email, not displayed here.")
-            
-            # Option to cancel signup
-            if st.button("Cancel Signup", type="secondary"):
-                del st.session_state["pending_signup"]
-                st.rerun()
-                
-        else:
-            # Signup form
-            with st.form("signup_form"):
-                email = st.text_input("Email Address", placeholder="your.email@example.com")
-                password = st.text_input("Password", type="password", placeholder="Choose a strong password (8+ chars)")
-                confirm_password = st.text_input("Confirm Password", type="password", placeholder="Confirm your password")
-                display_name = st.text_input("Display Name", placeholder="Your preferred name")
-                
-                # Password strength indicator
-                if password:
-                    strength = 0
-                    if len(password) >= 8:
-                        strength += 1
-                    if any(c.isupper() for c in password):
-                        strength += 1
-                    if any(c.islower() for c in password):
-                        strength += 1
-                    if any(c.isdigit() for c in password):
-                        strength += 1
-                    if any(c in "!@#$%^&*()_+-=[]{}|;:,.<>?" for c in password):
-                        strength += 1
-                    
-                    strength_labels = ["Very Weak", "Weak", "Fair", "Good", "Strong"]
-                    strength_colors = ["red", "orange", "yellow", "lightgreen", "green"]
-                    
-                    st.markdown(f"Password Strength: **<span style='color: {strength_colors[strength-1]}'>{strength_labels[strength-1]}</span>**", unsafe_allow_html=True)
-                
-                signup_submitted = st.form_submit_button("Send Verification Email", use_container_width=True, type="primary")
-                
-                if signup_submitted:
-                    if not all([email, password, confirm_password, display_name]):
-                        st.error("Please fill in all fields")
-                    elif password != confirm_password:
-                        st.error("Passwords do not match")
-                    elif len(password) < 8:
-                        st.error("Password must be at least 8 characters long")
-                    elif strength < 3:
-                        st.error("Please choose a stronger password")
-                    else:
-                        # Initiate signup process
-                        success, verification_code, message = initiate_signup(email, password, display_name)
-                        
+            if signup_button:
+                if new_email and new_password and confirm_password and display_name:
+                    if new_password == confirm_password:
+                        success, message = create_user_account(new_email, new_password, display_name)
                         if success:
-                            st.success("✅ Verification email sent!")
-                            st.info("📧 Please check your email for the verification code.")
-                            st.info("💡 Go to the Email Verification tab to complete your account creation.")
-                            st.rerun()
+                            st.success("✅ Account created successfully! You can now sign in.")
                         else:
                             st.error(f"❌ {message}")
-    
-    with tab3:
-        st.subheader("✅ Email Verification")
-        st.info("Verify your email address to complete account creation and access MultiAgentAI21.")
-        
-        # Check if there's a pending signup
-        pending_signup = st.session_state.get("pending_signup")
-        
-        if pending_signup:
-            st.info(f"""
-            📝 **Complete Your Signup**
-            
-            Email: **{pending_signup['email']}**
-            Display Name: **{pending_signup['display_name']}**
-            
-            Enter the verification code from your email to complete account creation.
-            """)
-            
-            # Show verification code for demonstration
-            if st.session_state.get("verification_code"):
-                st.code(f"Verification Code: {st.session_state['verification_code']}")
-                st.warning("⚠️ In production, this code would be sent via email, not displayed here.")
-        
-        with st.form("verification_form"):
-            email = st.text_input("Email Address", placeholder="your.email@example.com", value=pending_signup.get("email", "") if pending_signup else "")
-            verification_code = st.text_input("Verification Code", placeholder="Enter the code from your email")
-            
-            col_a, col_b = st.columns(2)
-            with col_a:
-                verify_submitted = st.form_submit_button("Verify & Create Account", use_container_width=True, type="primary")
-            with col_b:
-                resend_submitted = st.form_submit_button("Resend Code", use_container_width=True)
-            
-            if verify_submitted:
-                if email and verification_code:
-                    # First verify the email
-                    success, message = verify_email_code(email, verification_code)
-                    
-                    if success:
-                        # If verification successful and there's a pending signup, complete it
-                        if pending_signup and pending_signup["email"] == email:
-                            # Complete the signup process
-                            account_created, user_id, create_message = complete_signup_after_verification()
-                            
-                            if account_created:
-                                st.success("✅ Account created successfully!")
-                                st.info("🎉 Your account is now active! You can sign in using your email and password.")
-                                
-                                # Clear any existing verification data
-                                if "verification_sent" in st.session_state:
-                                    del st.session_state["verification_sent"]
-                            else:
-                                st.error(f"❌ Account creation failed: {create_message}")
-                        else:
-                            st.success("✅ Email verified successfully!")
-                            st.info("You can now sign in to your account.")
-                            
-                            # Clear any existing verification data
-                            if "verification_sent" in st.session_state:
-                                del st.session_state["verification_sent"]
                     else:
-                        st.error(f"❌ {message}")
+                        st.error("❌ Passwords do not match")
                 else:
-                    st.error("Please enter both email and verification code")
-            
-            if resend_submitted:
-                if email:
-                    success, message = resend_verification_email(email)
-                    
-                    if success:
-                        st.success("✅ Verification email sent!")
-                        st.info("Please check your email for the new verification code.")
-                    else:
-                        st.error(f"❌ {message}")
-                else:
-                    st.error("Please enter your email address")
-        
-        # Show verification status if available
-        if st.session_state.get("verification_sent"):
-            st.info("📧 Verification email sent! Check your email for the verification code.")
-        
-        # Show verification expiry if available
-        if st.session_state.get("verification_expiry"):
-            expiry_time = datetime.fromtimestamp(st.session_state["verification_expiry"])
-            time_left = expiry_time - datetime.now()
-            
-            if time_left.total_seconds() > 0:
-                hours, remainder = divmod(int(time_left.total_seconds()), 3600)
-                minutes, _ = divmod(remainder, 60)
-                st.info(f"⏰ Verification code expires in {hours}h {minutes}m")
-            else:
-                st.error("❌ Verification code has expired. Please request a new one.")
-                # Clear expired verification data
-                for key in ["verification_sent", "verification_code", "verification_email", "verification_expiry", "pending_signup"]:
-                    if key in st.session_state:
-                        del st.session_state[key]
-        
-        # Show legacy account information
-        st.info("""
-        **ℹ️ Legacy Account Information:**
-        • Existing accounts created before December 1, 2024 are automatically verified
-        • These accounts can sign in without email verification
-        • New accounts require email verification for security
-        """)
+                    st.warning("⚠️ Please fill in all fields")
 
-def check_email_verification_status():
-    """Check if the current user's email is verified or if it's a legacy account"""
-    if not st.session_state.get("authenticated"):
-        return False
-    
-    email_verified = st.session_state.get("email_verified", False)
-    is_legacy = st.session_state.get("is_legacy_account", False)
-    
-    return email_verified or is_legacy
-
-def require_email_verification(func):
-    """Decorator to require email verification (or legacy account)"""
+def require_auth(func):
+    """Decorator to require authentication"""
     @wraps(func)
     def wrapper(*args, **kwargs):
-        if not check_email_verification_status():
-            st.error("❌ Email verification required")
-            st.info("Please verify your email address to access this feature.")
+        if not is_authenticated():
+            st.error("❌ Please sign in to access this feature")
             login_page()
-            return None
+            return
+        
+        # Check session timeout
+        if is_session_expired():
+            logout()
+            st.error("⏰ Your session has expired. Please sign in again.")
+            login_page()
+            return
+            
         return func(*args, **kwargs)
     return wrapper
-
-def migrate_existing_account_to_legacy(email):
-    """Migrate an existing account to legacy status to allow access without verification"""
-    try:
-        # Check if user exists in local storage
-        local_users = st.session_state.get("local_users", {})
-        if email in local_users:
-            # Mark as legacy account
-            local_users[email]["is_legacy_account"] = True
-            local_users[email]["email_verified"] = True  # Legacy accounts are considered verified
-            local_users[email]["requires_verification"] = False
-            st.session_state["local_users"] = local_users
-            logger.info(f"Migrated {email} to legacy account status")
-            return True
-        
-        # Check Firebase if available
-        try:
-            import firebase_admin
-            from firebase_admin import auth
-            
-            user_record = auth.get_user_by_email(email)
-            if user_record:
-                logger.info(f"Found Firebase user {email}, treating as legacy account")
-                return True
-                
-        except ImportError:
-            pass
-        
-        return False
-        
-    except Exception as e:
-        logger.error(f"Error migrating account to legacy: {e}")
-        return False
-
-def check_account_exists(email):
-    """Check if an account exists in the system"""
-    try:
-        # Check Firebase if available
-        try:
-            import firebase_admin
-            from firebase_admin import auth
-            
-            try:
-                user_record = auth.get_user_by_email(email)
-                return True, "firebase", user_record.uid
-            except auth.UserNotFoundError:
-                pass
-                
-        except ImportError:
-            pass
-        
-        # Check local storage
-        local_users = st.session_state.get("local_users", {})
-        if email in local_users:
-            return True, "local", local_users[email]["uid"]
-        
-        return False, None, None
-        
-    except Exception as e:
-        logger.error(f"Error checking account existence: {e}")
-        return False, None, None
-
-def create_legacy_account_from_existing(email, password, display_name):
-    """Create a legacy account entry for an existing user"""
-    try:
-        # Check if account already exists
-        exists, account_type, user_id = check_account_exists(email)
-        
-        if exists and account_type == "firebase":
-            # Firebase user exists, mark as legacy
-            logger.info(f"Firebase user {email} exists, treating as legacy")
-            return True, user_id, "Existing Firebase account detected"
-        
-        # Create local legacy account
-        user_id = f"legacy_{int(time.time())}"
-        current_time = datetime.now() - timedelta(days=30)  # Set as created 30 days ago
-        
-        local_users = st.session_state.get("local_users", {})
-        local_users[email] = {
-            "uid": user_id,
-            "email": email,
-            "display_name": display_name or email.split("@")[0],
-            "password_hash": hash(password),
-            "created_at": current_time.isoformat(),
-            "email_verified": True,  # Legacy accounts are verified
-            "requires_verification": False,
-            "is_legacy_account": True
-        }
-        st.session_state["local_users"] = local_users
-        
-        logger.info(f"Created legacy account for {email}")
-        return True, user_id, "Legacy account created successfully"
-        
-    except Exception as e:
-        logger.error(f"Error creating legacy account: {e}")
-        return False, None, f"Failed to create legacy account: {str(e)}"
 

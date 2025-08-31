@@ -19,6 +19,11 @@ import time
 from datetime import datetime
 import io
 import uuid
+import firebase_admin.firestore as firestore
+from dotenv import load_dotenv
+
+# Load environment variables from .env file EARLY
+load_dotenv()
 
 # --- Streamlit Page Configuration (MUST BE FIRST) ---
 if not hasattr(st, '_page_config_set') or not st.session_state.get('page_config_set', False):
@@ -58,56 +63,33 @@ def check_environment():
     """Check essential environment variables"""
     issues = []
     
-    # Essential variables
+    # Only check for Google API key (required for Gemini)
     if not os.getenv("GOOGLE_API_KEY"):
         issues.append("GOOGLE_API_KEY is not set (required for Gemini API)")
-    
-    if not os.getenv("GOOGLE_APPLICATION_CREDENTIALS"):
-        issues.append("GOOGLE_APPLICATION_CREDENTIALS is not set (required for Firebase/Firestore)")
-    elif not os.path.exists(os.getenv("GOOGLE_APPLICATION_CREDENTIALS")):
-        issues.append(f"GOOGLE_APPLICATION_CREDENTIALS points to non-existent file: {os.getenv('GOOGLE_APPLICATION_CREDENTIALS')}")
     
     return issues
 
 # Display environment warnings
 environment_issues = check_environment()
 if environment_issues:
-    st.error("⚠️ Environment Configuration Issues:")
+    st.warning("⚠️ Environment Configuration Issues:")
     for issue in environment_issues:
-        st.error(f"• {issue}")
-    st.info("💡 Please check your .env file or environment variables")
-    logger.error(f"Environment issues: {environment_issues}")
-
-# Firebase and Google Cloud imports
-try:
-    from firebase_admin import credentials, auth
-    import firebase_admin
-    from google.cloud import firestore
-    import google.auth
-    import google.oauth2.credentials
-    logger.info("Successfully imported Firebase/Google Cloud libraries")
-except ImportError as e:
-    logger.error(f"Failed to import Firebase/Google Cloud libraries: {e}")
-    st.error(f"❌ Missing Firebase dependencies: {e}")
-    st.info("Please install: pip install firebase-admin google-cloud-firestore")
-    st.stop()
+        st.warning(f"• {issue}")
+    st.info("💡 Please set your GOOGLE_API_KEY environment variable")
+    logger.warning(f"Environment issues: {environment_issues}")
 
 # Import authentication module
 try:
     from src.auth_manager import (
-        initialize_firebase,
-        login_required,
         login_page,
         logout,
         is_authenticated,
-        get_current_user,
-        setup_google_application_credentials
+        get_user_email,
+        get_user_name,
+        get_user_uid,
+        require_auth
     )
     logger.info("Successfully imported auth_manager")
-    
-    # Setup credentials
-    setup_google_application_credentials()
-    initialize_firebase()
     
 except ModuleNotFoundError as e:
     logger.critical(f"ModuleNotFoundError: {e}")
@@ -119,25 +101,13 @@ except Exception as e:
     st.error(f"❌ Authentication setup failed: {e}")
     st.stop()
 
-# Initialize Firestore client
-@st.cache_resource
-def get_firestore_client():
-    """Initialize and cache Firestore client"""
-    try:
-        PROJECT_ID = "multiagentai21-9a8fc"
-        DATABASE_NAME = "multiagentaifirestoredatabase"
-        
-        db = firestore.Client(project=PROJECT_ID, database=DATABASE_NAME)
-        logger.info(f"Firestore client initialized: {PROJECT_ID}/{DATABASE_NAME}")
-        return db
-        
-    except Exception as e:
-        logger.error(f"Firestore initialization error: {e}")
-        st.error(f"❌ Firestore initialization failed: {e}")
-        return None
+# Simple chat history storage (in-memory for now)
+def get_chat_storage():
+    """Get simple chat storage"""
+    return {}
 
-# Initialize Firestore
-db = get_firestore_client()
+# Initialize chat storage
+chat_storage = get_chat_storage()
 
 # Import agent modules
 try:
@@ -160,7 +130,8 @@ def get_agent_system():
         # Check API key
         api_key = os.getenv("GOOGLE_API_KEY")
         if not api_key:
-            raise ValueError("GOOGLE_API_KEY environment variable is not set")
+            logger.warning("GOOGLE_API_KEY not set - some features may be limited")
+            # Continue without API key for basic functionality
         
         # Create agent instance
         agent_instance = MultiAgentCodingAI()
@@ -169,7 +140,8 @@ def get_agent_system():
         
     except Exception as e:
         logger.error(f"Agent system initialization error: {e}")
-        st.error(f"❌ Failed to initialize agent system: {e}")
+        st.warning(f"⚠️ Agent system initialization warning: {e}")
+        st.info("Some features may be limited without proper configuration")
         return None
 
 # Claude AI Inspired Professional UI
@@ -610,80 +582,176 @@ def initialize_session_state():
 # Chat history management
 CHAT_HISTORY_COLLECTION_NAME = "chat_histories"
 
-def get_firestore_chat_collection():
-    """Get Firestore collection for chat histories"""
-    if db is None:
-        st.error("Firestore client not initialized")
+# Initialize Firestore client for database operations
+@st.cache_resource
+def get_firestore_client():
+    """Get Firestore client instance (cached resource)"""
+    try:
+        from src.api.firestore import FirestoreClient
+        client = FirestoreClient()
+        if client.initialized:
+            logger.info("Firestore client initialized successfully")
+        else:
+            logger.warning("Firestore client not initialized - running in offline mode")
+        return client
+    except Exception as e:
+        logger.error(f"Failed to initialize Firestore client: {e}")
         return None
-    
-    user_info = get_current_user()
-    user_uid = user_info.get("uid") if user_info else None
-
-    if not user_uid:
-        st.error("❌ User not authenticated")
-        return None
-    
-    return db.collection("users").document(user_uid).collection(CHAT_HISTORY_COLLECTION_NAME)
 
 def save_chat_history(chat_id: str, messages: list):
-    """Save chat history to Firestore"""
-    chat_collection = get_firestore_chat_collection()
-    if not chat_collection:
-        st.error("❌ Cannot save chat history - user not authenticated")
-        return
-
+    """Save chat history to both session state and database"""
     try:
-        from google.cloud.firestore_v1 import SERVER_TIMESTAMP
+        # Save to session state (for immediate access)
+        if "chat_histories" not in st.session_state:
+            st.session_state.chat_histories = {}
         
-        chat_ref = chat_collection.document(chat_id)
-        doc = chat_ref.get()
-        
-        chat_data = {
+        st.session_state.chat_histories[chat_id] = {
             "chat_id": chat_id,
-            "last_updated": SERVER_TIMESTAMP,
+            "last_updated": datetime.now().isoformat(),
             "message_count": len(messages),
             "messages": messages
         }
         
-        if not doc.exists:
-            chat_data["created_at"] = SERVER_TIMESTAMP
+        # Save to database (for persistence)
+        firestore_client = get_firestore_client()
+        if firestore_client and firestore_client.initialized:
+            try:
+                # Get user info for database storage
+                user_email = get_user_email() if is_authenticated() else "anonymous"
+                user_uid = get_user_uid() if is_authenticated() else "anonymous"
+                
+                # Prepare data for database
+                chat_data = {
+                    'chat_id': chat_id,
+                    'user_email': user_email,
+                    'user_uid': user_uid,
+                    'last_updated': datetime.now().isoformat(),
+                    'message_count': len(messages),
+                    'messages': messages,
+                    'created_at': st.session_state.chat_histories[chat_id].get('created_at', datetime.now().isoformat())
+                }
+                
+                # Save to Firestore
+                doc_ref = firestore_client.db.collection('chat_histories').document(chat_id)
+                doc_ref.set(chat_data, merge=True)
+                logger.info(f"Chat history saved to database: {chat_id}")
+                
+            except Exception as db_error:
+                logger.error(f"Database save error: {db_error}")
+                # Continue with session state only if database fails
         
-        chat_ref.set(chat_data, merge=True)
         logger.info(f"Chat history saved: {chat_id}")
         
     except Exception as e:
         logger.error(f"Error saving chat history: {e}")
-        st.error(f"Failed to save chat history: {e}")
 
 def load_chat_history(chat_id: str) -> list:
-    """Load chat history from Firestore"""
-    chat_collection = get_firestore_chat_collection()
-    if not chat_collection:
-        st.error("❌ Cannot load chat history - user not authenticated")
-        return []
-
+    """Load chat history from database first, then session state as fallback"""
     try:
-        doc = chat_collection.document(chat_id).get()
-        if doc.exists:
-            return doc.to_dict().get("messages", [])
-        return []
+        # Try to load from database first
+        firestore_client = get_firestore_client()
+        if firestore_client and firestore_client.initialized:
+            try:
+                # Get user info for database query
+                user_email = get_user_email() if is_authenticated() else "anonymous"
+                user_uid = get_user_uid() if is_authenticated() else "anonymous"
+                
+                # Query database for this user's chat
+                chat_ref = firestore_client.db.collection('chat_histories').document(chat_id)
+                chat_doc = chat_ref.get()
+                
+                if chat_doc.exists:
+                    chat_data = chat_doc.to_dict()
+                    # Verify this chat belongs to the current user
+                    if chat_data.get('user_uid') == user_uid or chat_data.get('user_email') == user_email:
+                        messages = chat_data.get('messages', [])
+                        logger.info(f"Loaded chat history from database: {chat_id}")
+                        
+                        # Update session state with loaded data
+                        if "chat_histories" not in st.session_state:
+                            st.session_state.chat_histories = {}
+                        st.session_state.chat_histories[chat_id] = chat_data
+                        
+                        return messages
+                    else:
+                        logger.warning(f"Chat {chat_id} does not belong to current user")
+                        return []
+                        
+            except Exception as db_error:
+                logger.error(f"Database load error: {db_error}")
+                # Fall back to session state
+        
+        # Fallback to session state
+        if "chat_histories" not in st.session_state:
+            return []
+        
+        chat_data = st.session_state.chat_histories.get(chat_id, {})
+        return chat_data.get("messages", [])
         
     except Exception as e:
         logger.error(f"Error loading chat history: {e}")
         return []
 
 def get_available_chats() -> list:
-    """Get available chat sessions"""
-    chat_collection = get_firestore_chat_collection()
-    if not chat_collection:
-        return []
-
+    """Get available chat sessions from database first, then session state as fallback"""
     try:
-        chats = []
-        chat_docs = chat_collection.order_by("last_updated", direction=firestore.Query.DESCENDING).stream()
+        # Try to load from database first
+        firestore_client = get_firestore_client()
+        if firestore_client and firestore_client.initialized:
+            try:
+                # Get user info for database query
+                user_email = get_user_email() if is_authenticated() else "anonymous"
+                user_uid = get_user_uid() if is_authenticated() else "anonymous"
+                
+                # Query database for this user's chats
+                chats_query = firestore_client.db.collection('chat_histories').where(
+                    'user_uid', '==', user_uid
+                ).order_by('last_updated', direction=firestore.Query.DESCENDING)
+                
+                chat_docs = chats_query.stream()
+                chats = []
+                
+                for doc in chat_docs:
+                    chat_data = doc.to_dict()
+                    messages = chat_data.get('messages', [])
+                    
+                    preview = "New Chat"
+                    for message in messages:
+                        if message.get("role") == "user":
+                            preview = message.get("content", "New Chat")[:50]
+                            break
+                    
+                    chats.append({
+                        "id": chat_data.get('chat_id'),
+                        "preview": preview,
+                        "created_at": chat_data.get('created_at', datetime.now().isoformat()),
+                        "message_count": len(messages)
+                    })
+                
+                # Update session state with loaded data
+                if "chat_histories" not in st.session_state:
+                    st.session_state.chat_histories = {}
+                
+                for chat in chats:
+                    chat_id = chat["id"]
+                    chat_ref = firestore_client.db.collection('chat_histories').document(chat_id)
+                    chat_doc = chat_ref.get()
+                    if chat_doc.exists:
+                        st.session_state.chat_histories[chat_id] = chat_doc.to_dict()
+                
+                logger.info(f"Loaded {len(chats)} chats from database")
+                return chats
+                
+            except Exception as db_error:
+                logger.error(f"Database query error: {db_error}")
+                # Fall back to session state
         
-        for doc in chat_docs:
-            chat_data = doc.to_dict()
+        # Fallback to session state
+        if "chat_histories" not in st.session_state:
+            return []
+        
+        chats = []
+        for chat_id, chat_data in st.session_state.chat_histories.items():
             messages = chat_data.get("messages", [])
             
             preview = "New Chat"
@@ -692,19 +760,17 @@ def get_available_chats() -> list:
                     preview = message.get("content", "New Chat")[:50]
                     break
             
-            created_at = chat_data.get("created_at")
-            if created_at and hasattr(created_at, 'isoformat'):
-                created_at = created_at.isoformat()
-            else:
-                created_at = datetime.now().isoformat()
+            created_at = chat_data.get("created_at", datetime.now().isoformat())
 
             chats.append({
-                "id": doc.id,
+                "id": chat_id,
                 "preview": preview,
                 "created_at": created_at,
                 "message_count": len(messages)
             })
         
+        # Sort by last updated
+        chats.sort(key=lambda x: x["created_at"], reverse=True)
         return chats
         
     except Exception as e:
@@ -1046,9 +1112,9 @@ def is_acknowledgment(message: str) -> bool:
         'perfect', 'great', 'awesome', 'excellent',
         'good job', 'well done', 'nice work',
         'appreciate it', 'appreciated', 'appreciate',
-        'cool', 'sweet', 'nice', 'good',
+        'cool', 'sweet', 'nice',
         'understood', 'understand', 'got it',
-        'alright', 'all right', 'fine', 'good'
+        'alright', 'all right', 'fine'
     ]
     
     # Check if the message contains any acknowledgment phrases
@@ -1057,7 +1123,7 @@ def is_acknowledgment(message: str) -> bool:
             return True
     
     # Check if it's just a very short acknowledgment
-    if len(clean_message.split()) <= 3 and any(word in clean_message for word in ['thank', 'ok', 'bye', 'got', 'good', 'nice', 'cool']):
+    if len(clean_message.split()) <= 3 and any(word in clean_message for word in ['thank', 'ok', 'bye', 'got', 'nice', 'cool']):
         return True
     
     return False
@@ -1533,12 +1599,11 @@ def display_chat_history_sidebar():
 
 def user_profile_sidebar():
     """Display user profile in sidebar"""
-    user = get_current_user()
     with st.sidebar:
         st.markdown("---")
         st.markdown("### 👤 User Profile")
-        st.write(f"**Name:** {user.get('display_name', 'N/A')}")
-        st.write(f"**Email:** {user.get('email', 'N/A')}")
+        st.write(f"**Name:** {get_user_name() or 'N/A'}")
+        st.write(f"**Email:** {get_user_email() or 'N/A'}")
         
         if st.button("Logout", key="sidebar_logout"):
             logout()
@@ -1556,7 +1621,7 @@ def cleanup_temp_files():
         st.session_state.temp_files = []
 
 # Main application
-@login_required
+@require_auth
 def main_app():
     """Main application logic with modern UI"""
     try:

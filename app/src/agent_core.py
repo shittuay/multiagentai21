@@ -18,11 +18,15 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import io
 import base64
+from dotenv import load_dotenv
 
 import google.generativeai as genai
 from google.cloud import bigquery
 from google.oauth2 import service_account
 from google.cloud import aiplatform
+
+# Load environment variables from .env file
+load_dotenv()
 
 from src.data_analysis import DataAnalyzer
 from src.api.firestore import FirestoreClient
@@ -490,11 +494,58 @@ class AnalysisAgent(BaseAgent):
                 execution_time=time.time() - start_time
             )
 
+    def _safe_eval_math(self, expression: str) -> float:
+        """Safely evaluate mathematical expressions using AST parsing."""
+        import ast
+        import operator
+        
+        # Supported operators
+        ops = {
+            ast.Add: operator.add,
+            ast.Sub: operator.sub,
+            ast.Mult: operator.mul,
+            ast.Div: operator.truediv,
+            ast.Pow: operator.pow,
+            ast.USub: operator.neg,
+            ast.UAdd: operator.pos,
+        }
+        
+        def eval_node(node):
+            if isinstance(node, ast.Constant):  # Python 3.8+
+                return node.value
+            elif isinstance(node, ast.Num):  # Python < 3.8
+                return node.n
+            elif isinstance(node, ast.BinOp):
+                left = eval_node(node.left)
+                right = eval_node(node.right)
+                op = ops.get(type(node.op))
+                if op is None:
+                    raise ValueError(f"Unsupported operation: {type(node.op)}")
+                return op(left, right)
+            elif isinstance(node, ast.UnaryOp):
+                operand = eval_node(node.operand)
+                op = ops.get(type(node.op))
+                if op is None:
+                    raise ValueError(f"Unsupported unary operation: {type(node.op)}")
+                return op(operand)
+            else:
+                raise ValueError(f"Unsupported node type: {type(node)}")
+        
+        try:
+            # Parse the expression
+            tree = ast.parse(expression, mode='eval')
+            # Evaluate safely
+            return eval_node(tree.body)
+        except (SyntaxError, ValueError, ZeroDivisionError) as e:
+            raise ValueError(f"Invalid mathematical expression: {e}")
+
     def _perform_calculations(self, input_data: str, start_time: float) -> AgentResponse:
         """Perform mathematical calculations."""
         try:
             # Extract numbers and operations
             import re
+            import ast
+            import operator
             
             # Simple calculation patterns
             if '+' in input_data or '-' in input_data or '*' in input_data or '/' in input_data:
@@ -503,7 +554,7 @@ class AnalysisAgent(BaseAgent):
                 if expr_match:
                     expression = expr_match.group().strip()
                     try:
-                        result = eval(expression)  # Note: In production, use safer evaluation
+                        result = self._safe_eval_math(expression)
                         calculation_result = f"""
 ## 🧮 Calculation Result
 

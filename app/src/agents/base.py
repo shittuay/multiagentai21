@@ -484,6 +484,16 @@ class BaseAgent:
                     }
                 )
             
+            # Check if model is initialized
+            if not self.model:
+                return AgentResponse(
+                    content="AI model not initialized. Please check configuration.",
+                    success=False,
+                    agent_type=self.agent_type.value,
+                    execution_time=time.time() - start_time,
+                    error_message="Model not initialized"
+                )
+            
             # Process the input using the agent's model
             response = self._process_with_model(input_data)
             
@@ -511,7 +521,7 @@ class BaseAgent:
         except Exception as e:
             logger.error(f"Error in {self.__class__.__name__}.process: {e}", exc_info=True)
             return AgentResponse(
-                content="",
+                content=f"Error processing request: {str(e)}",
                 success=False,
                 agent_type=self.agent_type.value,
                 error=type(e).__name__,

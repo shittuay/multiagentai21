@@ -15,6 +15,10 @@ import google.generativeai as genai
 from pathlib import Path
 import tempfile
 import shutil
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 # Optional imports for advanced features
 try:
@@ -35,28 +39,23 @@ except ImportError:
     kubernetes = None
     logging.warning("Kubernetes SDK not available - K8s features disabled")
 
-from .base import BaseAgent
+from src.base_agent import BaseAgent
 from src.types import AgentType, AgentResponse
 
 logger = logging.getLogger(__name__)
 
 class DevOpsAutomationAgent(BaseAgent):
-    """
-    A powerful DevOps automation agent capable of handling complex automation tasks:
-    - Infrastructure as Code (Terraform, CloudFormation, Ansible)
-    - CI/CD Pipeline automation (Jenkins, GitLab CI, GitHub Actions, Azure DevOps)
-    - Container orchestration (Docker, Kubernetes)
-    - Monitoring and logging (Prometheus, Grafana, ELK Stack)
-    - Cloud platform automation (AWS, Azure, GCP)
-    - Security automation (IAM, secrets management, compliance)
-    - Database automation (backups, migrations, scaling)
-    - Network automation (load balancers, firewalls, DNS)
-    """
+    """DevOps automation agent that properly inherits from BaseAgent."""
 
     def __init__(self):
+        # Don't call _initialize_model here - BaseAgent does it
         super().__init__(AgentType.AUTOMATION)
         self.name = "DevOpsAutomationAgent"
         self.description = "Powerful DevOps automation specialist for infrastructure, CI/CD, and operations"
+        
+        # Store chat history and other state
+        self.chat_history = []
+        self.files = []
         
         # DevOps capabilities
         self.capabilities = {
@@ -103,71 +102,86 @@ class DevOpsAutomationAgent(BaseAgent):
             }
         }
 
-    def _initialize_model(self):
-        """Initialize the AI model for DevOps automation tasks."""
-        try:
-            api_key = os.getenv("GOOGLE_API_KEY")
-            if not api_key:
-                logger.error("GOOGLE_API_KEY not found")
-                return None
-            
-            genai.configure(api_key=api_key)
-            model = genai.GenerativeModel("gemini-pro")
-            logger.info("DevOps Automation Agent model initialized successfully")
-            return model
-        except Exception as e:
-            logger.error(f"Failed to initialize model: {e}")
-            return None
-
-    def process(self, input_data: str, session_id: Optional[str] = None) -> AgentResponse:
-        """Process DevOps automation requests."""
-        start_time = time.time()
+    def debug_info(self):
+        """Print debug information about the agent."""
+        logger.info(f"DevOpsAutomationAgent Debug Info:")
+        logger.info(f"  - Model initialized: {self.model is not None}")
+        logger.info(f"  - Agent type: {self.agent_type}")
+        logger.info(f"  - Capabilities: {list(self.capabilities.keys())}")
         
+        if self.model:
+            logger.info(f"  - Model name: {getattr(self.model, 'model_name', 'Unknown')}")
+        
+        api_key = os.getenv("GOOGLE_API_KEY")
+        logger.info(f"  - API Key set: {api_key is not None}")
+        if api_key:
+            logger.info(f"  - API Key length: {len(api_key)}")
+
+    def _process_with_model(self, prompt: str, chat_history: Optional[List[Dict]] = None) -> str:
+        """Process input using the model - required by BaseAgent."""
         try:
             # Determine the type of automation task
-            task_type = self._determine_task_type(input_data)
+            task_type = self._determine_task_type(prompt)
+            logger.info(f"DevOps task type detected: {task_type}")
             
             # Route to appropriate handler
             if task_type == "infrastructure":
-                response = self._handle_infrastructure_automation(input_data)
+                response = self._handle_infrastructure_automation(prompt, chat_history)
             elif task_type == "ci_cd":
-                response = self._handle_cicd_automation(input_data)
+                response = self._handle_cicd_automation(prompt, chat_history)
             elif task_type == "monitoring":
-                response = self._handle_monitoring_automation(input_data)
+                response = self._handle_monitoring_automation(prompt, chat_history)
             elif task_type == "cloud":
-                response = self._handle_cloud_automation(input_data)
+                response = self._handle_cloud_automation(prompt, chat_history)
             elif task_type == "security":
-                response = self._handle_security_automation(input_data)
+                response = self._handle_security_automation(prompt, chat_history)
             elif task_type == "database":
-                response = self._handle_database_automation(input_data)
+                response = self._handle_database_automation(prompt, chat_history)
             elif task_type == "container":
-                response = self._handle_container_automation(input_data)
+                response = self._handle_container_automation(prompt, chat_history)
             else:
-                response = self._handle_general_automation(input_data)
+                response = self._handle_general_automation(prompt, chat_history)
             
-            execution_time = time.time() - start_time
+            return response if response else "Error: No response generated"
+            
+        except Exception as e:
+            logger.error(f"Error in _process_with_model: {e}")
+            return f"Error processing request: {str(e)}"
+
+    def process(self, input_data: str, session_id: Optional[str] = None, **kwargs) -> AgentResponse:
+        """Process input data and return a response."""
+        try:
+            # Get chat history from kwargs if provided
+            chat_history = kwargs.get('chat_history', [])
+            files = kwargs.get('files', [])
+            
+            # Store the additional parameters
+            if chat_history:
+                self.chat_history = chat_history
+            if files:
+                self.files = files
+            
+            # Process using the model
+            response_text = self._process_with_model(input_data, chat_history)
             
             return AgentResponse(
-                content=response,
-                success=True,
+                content=response_text,
                 agent_type=self.agent_type.value,
-                execution_time=execution_time,
                 metadata={
-                    'task_type': task_type,
-                    'capabilities_used': self._get_used_capabilities(task_type),
+                    'task_type': self._determine_task_type(input_data),
+                    'capabilities_used': self._get_used_capabilities(self._determine_task_type(input_data)),
                     'session_id': session_id
                 }
             )
             
         except Exception as e:
-            logger.error(f"Error in DevOpsAutomationAgent.process: {e}", exc_info=True)
+            logger.error(f"Error in process: {e}")
             return AgentResponse(
-                content="",
-                error=str(e),
-                success=False,
+                content=f"Error processing request: {str(e)}",
                 agent_type=self.agent_type.value,
-                execution_time=time.time() - start_time,
-                error_message=f"DevOps automation error: {str(e)}"
+                success=False,
+                error=str(e),
+                metadata={'session_id': session_id}
             )
 
     def _determine_task_type(self, input_data: str) -> str:
@@ -211,64 +225,96 @@ class DevOpsAutomationAgent(BaseAgent):
         
         return "general"
 
-    def _handle_infrastructure_automation(self, input_data: str) -> str:
+    def _handle_infrastructure_automation(self, input_data: str, chat_history: Optional[List[Dict]] = None) -> str:
         """Handle infrastructure automation tasks."""
         prompt = f"""
-        You are an expert DevOps engineer specializing in Infrastructure as Code and automation.
-        
+        You are an expert DevOps engineer. The user needs COMPLETE, WORKING INFRASTRUCTURE CODE.
+
         User Request: {input_data}
-        
-        Provide a comprehensive response including:
-        1. **Analysis**: What infrastructure components are needed
-        2. **Tools**: Recommended tools (Terraform, Ansible, CloudFormation, etc.)
-        3. **Code Examples**: Practical code snippets and configurations
-        4. **Best Practices**: Security, scalability, and maintainability considerations
-        5. **Implementation Steps**: Step-by-step guide for implementation
-        6. **Monitoring**: How to monitor and maintain the infrastructure
-        
-        Focus on:
-        - Infrastructure as Code principles
-        - Security best practices
-        - Scalability and performance
-        - Cost optimization
-        - Disaster recovery
-        - Compliance requirements
-        
-        Provide actionable, production-ready solutions.
+
+        CRITICAL: Provide actual working code files, not just explanations!
+
+        Response Format:
+        1. **Working Code First** (complete files with proper syntax)
+        2. **Usage Commands** (exact commands to run)
+        3. **Brief Explanation** (what the code does)
+
+        For Terraform requests, provide:
+        - Complete .tf files (main.tf, variables.tf, outputs.tf)
+        - terraform init, plan, apply commands
+        - Provider configurations
+        - Resource blocks with all required arguments
+
+        For Ansible requests, provide:
+        - Complete playbook.yml with tasks
+        - inventory file if needed
+        - ansible-playbook run commands
+        - Variable definitions
+
+        For CloudFormation requests, provide:
+        - Complete template.yaml/json
+        - AWS CLI deployment commands
+        - Parameters and outputs
+
+        CODE REQUIREMENTS:
+        - Complete, runnable files
+        - Proper resource names and references
+        - Security groups, IAM policies where needed
+        - Comments explaining complex sections
+        - Production-ready configurations
+        - Error handling and validation
+
+        START WITH THE WORKING CODE IMMEDIATELY!
         """
         
-        return self._generate_response(prompt)
+        return self._generate_response(prompt, chat_history)
 
-    def _handle_cicd_automation(self, input_data: str) -> str:
+    def _handle_cicd_automation(self, input_data: str, chat_history: Optional[List[Dict]] = None) -> str:
         """Handle CI/CD pipeline automation tasks."""
         prompt = f"""
-        You are an expert DevOps engineer specializing in CI/CD pipeline automation.
-        
+        You are an expert DevOps engineer. The user needs COMPLETE, WORKING CI/CD PIPELINE CODE.
+
         User Request: {input_data}
-        
-        Provide a comprehensive response including:
-        1. **Pipeline Design**: Optimal CI/CD pipeline architecture
-        2. **Tool Selection**: Best tools for the specific use case (Jenkins, GitLab CI, GitHub Actions, etc.)
-        3. **Configuration**: Pipeline configuration files and scripts
-        4. **Security**: Security scanning and compliance checks
-        5. **Testing Strategy**: Automated testing integration
-        6. **Deployment Strategy**: Blue-green, canary, or rolling deployments
-        7. **Monitoring**: Pipeline monitoring and alerting
-        
-        Focus on:
-        - Automation best practices
-        - Security and compliance
-        - Performance optimization
-        - Error handling and rollback strategies
-        - Multi-environment deployments
-        - GitOps principles
-        
-        Provide production-ready pipeline configurations.
+
+        CRITICAL: Provide actual working pipeline files, not explanations!
+
+        Response Format:
+        1. **Complete Pipeline File** (working configuration)
+        2. **Setup Commands** (how to implement)
+        3. **Trigger Instructions** (how to run)
+
+        For Jenkins requests, provide:
+        - Complete Jenkinsfile with all stages
+        - Pipeline steps and post actions
+        - Environment variables and credentials
+        - Build, test, deploy stages
+
+        For GitHub Actions, provide:
+        - Complete .github/workflows/[name].yml
+        - All workflow steps with proper actions
+        - Secrets and environment variables
+        - Matrix builds if appropriate
+
+        For GitLab CI, provide:
+        - Complete .gitlab-ci.yml
+        - All stages and job definitions
+        - Docker images and scripts
+        - Deployment configurations
+
+        CODE REQUIREMENTS:
+        - Complete, functional pipeline files
+        - Proper syntax and indentation
+        - Error handling and notifications
+        - Security scanning integration
+        - Deployment strategies
+        - Environment-specific configurations
+
+        PROVIDE THE WORKING PIPELINE CODE FIRST!
         """
         
-        return self._generate_response(prompt)
+        return self._generate_response(prompt, chat_history)
 
-    def _handle_monitoring_automation(self, input_data: str) -> str:
+    def _handle_monitoring_automation(self, input_data: str, chat_history: Optional[List[Dict]] = None) -> str:
         """Handle monitoring and observability automation tasks."""
         prompt = f"""
         You are an expert DevOps engineer specializing in monitoring, observability, and alerting.
@@ -295,9 +341,9 @@ class DevOpsAutomationAgent(BaseAgent):
         Provide actionable monitoring solutions.
         """
         
-        return self._generate_response(prompt)
+        return self._generate_response(prompt, chat_history)
 
-    def _handle_cloud_automation(self, input_data: str) -> str:
+    def _handle_cloud_automation(self, input_data: str, chat_history: Optional[List[Dict]] = None) -> str:
         """Handle cloud platform automation tasks."""
         prompt = f"""
         You are an expert DevOps engineer specializing in cloud platform automation (AWS, Azure, GCP).
@@ -325,9 +371,9 @@ class DevOpsAutomationAgent(BaseAgent):
         Provide cloud-native automation solutions.
         """
         
-        return self._generate_response(prompt)
+        return self._generate_response(prompt, chat_history)
 
-    def _handle_security_automation(self, input_data: str) -> str:
+    def _handle_security_automation(self, input_data: str, chat_history: Optional[List[Dict]] = None) -> str:
         """Handle security automation tasks."""
         prompt = f"""
         You are an expert DevOps engineer specializing in security automation and compliance.
@@ -355,9 +401,9 @@ class DevOpsAutomationAgent(BaseAgent):
         Provide security-first automation solutions.
         """
         
-        return self._generate_response(prompt)
+        return self._generate_response(prompt, chat_history)
 
-    def _handle_database_automation(self, input_data: str) -> str:
+    def _handle_database_automation(self, input_data: str, chat_history: Optional[List[Dict]] = None) -> str:
         """Handle database automation tasks."""
         prompt = f"""
         You are an expert DevOps engineer specializing in database automation and management.
@@ -385,39 +431,49 @@ class DevOpsAutomationAgent(BaseAgent):
         Provide database automation solutions.
         """
         
-        return self._generate_response(prompt)
+        return self._generate_response(prompt, chat_history)
 
-    def _handle_container_automation(self, input_data: str) -> str:
+    def _handle_container_automation(self, input_data: str, chat_history: Optional[List[Dict]] = None) -> str:
         """Handle container and Kubernetes automation tasks."""
         prompt = f"""
-        You are an expert DevOps engineer specializing in container orchestration and Kubernetes.
-        
+        You are an expert DevOps engineer. The user needs WORKING, PRODUCTION-READY CODE.
+
         User Request: {input_data}
-        
-        Provide a comprehensive response including:
-        1. **Container Strategy**: Containerization strategy and best practices
-        2. **Kubernetes Configuration**: K8s manifests and configurations
-        3. **Helm Charts**: Helm chart development and deployment
-        4. **Service Mesh**: Service mesh implementation (Istio, Linkerd)
-        5. **Scaling**: Horizontal and vertical pod autoscaling
-        6. **Security**: Container security and RBAC
-        7. **Monitoring**: K8s monitoring and observability
-        
-        Focus on:
-        - Container best practices
-        - Kubernetes patterns
-        - Service mesh architecture
-        - Security and compliance
-        - Performance optimization
-        - GitOps deployment
-        - Monitoring and troubleshooting
-        
-        Provide container-native automation solutions.
+
+        IMPORTANT: You MUST provide actual working code/configuration files, not just explanations!
+
+        Response Format:
+        1. **Brief Explanation** (2-3 sentences max)
+        2. **Complete Working Code** with proper syntax
+        3. **Usage Instructions** (how to run/deploy)
+        4. **Best Practices** (security, optimization)
+
+        For Docker requests, provide:
+        - Complete Dockerfile with all stages
+        - docker-compose.yml if needed
+        - Build and run commands
+        - Security optimizations
+
+        For Kubernetes requests, provide:
+        - Complete YAML manifests
+        - kubectl apply commands
+        - Service definitions
+        - ConfigMaps/Secrets if needed
+
+        CODE REQUIREMENTS:
+        - Use proper syntax and formatting
+        - Include all necessary dependencies
+        - Add security best practices
+        - Use multi-stage builds when appropriate
+        - Include comments explaining key sections
+        - Provide complete, runnable examples
+
+        Start your response with the working code, not lengthy explanations!
         """
         
-        return self._generate_response(prompt)
+        return self._generate_response(prompt, chat_history)
 
-    def _handle_general_automation(self, input_data: str) -> str:
+    def _handle_general_automation(self, input_data: str, chat_history: Optional[List[Dict]] = None) -> str:
         """Handle general automation tasks."""
         prompt = f"""
         You are an expert DevOps engineer specializing in automation and process optimization.
@@ -445,16 +501,40 @@ class DevOpsAutomationAgent(BaseAgent):
         Provide comprehensive automation solutions.
         """
         
-        return self._generate_response(prompt)
+        return self._generate_response(prompt, chat_history)
 
-    def _generate_response(self, prompt: str) -> str:
+    def _generate_response(self, prompt: str, chat_history: Optional[List[Dict]] = None) -> str:
         """Generate response using the AI model."""
         try:
             if not self.model:
                 return "Error: AI model not initialized"
             
-            response = self.model.generate_content(prompt)
-            return response.text
+            # Build the chat history for the model
+            contents = []
+            if chat_history:
+                for message in chat_history:
+                    if not message.get("content"):
+                        continue
+                    if "MultiAgentAI21 can make mistakes" in message["content"]:
+                        continue
+
+                    if message["role"] == "user":
+                        contents.append({"role": "user", "parts": [message["content"]]})
+                    elif message["role"] == "assistant":
+                        contents.append({"role": "model", "parts": [message["content"]]})
+            
+            # Add the current prompt as the last user message
+            contents.append({"role": "user", "parts": [prompt]})
+            
+            # Use generate_content with the entire 'contents' list
+            response = self.model.generate_content(contents)
+            
+            if hasattr(response, 'text') and response.text:
+                return response.text.strip()
+            elif hasattr(response, 'parts') and response.parts:
+                return ''.join([part.text for part in response.parts if hasattr(part, 'text')])
+            else:
+                return "Error: No text content in model response"
             
         except Exception as e:
             logger.error(f"Error generating response: {e}")
@@ -465,6 +545,20 @@ class DevOpsAutomationAgent(BaseAgent):
         if task_type in self.capabilities:
             return list(self.capabilities[task_type].keys())
         return []
+
+    def test_model_connection(self) -> tuple[bool, str]:
+        """Test if the model can be reached and is working."""
+        try:
+            if not self.model:
+                return False, "Model not initialized"
+            
+            test_response = self.model.generate_content("Test connection")
+            if test_response and hasattr(test_response, 'text'):
+                return True, "Model connection successful"
+            else:
+                return False, "Model returned empty response"
+        except Exception as e:
+            return False, f"Model connection failed: {str(e)}"
 
     def generate_terraform_config(self, requirements: Dict[str, Any]) -> str:
         """Generate Terraform configuration based on requirements."""
@@ -627,3 +721,4 @@ pipeline {{
     }}
 }}
 """
+
