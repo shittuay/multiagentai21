@@ -21,9 +21,19 @@ import base64
 from dotenv import load_dotenv
 
 import google.generativeai as genai
-from google.cloud import bigquery
-from google.oauth2 import service_account
-from google.cloud import aiplatform
+
+# Optional Google Cloud imports
+try:
+    from google.cloud import bigquery
+    from google.oauth2 import service_account
+    from google.cloud import aiplatform
+    GOOGLE_CLOUD_AVAILABLE = True
+except ImportError as e:
+    logging.warning(f"Google Cloud libraries not available: {e}")
+    bigquery = None
+    service_account = None
+    aiplatform = None
+    GOOGLE_CLOUD_AVAILABLE = False
 
 # Load environment variables from .env file
 load_dotenv()
