@@ -151,6 +151,8 @@ class DevOpsAutomationAgent(BaseAgent):
     def process(self, input_data: str, session_id: Optional[str] = None, **kwargs) -> AgentResponse:
         """Process input data and return a response."""
         try:
+            logger.info(f"Processing DevOps request: {input_data[:100]}...")
+            
             # Get chat history from kwargs if provided
             chat_history = kwargs.get('chat_history', [])
             files = kwargs.get('files', [])
@@ -161,23 +163,36 @@ class DevOpsAutomationAgent(BaseAgent):
             if files:
                 self.files = files
             
+            # Determine task type
+            task_type = self._determine_task_type(input_data)
+            logger.info(f"Detected task type: {task_type}")
+            
             # Process using the model
             response_text = self._process_with_model(input_data, chat_history)
+            
+            # Validate response
+            if not response_text or response_text.strip() == "":
+                logger.error("Empty response from model")
+                response_text = "Error: No response generated from the AI model. Please try again."
+            elif "Error" in response_text and len(response_text) < 50:
+                logger.error(f"Short error response: {response_text}")
+            else:
+                logger.info(f"Generated response of length: {len(response_text)}")
             
             return AgentResponse(
                 content=response_text,
                 agent_type=self.agent_type.value,
                 metadata={
-                    'task_type': self._determine_task_type(input_data),
-                    'capabilities_used': self._get_used_capabilities(self._determine_task_type(input_data)),
+                    'task_type': task_type,
+                    'capabilities_used': self._get_used_capabilities(task_type),
                     'session_id': session_id
                 }
             )
             
         except Exception as e:
-            logger.error(f"Error in process: {e}")
+            logger.error(f"Error in process: {e}", exc_info=True)
             return AgentResponse(
-                content=f"Error processing request: {str(e)}",
+                content=f"Error processing DevOps request: {str(e)}",
                 agent_type=self.agent_type.value,
                 success=False,
                 error=str(e),
@@ -507,7 +522,10 @@ class DevOpsAutomationAgent(BaseAgent):
         """Generate response using the AI model."""
         try:
             if not self.model:
+                logger.error("AI model not initialized")
                 return "Error: AI model not initialized"
+            
+            logger.info(f"Generating response for prompt length: {len(prompt)}")
             
             # Build the chat history for the model
             contents = []
@@ -526,18 +544,27 @@ class DevOpsAutomationAgent(BaseAgent):
             # Add the current prompt as the last user message
             contents.append({"role": "user", "parts": [prompt]})
             
+            logger.info(f"Sending {len(contents)} messages to model")
+            
             # Use generate_content with the entire 'contents' list
             response = self.model.generate_content(contents)
             
+            logger.info(f"Model response received: {type(response)}")
+            
             if hasattr(response, 'text') and response.text:
-                return response.text.strip()
+                result = response.text.strip()
+                logger.info(f"Successfully extracted text response of length: {len(result)}")
+                return result
             elif hasattr(response, 'parts') and response.parts:
-                return ''.join([part.text for part in response.parts if hasattr(part, 'text')])
+                result = ''.join([part.text for part in response.parts if hasattr(part, 'text')])
+                logger.info(f"Successfully extracted parts response of length: {len(result)}")
+                return result
             else:
+                logger.error(f"No text content in model response. Response attributes: {dir(response)}")
                 return "Error: No text content in model response"
             
         except Exception as e:
-            logger.error(f"Error generating response: {e}")
+            logger.error(f"Error generating response: {e}", exc_info=True)
             return f"Error generating response: {str(e)}"
 
     def _get_used_capabilities(self, task_type: str) -> List[str]:

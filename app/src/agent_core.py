@@ -340,9 +340,78 @@ class AnalysisAgent(BaseAgent):
     """Agent for actual data analysis tasks."""
 
     def __init__(self):
-        """Initialize the analysis agent."""
-        super().__init__(AgentType.DATA_ANALYSIS)
+        """Initialize the analysis agent with quota-resilient fallback."""
+        try:
+            super().__init__(AgentType.DATA_ANALYSIS)
+        except Exception as e:
+            # If model initialization fails due to quota, continue with fallback
+            logger.warning(f"Model initialization failed, using fallback mode: {e}")
+            self.agent_type = AgentType.DATA_ANALYSIS
+            self.model = None
+            self.performance_metrics = {
+                'total_requests': 0,
+                'successful_requests': 0,
+                'average_response_time': 0.0,
+                'user_satisfaction_scores': [],
+                'common_failure_patterns': [],
+                'improvement_suggestions': []
+            }
+            self.learning_history = []
+            self.adaptive_prompts = {}
+            
         self.analyzer = DataAnalyzer() if 'DataAnalyzer' in globals() else None
+    
+    def _safe_process_with_model(self, prompt: str, chat_history: Optional[List[Dict]] = None) -> str:
+        """Safely process with AI model, falling back to basic response if quota exceeded."""
+        try:
+            if self.model:
+                return self._process_with_model(prompt, chat_history)
+            else:
+                logger.warning("AI model not available, using fallback response")
+                return self._generate_fallback_response(prompt)
+        except Exception as e:
+            error_msg = str(e).lower()
+            if "quota" in error_msg or "rate" in error_msg or "429" in error_msg:
+                logger.warning("API quota exceeded, using fallback response")
+                return self._generate_fallback_response(prompt)
+            else:
+                raise e
+    
+    def _generate_fallback_response(self, prompt: str) -> str:
+        """Generate a basic fallback response when AI model is not available."""
+        if "sample data" in prompt.lower():
+            return """
+            {
+                "sample_data": [
+                    {"name": "Alice", "age": 25, "salary": 50000, "department": "Engineering"},
+                    {"name": "Bob", "age": 30, "salary": 60000, "department": "Sales"},
+                    {"name": "Charlie", "age": 35, "salary": 70000, "department": "Engineering"},
+                    {"name": "Diana", "age": 28, "salary": 55000, "department": "Marketing"},
+                    {"name": "Eve", "age": 32, "salary": 65000, "department": "Sales"}
+                ]
+            }
+            """
+        else:
+            return """
+            ## 🔍 Data Analysis Summary
+
+            **Note**: This analysis was performed with limited AI capabilities due to API quota restrictions. 
+            For more detailed insights, please ensure your Google Cloud API quota is available.
+
+            ### Key Recommendations:
+            1. **Data Quality**: Check for missing values and outliers
+            2. **Statistical Analysis**: Review descriptive statistics for each column
+            3. **Correlations**: Look for relationships between numerical variables
+            4. **Distribution**: Examine the distribution of key variables
+            5. **Segmentation**: Consider grouping data by categorical variables
+
+            ### Next Steps:
+            - Upload your CSV file for automated analysis
+            - Specify particular questions you'd like answered
+            - Request specific calculations or visualizations
+
+            For full AI-powered analysis capabilities, please check your Google Cloud API quota limits.
+            """
     
     def add_user_feedback(self, satisfaction_score: int, feedback_text: str = ""):
         """Add user feedback for continuous improvement."""
@@ -439,11 +508,23 @@ class AnalysisAgent(BaseAgent):
             
             for file in files:
                 if hasattr(file, 'name') and file.name.endswith(('.csv', '.xlsx', '.xls')):
-                    # Read the file
-                    if file.name.endswith('.csv'):
-                        df = pd.read_csv(file)
-                    else:
-                        df = pd.read_excel(file)
+                    # Read the file - handle both file paths and file objects
+                    try:
+                        if file.name.endswith('.csv'):
+                            if hasattr(file, 'filepath'):
+                                # Handle mock file objects with filepath
+                                df = pd.read_csv(file.filepath)
+                            else:
+                                df = pd.read_csv(file)
+                        else:
+                            if hasattr(file, 'filepath'):
+                                # Handle mock file objects with filepath
+                                df = pd.read_excel(file.filepath)
+                            else:
+                                df = pd.read_excel(file)
+                    except Exception as e:
+                        logger.error(f"Error reading file {file.name}: {e}")
+                        continue
                     
                     # Perform comprehensive analysis
                     analysis_result = self._perform_dataframe_analysis(df, file.name, request)
@@ -644,7 +725,7 @@ class AnalysisAgent(BaseAgent):
             Make the data realistic and varied to enable meaningful analysis.
             """
             
-            ai_response = self._process_with_model(sample_data_prompt, chat_history)
+            ai_response = self._safe_process_with_model(sample_data_prompt, chat_history)
             
             try:
                 # Extract JSON from response
@@ -696,7 +777,7 @@ class AnalysisAgent(BaseAgent):
             Be specific and practical.
             """
             
-            response_text = self._process_with_model(analysis_prompt, chat_history)
+            response_text = self._safe_process_with_model(analysis_prompt, chat_history)
             
             return AgentResponse(
                 content=response_text,
