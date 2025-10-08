@@ -62,11 +62,11 @@ logger.info("Application starting...")
 def check_environment():
     """Check essential environment variables"""
     issues = []
-    
-    # Only check for Google API key (required for Gemini)
-    if not os.getenv("GOOGLE_API_KEY"):
-        issues.append("GOOGLE_API_KEY is not set (required for Gemini API)")
-    
+
+    # Check for OpenRouter API key (required - Gemini is disabled)
+    if not os.getenv("OPENROUTER_API_KEY"):
+        issues.append("OPENROUTER_API_KEY is not set (required for AI features)")
+
     return issues
 
 # Display environment warnings
@@ -75,7 +75,7 @@ if environment_issues:
     st.warning("⚠️ Environment Configuration Issues:")
     for issue in environment_issues:
         st.warning(f"• {issue}")
-    st.info("💡 Please set your GOOGLE_API_KEY environment variable")
+    st.info("💡 Please set your OPENROUTER_API_KEY environment variable in Streamlit Cloud secrets")
     logger.warning(f"Environment issues: {environment_issues}")
 
 # Import authentication module
@@ -126,18 +126,18 @@ def get_agent_system():
     """Create and return the MultiAgentAI21 instance (cached resource)"""
     try:
         logger.info("Initializing MultiAgentAI21...")
-        
+
         # Check API key
-        api_key = os.getenv("GOOGLE_API_KEY")
+        api_key = os.getenv("OPENROUTER_API_KEY")
         if not api_key:
-            logger.warning("GOOGLE_API_KEY not set - some features may be limited")
+            logger.warning("OPENROUTER_API_KEY not set - AI features will be limited")
             # Continue without API key for basic functionality
-        
+
         # Create agent instance
         agent_instance = MultiAgentCodingAI()
         logger.info("MultiAgentAI21 initialized successfully")
         return agent_instance
-        
+
     except Exception as e:
         logger.error(f"Agent system initialization error: {e}")
         st.warning(f"⚠️ Agent system initialization warning: {e}")
@@ -1030,102 +1030,39 @@ def display_professional_chat_messages():
                     
                     if metadata:
                         st.caption(" | ".join(metadata))
-                    
-                    # Add feedback collection for assistant messages
-                    if st.session_state.agent and message.get("agent_type"):
-                        st.markdown("---")
-                        st.markdown("**Rate this response:**")
-                        
-                        col1, col2, col3, col4, col5 = st.columns(5)
-                        
-                        feedback_key = f"feedback_{i}"
-                        if feedback_key not in st.session_state:
-                            st.session_state[feedback_key] = None
-                        
-                        with col1:
-                            if st.button("😞", key=f"rate_1_{i}", help="Very Dissatisfied"):
-                                st.session_state[feedback_key] = 1
-                                st.success("Feedback recorded!")
-                        
-                        with col2:
-                            if st.button("😐", key=f"rate_2_{i}", help="Dissatisfied"):
-                                st.session_state[feedback_key] = 2
-                                st.success("Feedback recorded!")
-                        
-                        with col3:
-                            if st.button("😊", key=f"rate_3_{i}", help="Neutral"):
-                                st.session_state[feedback_key] = 3
-                                st.success("Feedback recorded!")
-                        
-                        with col4:
-                            if st.button("😄", key=f"rate_4_{i}", help="Satisfied"):
-                                st.session_state[feedback_key] = 4
-                                st.success("Feedback recorded!")
-                        
-                        with col5:
-                            if st.button("🤩", key=f"rate_5_{i}", help="Very Satisfied"):
-                                st.session_state[feedback_key] = 5
-                                st.success("Feedback recorded!")
-                        
-                        # If feedback was given, add it to the agent system
-                        if st.session_state[feedback_key] is not None:
-                            try:
-                                # Handle acknowledgment responses differently
-                                if message["agent_type"] == "acknowledgment":
-                                    # For acknowledgments, just record general feedback
-                                    st.session_state.agent.add_user_feedback(
-                                        "general",
-                                        st.session_state[feedback_key],
-                                        f"Acknowledgment response feedback for message {i+1}"
-                                    )
-                                else:
-                                    # Get the specific agent instance for feedback
-                                    agent_type_enum = AgentType(message["agent_type"])
-                                    if agent_type_enum in st.session_state.agent.agents:
-                                        st.session_state.agent.agents[agent_type_enum].add_user_feedback(
-                                            st.session_state[feedback_key],
-                                            f"Response feedback for message {i+1}"
-                                        )
-                                    # Also record system-wide feedback
-                                    st.session_state.agent.add_user_feedback(
-                                        message["agent_type"],
-                                        st.session_state[feedback_key],
-                                        f"Response feedback for message {i+1}"
-                                    )
-                            except Exception as e:
-                                st.error(f"Error recording feedback: {e}")
 
 def is_acknowledgment(message: str) -> bool:
     """Check if the message is an acknowledgment like 'thank you', 'thanks', 'ok', etc."""
     if not message or not isinstance(message, str):
         return False
-    
+
     # Convert to lowercase and remove punctuation for comparison
     clean_message = message.lower().strip()
     clean_message = ''.join(c for c in clean_message if c.isalnum() or c.isspace())
-    
-    # Common acknowledgment phrases
-    acknowledgment_phrases = [
-        'thank you', 'thanks', 'thankyou', 'thx', 'tx',
-        'ok', 'okay', 'k', 'got it', 'gotit',
-        'bye', 'goodbye', 'see you', 'seeya',
-        'perfect', 'great', 'awesome', 'excellent',
-        'good job', 'well done', 'nice work',
-        'appreciate it', 'appreciated', 'appreciate',
-        'cool', 'sweet', 'nice',
-        'understood', 'understand', 'got it',
-        'alright', 'all right', 'fine'
+
+    # Only match very specific, exact acknowledgment phrases to avoid false positives
+    # Must be a short message (5 words or less) to be considered acknowledgment
+    words = clean_message.split()
+    if len(words) > 5:
+        return False
+
+    # Exact match acknowledgment phrases
+    exact_acknowledgments = [
+        'thank you', 'thanks', 'thankyou', 'thx', 'ty',
+        'ok', 'okay',
+        'bye', 'goodbye',
+        'got it', 'gotit',
+        'k'
     ]
-    
-    # Check if the message contains any acknowledgment phrases
-    for phrase in acknowledgment_phrases:
-        if phrase in clean_message:
-            return True
-    
-    # Check if it's just a very short acknowledgment
-    if len(clean_message.split()) <= 3 and any(word in clean_message for word in ['thank', 'ok', 'bye', 'got', 'nice', 'cool']):
+
+    # Check if the entire message is an acknowledgment
+    if clean_message in exact_acknowledgments:
         return True
-    
+
+    # Check if it starts with thank/thanks
+    if words[0] in ['thank', 'thanks', 'thankyou', 'thx', 'ty']:
+        return True
+
     return False
 
 def generate_acknowledgment_response() -> str:
@@ -1260,79 +1197,52 @@ def display_claude_chat_interface():
     # Initialize variables at function scope
     uploaded_files = None
     send_clicked = False
-    
+
     # Initialize session state for input clearing
     if "input_counter" not in st.session_state:
         st.session_state.input_counter = 0
-    
-    st.markdown('<div class="claude-card">', unsafe_allow_html=True)
+
     st.header("💬 AI Assistant")
-    
+
     # Agent selection
     display_claude_agent_selection()
 
-    # Claude chat container
+    # Chat interface
     if st.session_state.agent_locked and st.session_state.selected_agent:
-        st.markdown('<div class="claude-chat-container">', unsafe_allow_html=True)
-        
-        # Chat header
         agent_info = {
             "data_analysis_and_insights": "Data Analysis Expert",
-            "automation_of_complex_processes": "DevOps Automation Expert", 
+            "automation_of_complex_processes": "DevOps Automation Expert",
             "content_creation_and_generation": "Content Creator",
             "customer_service_and_engagement": "Customer Success",
-            
         }
-        
+
         agent_title = agent_info.get(st.session_state.selected_agent, "AI Assistant")
-        
-        st.markdown(f"""
-        <div class="claude-chat-header">
-            💬 Chat with {agent_title}
-        </div>
-        """, unsafe_allow_html=True)
-        
+        st.subheader(f"💬 {agent_title}")
+
         # Chat messages area
-        st.markdown('<div class="claude-chat-messages">', unsafe_allow_html=True)
         display_professional_chat_messages()
-        st.markdown('</div>', unsafe_allow_html=True)
-        
-        # Claude input area
-        st.markdown('<div class="claude-input-area">', unsafe_allow_html=True)
-        
-        # Enhanced input area with better styling
-        st.markdown("""
-        <div style="
-            background: #ffffff;
-            border: 2px solid #e2e8f0;
-            border-radius: 12px;
-            padding: 1rem;
-            margin-bottom: 0.5rem;
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
-        ">
-        """, unsafe_allow_html=True)
-        
-        # Input controls with Claude styling
+
+        st.markdown("---")
+
+        # Input controls
         col1, col2, col3 = st.columns([8, 1, 1.5])
-        
+
         with col1:
             user_input = st.text_area(
                 "Your message",
                 placeholder="Type your request here... (e.g., 'Analyze this data', 'Create a script', 'Write content')",
-                height=68,
+                height=100,
                 key=f"chat_input_{st.session_state.input_counter}",
                 label_visibility="collapsed"
             )
-        
+
         with col2:
             if st.button("📎", key="attach_btn", help="Attach files", use_container_width=True):
                 st.session_state.show_file_upload = not st.session_state.show_file_upload
                 st.rerun()
-        
+
         with col3:
             send_clicked = st.button("Send", key="send_button", type="primary", use_container_width=True)
-        
-        st.markdown("</div>", unsafe_allow_html=True)
         
         # File upload with Claude styling
         if st.session_state.show_file_upload:
@@ -1355,7 +1265,7 @@ def display_claude_chat_interface():
             # Check if this is an acknowledgment before processing
             if is_acknowledgment(user_input.strip()):
                 st.info("💬 **Acknowledgment Detected** - Processing your polite response...")
-            
+
             process_and_display_user_message(user_input, uploaded_files)
             # Increment counter to force new input key (clears the input)
             st.session_state.input_counter += 1
@@ -1363,17 +1273,11 @@ def display_claude_chat_interface():
             st.rerun()
         elif send_clicked:
             st.warning("Please enter a message or upload files.")
-        
-        st.markdown('</div>', unsafe_allow_html=True)  # Close input area
-        st.markdown('</div>', unsafe_allow_html=True)  # Close chat container
-    
-    st.markdown('</div>', unsafe_allow_html=True)  # Close Claude card
 
 def display_enhanced_analytics_dashboard():
     """Display enhanced analytics dashboard with agent performance and learning insights"""
-    st.markdown('<div class="claude-card">', unsafe_allow_html=True)
-    st.header("📊 Enhanced Analytics Dashboard")
-    
+    st.header("📊 Analytics Dashboard")
+
     # Check if agent system is available
     if not st.session_state.agent:
         st.warning("⚠️ Agent system not initialized. Please use the Agent Chat first.")
@@ -1560,8 +1464,6 @@ def display_enhanced_analytics_dashboard():
             st.success("✅ Thank you for your feedback! It will help us improve.")
         except Exception as e:
             st.error(f"❌ Error submitting feedback: {e}")
-    
-    st.markdown('</div>', unsafe_allow_html=True)
 
 def display_chat_history_sidebar():
     """Display chat history in sidebar"""
@@ -1665,23 +1567,20 @@ def main_app():
         elif page == "📊 Analytics":
             display_enhanced_analytics_dashboard()
         elif page == "📚 Documentation":
-            st.markdown('<div class="claude-card">', unsafe_allow_html=True)
             st.header("📚 Documentation")
-            
+
             with st.expander("🚀 Getting Started", expanded=True):
                 st.write("**Welcome to MultiAgentAI21**")
                 st.write("• Select an AI agent based on your needs")
                 st.write("• Upload files for analysis and processing")
                 st.write("• Get professional results and insights")
-            
+
             with st.expander("🤖 Agent Capabilities"):
                 st.write("**Next-Generation AI Solutions**")
                 st.write("• **Data Analysis**: Advanced analytics and insights")
-                st.write("• **Automation**: Workflow optimization and scripting")
+                st.write("• **DevOps Automation**: CI/CD, Infrastructure as Code, Kubernetes, monitoring")
                 st.write("• **Content Creation**: Professional content generation")
                 st.write("• **Customer Service**: Support and engagement solutions")
-            
-            st.markdown('</div>', unsafe_allow_html=True)
 
         # Cleanup temp files
         atexit.register(cleanup_temp_files)

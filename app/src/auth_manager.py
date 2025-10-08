@@ -12,6 +12,7 @@ import uuid
 import bcrypt
 import re
 import time
+import json
 from datetime import datetime, timedelta
 from functools import wraps
 
@@ -29,6 +30,42 @@ def get_firestore_client():
 
 # Simple user storage (fallback when database is not available)
 USERS = {}
+USERS_FILE = os.path.join(os.path.dirname(__file__), '..', 'data', 'users.json')
+
+def load_users_from_file():
+    """Load users from JSON file"""
+    global USERS
+    try:
+        # Create data directory if it doesn't exist
+        os.makedirs(os.path.dirname(USERS_FILE), exist_ok=True)
+
+        if os.path.exists(USERS_FILE):
+            with open(USERS_FILE, 'r') as f:
+                USERS = json.load(f)
+                logger.info(f"Loaded {len(USERS)} users from file")
+        else:
+            logger.info("No users file found, starting with empty user database")
+            USERS = {}
+    except Exception as e:
+        logger.error(f"Error loading users from file: {e}")
+        USERS = {}
+
+def save_users_to_file():
+    """Save users to JSON file"""
+    try:
+        # Create data directory if it doesn't exist
+        os.makedirs(os.path.dirname(USERS_FILE), exist_ok=True)
+
+        with open(USERS_FILE, 'w') as f:
+            json.dump(USERS, f, indent=2)
+            logger.info(f"Saved {len(USERS)} users to file")
+        return True
+    except Exception as e:
+        logger.error(f"Error saving users to file: {e}")
+        return False
+
+# Load users on module import
+load_users_from_file()
 
 def hash_password(password):
     """Hash password using bcrypt with salt"""
@@ -105,15 +142,52 @@ class LoginRateLimit:
 # Global rate limiter instance
 rate_limiter = LoginRateLimit()
 
+# Session persistence helpers
+def save_session_to_storage():
+    """Save session data using Streamlit's query params for persistence across refreshes"""
+    if st.session_state.get('authenticated', False):
+        # Create a simple session token (you can make this more secure)
+        session_data = {
+            'email': st.session_state.get('user_email'),
+            'uid': st.session_state.get('user_uid'),
+            'name': st.session_state.get('user_name'),
+            'created': st.session_state.get('session_created')
+        }
+
+        # Store in session_state with a special key that persists
+        if 'persisted_session' not in st.session_state:
+            st.session_state.persisted_session = session_data
+
+def restore_session_from_storage():
+    """Restore session data from persisted storage"""
+    if 'persisted_session' in st.session_state and st.session_state.persisted_session:
+        session_data = st.session_state.persisted_session
+
+        # Restore session state
+        st.session_state.authenticated = True
+        st.session_state.user_email = session_data.get('email')
+        st.session_state.user_uid = session_data.get('uid')
+        st.session_state.user_name = session_data.get('name')
+        st.session_state.session_created = session_data.get('created')
+
+        logger.info(f"Session restored for user: {session_data.get('email')}")
+        return True
+    return False
+
 def is_session_expired():
     """Check if current session has expired"""
+    # First check if we need to restore session from browser storage
+    if 'session_created' not in st.session_state:
+        # Try to restore session from stored session token
+        restore_session_from_storage()
+
     if 'session_created' not in st.session_state:
         return True
-    
+
     try:
         session_created = datetime.fromisoformat(st.session_state.session_created)
         session_timeout = timedelta(hours=24)  # 24 hour timeout
-        
+
         return datetime.now() > session_created + session_timeout
     except (ValueError, TypeError):
         return True
@@ -147,7 +221,7 @@ def get_user_uid():
     return st.session_state.get('user_uid', None)
 
 def save_user_to_database(user_data):
-    """Save user data to Firestore database"""
+    """Save user data to Firestore database or local file"""
     try:
         firestore_client = get_firestore_client()
         if firestore_client and firestore_client.initialized:
@@ -157,14 +231,16 @@ def save_user_to_database(user_data):
             logger.info(f"User saved to database: {user_data['email']}")
             return True
         else:
-            # Fallback to in-memory storage
+            # Fallback to in-memory storage and file
             USERS[user_data['email']] = user_data
-            logger.info(f"User saved to memory: {user_data['email']}")
+            save_users_to_file()  # Persist to file
+            logger.info(f"User saved to memory and file: {user_data['email']}")
             return True
     except Exception as e:
         logger.error(f"Error saving user to database: {e}")
-        # Fallback to in-memory storage
+        # Fallback to in-memory storage and file
         USERS[user_data['email']] = user_data
+        save_users_to_file()  # Persist to file
         return True
 
 def get_user_from_database(email):
@@ -217,11 +293,14 @@ def authenticate_user(email, password):
                 
                 # Refresh session timestamp
                 refresh_session()
-                
+
+                # Save session for persistence across page refreshes
+                save_session_to_storage()
+
                 # Update last login time
                 user_data['last_login'] = datetime.now().isoformat()
                 save_user_to_database(user_data)
-                
+
                 logger.info(f"User {email} authenticated successfully")
                 return True, "Authentication successful"
             else:
@@ -285,6 +364,11 @@ def logout():
     st.session_state.user_uid = None
     st.session_state.user_created_at = None
     st.session_state.session_created = None
+
+    # Clear persisted session
+    if 'persisted_session' in st.session_state:
+        st.session_state.persisted_session = None
+
     logger.info("User logged out")
 
 def login_page():

@@ -63,60 +63,45 @@ class BaseAgent(ABC):
         self._initialize_model()
 
     def _initialize_model(self):
-        """Initialize the AI model for the agent with quota management."""
+        """Initialize the AI model for the agent - OpenRouter ONLY."""
         try:
-            # Get API key using robust method with fallbacks
-            try:
-                from src.utils.env_loader import get_api_key
-                api_key = get_api_key('GOOGLE_API_KEY')
-            except ImportError:
-                # Fallback to direct environment variable access
-                api_key = os.getenv('GOOGLE_API_KEY') or os.getenv('GEMINI_API_KEY')
-            
-            if not api_key:
-                logger.error("No valid API key found. Please set GOOGLE_API_KEY or GEMINI_API_KEY in your .env file")
-                # Initialize with a fallback mock model for testing
+            # ONLY use OpenRouter - Gemini disabled due to terms of service violations
+            openrouter_key = os.getenv('OPENROUTER_API_KEY')
+
+            if not openrouter_key:
+                logger.error("⚠️ OPENROUTER_API_KEY not found in environment variables!")
+                logger.error("Please add your OpenRouter API key to app/.env file:")
+                logger.error("OPENROUTER_API_KEY=sk-or-v1-YOUR_KEY_HERE")
+                logger.error("Get your key at: https://openrouter.ai/keys")
                 self.model = self._create_fallback_model()
                 return
-            
-            # Configure the Gemini API
-            genai.configure(api_key=api_key)
-            
-            # Try different model names in order of preference
-            model_names = ['gemini-1.5-flash', 'gemini-pro', 'gemini-1.5-pro']  # Reorder for quota efficiency
-            
-            for model_name in model_names:
-                try:
-                    self.model = genai.GenerativeModel(
-                        model_name,
-                        generation_config={
-                            "temperature": 0.7,
-                            "top_p": 0.8,
-                            "top_k": 40,
-                            "max_output_tokens": 8192,
-                        }
-                    )
-                    
-                    # Test the model with a minimal prompt to avoid quota waste
-                    test_response = self.model.generate_content("Hi")
-                    if test_response and hasattr(test_response, 'text'):
-                        logger.info(f"Successfully initialized Gemini model: {model_name}")
-                        return
-                except Exception as e:
-                    error_msg = str(e).lower()
-                    if "quota" in error_msg or "rate" in error_msg or "429" in error_msg:
-                        logger.error(f"Quota/Rate limit exceeded for {model_name}: {e}")
-                        # Don't try other models if quota is exceeded, use fallback
-                        self.model = self._create_fallback_model()
-                        return
-                    else:
-                        logger.warning(f"Failed to initialize model {model_name}: {e}")
-                        continue
-            
-            # If all models fail, use fallback
-            logger.warning("All Gemini models failed, using fallback model")
-            self.model = self._create_fallback_model()
-            
+
+            try:
+                from src.utils.openrouter_client import configure_openrouter, GenerativeModel
+                configure_openrouter(api_key=openrouter_key)
+
+                # Determine best model for agent type
+                use_case_map = {
+                    AgentType.CONTENT_CREATION: 'content_creation',
+                    AgentType.DATA_ANALYSIS: 'data_analysis',
+                    AgentType.AUTOMATION: 'devops',
+                    AgentType.CUSTOMER_SERVICE: 'customer_service',
+                }
+                use_case = use_case_map.get(self.agent_type, 'general')
+
+                self.model = GenerativeModel(use_case)
+                logger.info(f"✅ Initialized OpenRouter for {self.agent_type.value} with use_case: {use_case}")
+                return
+
+            except Exception as e:
+                logger.error(f"❌ OpenRouter initialization failed: {e}")
+                logger.error("Please check:")
+                logger.error("1. OPENROUTER_API_KEY is correctly set in app/.env")
+                logger.error("2. You have credits at https://openrouter.ai/credits")
+                logger.error("3. Your API key is valid (starts with sk-or-v1-)")
+                self.model = self._create_fallback_model()
+                return
+
         except Exception as e:
             logger.error(f"Error initializing model: {e}")
             self.model = self._create_fallback_model()
@@ -251,7 +236,7 @@ pipeline {
 **Note:** This is a fallback response due to API quota limitations. For production use, consider upgrading your Google Cloud quota."""
             
             def _generate_prometheus_fallback(self):
-                return """# Prometheus Monitoring Setup for Microservices
+                return r"""# Prometheus Monitoring Setup for Microservices
 
 ## 1. Prometheus Configuration (prometheus.yml)
 
@@ -666,13 +651,13 @@ This is a fallback response due to Google Cloud API quota limitations. For full 
             # MAKE API REQUEST with proper error tracking
             try:
                 response = self.model.generate_content(contents)
-                
+
                 # Record successful request
                 self.rate_limiter.record_request(success=True, quota_exceeded=False)
-                
+
                 if hasattr(response, 'text') and response.text:
                     response_text = response.text.strip()
-                    
+
                     # Log compliance event
                     self.compliance_monitor.log_event(
                         event_type='api_request',
@@ -684,23 +669,38 @@ This is a fallback response due to Google Cloud API quota limitations. For full 
                             'processing_time': time.time() - start_time
                         }
                     )
-                    
+
                     # Record performance metrics
                     self._record_performance_metrics(True, time.time() - start_time)
-                    
+
                     # Learn from this interaction
                     self._learn_from_interaction(prompt, response_text, True, time.time() - start_time)
-                    
+
                     logger.info(f"API request successful (response length: {len(response_text)} chars)")
                     return response_text
-                    
+
+                elif hasattr(response, 'parts') and response.parts:
+                    response_text = ''.join([part.text for part in response.parts if hasattr(part, 'text')])
+
+                    # Record performance metrics
+                    self._record_performance_metrics(True, time.time() - start_time)
+
+                    # Learn from this interaction
+                    self._learn_from_interaction(prompt, response_text, True, time.time() - start_time)
+
+                    return response_text
+                else:
+                    # Record failure
+                    self._record_performance_metrics(False, time.time() - start_time)
+                    return "Error: No text content in model response"
+
             except Exception as api_error:
                 error_msg = str(api_error).lower()
                 quota_exceeded = "quota" in error_msg or "rate" in error_msg or "429" in error_msg
-                
+
                 # Record failed request with quota info
                 self.rate_limiter.record_request(success=False, quota_exceeded=quota_exceeded)
-                
+
                 # Log compliance event for failure
                 event_type = 'quota_exceeded' if quota_exceeded else 'api_request'
                 self.compliance_monitor.log_event(
@@ -711,27 +711,13 @@ This is a fallback response due to Google Cloud API quota limitations. For full 
                     error_message=str(api_error),
                     metadata={'processing_time': time.time() - start_time}
                 )
-                
+
                 if quota_exceeded:
                     logger.error(f"API quota/rate limit exceeded: {api_error}")
                     raise ValueError(f"API quota exceeded: {api_error}")
                 else:
                     logger.error(f"API request failed: {api_error}")
                     raise
-            elif hasattr(response, 'parts') and response.parts:
-                response_text = ''.join([part.text for part in response.parts if hasattr(part, 'text')])
-                
-                # Record performance metrics
-                self._record_performance_metrics(True, time.time() - start_time)
-                
-                # Learn from this interaction
-                self._learn_from_interaction(prompt, response_text, True, time.time() - start_time)
-                
-                return response_text
-            else:
-                # Record failure
-                self._record_performance_metrics(False, time.time() - start_time)
-                return "Error: No text content in model response"
                 
         except Exception as e:
             # Record failure

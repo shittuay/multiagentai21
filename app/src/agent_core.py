@@ -84,35 +84,43 @@ class BaseAgent(ABC):
         self._initialize_model()
 
     def _initialize_model(self):
-        """Initialize the AI model for the agent."""
+        """Initialize the AI model for the agent - OpenRouter ONLY."""
         try:
-            # Get API key from environment variable
-            api_key = os.getenv('GOOGLE_API_KEY')
-            if not api_key:
-                logger.error("GOOGLE_API_KEY environment variable not set")
-                raise ValueError("GOOGLE_API_KEY environment variable is required")
-            
-            # Configure the Gemini API
-            genai.configure(api_key=api_key)
-            
-            # Try different model names in order of preference
-            model_names = ['gemini-1.5-pro', 'gemini-1.5-flash', 'gemini-pro']
-            
-            for model_name in model_names:
-                try:
-                    self.model = genai.GenerativeModel(model_name)
-                    # Test the model with a simple prompt
-                    test_response = self.model.generate_content("Hello")
-                    if test_response and hasattr(test_response, 'text'):
-                        logger.info(f"Successfully initialized Gemini model: {model_name}")
-                        return
-                except Exception as e:
-                    logger.warning(f"Failed to initialize model {model_name}: {e}")
-                    continue
-            
-            # If all models fail, raise an error
-            raise ValueError("Could not initialize any Gemini model. Please check your API key and model availability.")
-            
+            # ONLY use OpenRouter - Gemini disabled due to terms of service violations
+            openrouter_key = os.getenv('OPENROUTER_API_KEY')
+
+            if not openrouter_key:
+                logger.error("⚠️ OPENROUTER_API_KEY not found in environment variables!")
+                logger.error("Please add your OpenRouter API key to app/.env file:")
+                logger.error("OPENROUTER_API_KEY=sk-or-v1-YOUR_KEY_HERE")
+                logger.error("Get your key at: https://openrouter.ai/keys")
+                raise ValueError("OPENROUTER_API_KEY is required - Gemini is disabled")
+
+            try:
+                from src.utils.openrouter_client import configure_openrouter, GenerativeModel
+                configure_openrouter(api_key=openrouter_key)
+
+                # Map agent types to use cases
+                use_case_map = {
+                    AgentType.CONTENT_CREATION: 'content_creation',
+                    AgentType.DATA_ANALYSIS: 'data_analysis',
+                    AgentType.AUTOMATION: 'devops',
+                    AgentType.CUSTOMER_SERVICE: 'customer_service',
+                }
+                use_case = use_case_map.get(self.agent_type, 'general')
+
+                self.model = GenerativeModel(use_case)
+                logger.info(f"✅ Initialized OpenRouter for {self.agent_type.value} with {use_case}")
+                return
+
+            except Exception as e:
+                logger.error(f"❌ OpenRouter initialization failed: {e}")
+                logger.error("Please check:")
+                logger.error("1. OPENROUTER_API_KEY is correctly set in app/.env")
+                logger.error("2. You have credits at https://openrouter.ai/credits")
+                logger.error("3. Your API key is valid (starts with sk-or-v1-)")
+                raise
+
         except Exception as e:
             logger.error(f"Error initializing model: {e}")
             raise
