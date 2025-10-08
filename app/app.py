@@ -1603,9 +1603,19 @@ def main_app():
 if __name__ == "__main__":
     try:
         logger.info("Starting MultiAgentAI21 application")
-        
+
+        # Check if authentication is disabled (for Streamlit Cloud without database)
+        auth_disabled = os.getenv("DISABLE_AUTH", "false").lower() == "true"
+        try:
+            auth_disabled = auth_disabled or st.secrets.get("DISABLE_AUTH", False)
+        except (AttributeError, FileNotFoundError, KeyError):
+            pass
+
         # Check authentication and run appropriate page
-        if not is_authenticated():
+        if auth_disabled:
+            logger.info("Authentication disabled - running in public mode")
+            main_app()
+        elif not is_authenticated():
             login_page()
         else:
             main_app()
