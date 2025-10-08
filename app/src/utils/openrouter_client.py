@@ -13,6 +13,18 @@ from dotenv import load_dotenv
 load_dotenv()
 logger = logging.getLogger(__name__)
 
+def get_api_key():
+    """Get API key from Streamlit secrets or environment variables"""
+    # Try Streamlit secrets first (for Streamlit Cloud)
+    try:
+        import streamlit as st
+        return st.secrets.get("OPENROUTER_API_KEY")
+    except (ImportError, AttributeError, FileNotFoundError):
+        pass
+
+    # Fall back to environment variable (for local development)
+    return os.getenv('OPENROUTER_API_KEY')
+
 
 class OpenRouterClient:
     """Client for interacting with OpenRouter API"""
@@ -39,11 +51,11 @@ class OpenRouterClient:
         Initialize OpenRouter client
 
         Args:
-            api_key: OpenRouter API key (defaults to OPENROUTER_API_KEY env var)
+            api_key: OpenRouter API key (defaults to OPENROUTER_API_KEY from secrets or env var)
         """
-        self.api_key = api_key or os.getenv('OPENROUTER_API_KEY')
+        self.api_key = api_key or get_api_key()
         if not self.api_key:
-            logger.warning("OpenRouter API key not found. Set OPENROUTER_API_KEY environment variable.")
+            logger.warning("OpenRouter API key not found. Set OPENROUTER_API_KEY in Streamlit secrets or environment variable.")
 
         self.session = requests.Session()
         self.session.headers.update({

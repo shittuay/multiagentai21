@@ -64,7 +64,17 @@ def check_environment():
     issues = []
 
     # Check for OpenRouter API key (required - Gemini is disabled)
-    if not os.getenv("OPENROUTER_API_KEY"):
+    # Check both st.secrets (Streamlit Cloud) and os.getenv (local)
+    openrouter_key = None
+    try:
+        openrouter_key = st.secrets.get("OPENROUTER_API_KEY")
+    except (AttributeError, FileNotFoundError):
+        pass
+
+    if not openrouter_key:
+        openrouter_key = os.getenv("OPENROUTER_API_KEY")
+
+    if not openrouter_key:
         issues.append("OPENROUTER_API_KEY is not set (required for AI features)")
 
     return issues
